@@ -3,14 +3,89 @@
 
 namespace database
 {
+	namespace Umbra
+	{
+		struct Vector3
+		{
+			float x;
+			float y;
+			float z;
+		};
+
+		struct DataPtr
+		{
+			unsigned int m_offset;
+		};
+
+		struct SerializedTreeData
+		{
+			unsigned int m_nodeCount_mapWidth;
+			DataPtr m_treeData;
+			DataPtr m_map;
+			unsigned int m_numSplitValues;
+			DataPtr m_splitValues;
+		};
+
+		struct ImpTome
+		{
+			unsigned int m_versionMagic;
+			unsigned int m_crc32;
+			unsigned int m_size;
+			float m_lodBaseDistance;
+			unsigned int m_flags;
+			Vector3 m_treeMin;
+			Vector3 m_treeMax;
+			SerializedTreeData m_tileTree;
+			int m_numObjects;
+			DataPtr m_objBounds;
+			DataPtr m_objDistances;
+			DataPtr m_userIDStarts;
+			DataPtr m_userIDs;
+			unsigned int m_listWidths;
+			DataPtr m_objectLists;
+			int m_objectListSize;
+			DataPtr m_clusterLists;
+			int m_clusterListSize;
+			int m_numGates;
+			DataPtr m_gateIndexMap;
+			DataPtr m_gateVertices;
+			int m_numGateVertices;
+			DataPtr m_gateIndices;
+			int m_numClusters;
+			DataPtr m_clusters;
+			DataPtr m_clusterPortals;
+			DataPtr m_cellStarts;
+			int m_numLeafTiles;
+			int m_numTiles;
+			int m_bitsPerSlotPath;
+			DataPtr m_slotPaths;
+			DataPtr m_tileLodLevels;
+			DataPtr m_tiles;
+			DataPtr m_tileMatchingData;
+			DataPtr m_matchingTrees;
+			int m_numMatchingTrees;
+			int m_numTomes;
+			DataPtr m_tomeClusterStarts;
+			DataPtr m_tomeClusterPortalStarts;
+			char m_computationString[128];
+			DataPtr m_objectDepthmaps;
+			DataPtr m_depthmapFaces;
+			DataPtr m_depthmapPalettes;
+			int m_numFaces;
+			DataPtr m_tilePortalExpands;
+			Vector3 m_boundsMin;
+			Vector3 m_boundsMax;
+			float m_clusterCoordScale;
+			int m_pad[1];
+		};
+	}
+
 	typedef float vec_t;
 	typedef vec_t vec2_t[2];
 	typedef vec_t vec3_t[3];
 	typedef vec_t vec4_t[4];
 
-	enum scr_string_t : std::int32_t
-	{
-	};
+	typedef std::int32_t scr_string_t;
 
 	enum XAssetType : std::int32_t
 	{
@@ -67,7 +142,7 @@ namespace database
 		ASSET_TYPE_STRINGTABLE = 50,
 		ASSET_TYPE_LEADERBOARD = 51,
 		ASSET_TYPE_VIRTUAL_LEADERBOARD = 52,
-		ASSET_TYPE_STRUCTUREDDATADEF = 53,
+		ASSET_TYPE_STRUCTURED_DATA_DEF = 53,
 		ASSET_TYPE_DDL = 54,
 		ASSET_TYPE_TRACER = 55,
 		ASSET_TYPE_VEHICLE = 56,
@@ -673,15 +748,24 @@ namespace database
 		XAnimDeltaPartQuat* quat;
 	};
 
+	enum XAnimPartsFlags
+	{
+		ANIM_LOOP = 0x1,
+		ANIM_DELTA = 0x2,
+		ANIM_DELTA_3D = 0x4,
+		ANIM_DEFAULT = 0x8,
+		ANIM_SHMEM = 0x10,
+	};
+
 	struct XAnimParts
 	{
 		const char* name; // 0
 		scr_string_t* names; // 8
-		unsigned char* dataByte; // 16
+		char* dataByte; // 16
 		short* dataShort; // 24
 		int* dataInt; // 32
 		short* randomDataShort; // 40
-		unsigned char* randomDataByte; // 48
+		char* randomDataByte; // 48
 		int* randomDataInt; // 56
 		XAnimIndices indices; // 64
 		XAnimNotifyInfo* notify; // 72
@@ -918,6 +1002,7 @@ namespace database
 		SURF_FLAG_SECONDUV = 0x100,
 		SURF_FLAG_MAYHEM_CUSTOM_CHANNELS = 0x200,
 		SURF_FLAG_MAYHEM_SELFVIS = 0x400,
+		SURF_FLAG_UNK800 = 0x800, // R_SkinDObjModels
 	};
 
 	struct XSurface
@@ -1122,6 +1207,76 @@ namespace database
 		SURFACE_FLAG_NAVINCLUSIONVOLUME = 0x00000000,
 		SURFACE_FLAG_NAVEXCLUSIONVOLUME = 0x00000000,
 		SURFACE_FLAG_NAV3DVOLUME = 0x00000000,
+	};
+
+	enum SurfaceType
+	{
+		SURFACE_TYPE_NONE = 0,
+		SURFACE_TYPE_BARK = 1,
+		SURFACE_TYPE_BRICK = 2,
+		SURFACE_TYPE_CARPET_SOLID = 3,
+		SURFACE_TYPE_CLOTH = 4,
+		SURFACE_TYPE_CONCRETE_DRY = 5,
+		SURFACE_TYPE_DIRT = 6,
+		SURFACE_TYPE_FLESH = 7,
+		SURFACE_TYPE_FOLIAGE_DRY = 8,
+		SURFACE_TYPE_GLASS_PANE = 9,
+		SURFACE_TYPE_GRASS_SHORT = 10,
+		SURFACE_TYPE_GRAVEL = 11,
+		SURFACE_TYPE_ICE_SOLID = 12,
+		SURFACE_TYPE_METAL_THICK = 13,
+		SURFACE_TYPE_METAL_GRATE = 14,
+		SURFACE_TYPE_MUD = 15,
+		SURFACE_TYPE_PAPER = 16,
+		SURFACE_TYPE_PLASTER = 17,
+		SURFACE_TYPE_ROCK = 18,
+		SURFACE_TYPE_SAND = 19,
+		SURFACE_TYPE_SNOW = 20,
+		SURFACE_TYPE_WATER = 21,
+		SURFACE_TYPE_WOOD_SOLID = 22,
+		SURFACE_TYPE_ASPHALT_DRY = 23,
+		SURFACE_TYPE_CERAMIC = 24,
+		SURFACE_TYPE_PLASTIC = 25,
+		SURFACE_TYPE_RUBBER = 26,
+		SURFACE_TYPE_FRUIT = 27,
+		SURFACE_TYPE_METAL_PAINTED = 28,
+		SURFACE_TYPE_RIOTSHIELD = 29,
+		SURFACE_TYPE_SLUSH = 30,
+		SURFACE_TYPE_ASPHALT_WET = 31,
+		SURFACE_TYPE_CARPET_WOOD = 32,
+		SURFACE_TYPE_CARPET_METAL = 33,
+		SURFACE_TYPE_CONCRETE_WET = 34,
+		SURFACE_TYPE_CUSHION = 35,
+		SURFACE_TYPE_DEFAULT = 36,
+		SURFACE_TYPE_FOLIAGE_WET = 37,
+		SURFACE_TYPE_GLASS_BROKEN = 38,
+		SURFACE_TYPE_GLASS_SOLID = 39,
+		SURFACE_TYPE_GLASS_VEHICLE = 40,
+		SURFACE_TYPE_GRASS_TALL = 41,
+		SURFACE_TYPE_ICE_THIN = 42,
+		SURFACE_TYPE_METAL_THIN = 43,
+		SURFACE_TYPE_ROBOT_HEAD = 44,
+		SURFACE_TYPE_ROBOT_TORSO = 45,
+		SURFACE_TYPE_ROBOT_LIMB = 46,
+		SURFACE_TYPE_ROBOT_ARMOR = 47,
+		SURFACE_TYPE_BIG_ROBOT_HEAD = 48,
+		SURFACE_TYPE_BIG_ROBOT_LIMB = 49,
+		SURFACE_TYPE_WATER_KNEE = 50,
+		SURFACE_TYPE_WATER_WAIST = 51,
+		SURFACE_TYPE_WOOD_FLOOR = 52,
+		SURFACE_TYPE_USER_TERRAIN_1 = 53,
+		SURFACE_TYPE_USER_TERRAIN_2 = 54,
+		SURFACE_TYPE_USER_TERRAIN_3 = 55,
+		SURFACE_TYPE_USER_TERRAIN_4 = 56,
+		SURFACE_TYPE_USER_TERRAIN_5 = 57,
+		SURFACE_TYPE_USER_TERRAIN_6 = 58,
+		SURFACE_TYPE_USER_TERRAIN_7 = 59,
+		SURFACE_TYPE_USER_TERRAIN_8 = 60,
+		SURFACE_TYPE_USER_TERRAIN_9 = 61,
+		SURFACE_TYPE_USER_TERRAIN_10 = 62,
+		SURFACE_TYPE_CODE_RESERVED = 63,
+
+		SURFACE_TYPE_COUNT = 64
 	};
 
 	enum SurfaceTypeBits : std::uint64_t
@@ -1678,6 +1833,14 @@ namespace database
 		ID3D11Buffer* hsConstantBuffer;
 		ID3D11Buffer* dsConstantBuffer;
 		ID3D11Buffer* psConstantBuffer;
+	};
+
+	enum GfxCameraRegionType : std::uint8_t
+	{
+		CAMERA_REGION_LIT_OPAQUE = 0,
+		CAMERA_REGION_LIT_DECAL = 2,
+		CAMERA_REGION_LIT_TRANS = 3,
+		CAMERA_REGION_NONE = 4,
 	};
 
 	struct Material
@@ -2513,11 +2676,10 @@ namespace database
 	enum SndAliasType
 	{
 		SAT_LOADED = 0x0,
-		SAT_REV_VEHICLE = 0x1,
-		SAT_HYBRID_PCM = 0x2,
-		SAT_STREAMED = 0x3,
-		SAT_PRIMED = 0x4,
-		SAT_COUNT = 0x5,
+		SAT_HYBRID_PCM = 0x1,
+		SAT_STREAMED = 0x2,
+		SAT_PRIMED = 0x3,
+		SAT_COUNT = 0x4,
 	};
 
 	struct SndAliasFlags
@@ -3020,13 +3182,17 @@ namespace database
 		XModel* xmodel;
 		float origin[3];
 		float invScaledAxis[3][3];
-		float unk[2];
+		bool unk1;
+		bool unk2;
+		bool hasTransientModel;
+		bool hasTransientPhysicsAsset;
+		int pad;
 	}; assert_sizeof(cStaticModel_s, 0x40);
 
-	struct unk_1453E2338
+	struct StaticModelCollisionModelList
 	{
-		unsigned int num;
-		int* unk;
+		unsigned int numModels;
+		int* staticModelIndex;
 	};
 
 	struct Stage
@@ -3140,9 +3306,9 @@ namespace database
 		ClipInfo* pInfo;
 		unsigned int numStaticModels;
 		cStaticModel_s* staticModelList;
-		unk_1453E2338 unk01;
-		unsigned int numUnk02;
-		unk_1453E2338* unk02;
+		StaticModelCollisionModelList staticModelCollisionModelList; // all collision models
+		unsigned int numStaticModelCollisionModelLists;
+		StaticModelCollisionModelList* staticModelCollisionModelLists; // transient collision models
 		MapEnts* mapEnts;
 		Stage* stages;
 		unsigned char stageCount;
@@ -3486,7 +3652,7 @@ namespace database
 		scr_string_t targetName;
 		int modelIdx;
 		int targetEntNum;
-		void* pSpace;
+		void* pSpace; // nav_space_s
 		int graphSize;
 		vec3_t localOffsetPos;
 		vec4_t localOffsetRot;
@@ -4831,22 +4997,38 @@ namespace database
 	enum StaticModelFlag : std::int32_t
 	{
 		// scale modifiers: 
-		// 0 = 4.0f
-		// 1 = 2.66667f
-		// 2 = 2.0f
-		// 3 = 1.6f
-		// 4 = 1.33333f
-		// 5 = 1.14286f
-		// 6 = 1.0f
-		// 7 = 0.888889f
-		// 8 = 0.8f
-		// 9 = 0.666667f
-		// 10 = 0.571429f
-		// 11 = 0.5f
-		// 12 = 0.4f
-		// 13 = 0.333333f
-		// 14 = 0.285714f
-		// 15 = 0.25f
+		// 0 = 0.25f
+		// 1 = 0.285714f
+		// 2 = 0.333333f
+		// 3 = 0.4f
+		// 4 = 0.5f
+		// 5 = 0.571429f
+		// 6 = 0.666667f
+		// 7 = 0.8f
+		// 8 = 0.888889f
+		// 9 = 1.0f
+		// 10 = 1.14286f
+		// 11 = 1.33333f
+		// 12 = 1.6f
+		// 13 = 2.0f
+		// 14 = 2.66667f
+		// 15 = 4.0f
+		STATIC_MODEL_FLAG_SCALE_0 = 0,
+		STATIC_MODEL_FLAG_SCALE_1 = 1,
+		STATIC_MODEL_FLAG_SCALE_2 = 2,
+		STATIC_MODEL_FLAG_SCALE_3 = 3,
+		STATIC_MODEL_FLAG_SCALE_4 = 4,
+		STATIC_MODEL_FLAG_SCALE_5 = 5,
+		STATIC_MODEL_FLAG_SCALE_6 = 6,
+		STATIC_MODEL_FLAG_SCALE_7 = 7,
+		STATIC_MODEL_FLAG_SCALE_8 = 8,
+		STATIC_MODEL_FLAG_SCALE_9 = 9,
+		STATIC_MODEL_FLAG_SCALE_10 = 10,
+		STATIC_MODEL_FLAG_SCALE_11 = 11,
+		STATIC_MODEL_FLAG_SCALE_12 = 12,
+		STATIC_MODEL_FLAG_SCALE_13 = 13,
+		STATIC_MODEL_FLAG_SCALE_14 = 14,
+		STATIC_MODEL_FLAG_SCALE_15 = 15,
 		STATIC_MODEL_FLAG_SCALE_MODIFIER_MASK = 0xF,
 		STATIC_MODEL_FLAG_NO_CAST_SHADOW = 0x10,
 		STATIC_MODEL_FLAG_GROUND_LIGHTING = 0x20,
@@ -4929,7 +5111,7 @@ namespace database
 		GfxStaticModelDrawInst* smodelDrawInsts;
 		GfxDrawSurf* surfaceMaterials;
 		unsigned int* surfaceCastsSunShadow;
-		unsigned short* smodelUnk;
+		unsigned short* sortedSmodelIndices;
 		unsigned int sunShadowOptCount;
 		unsigned int sunSurfVisDataCount;
 		unsigned int* surfaceCastsSunShadowOpt;
@@ -7908,7 +8090,7 @@ namespace database
 		PARTICLE_STATE_DEF_FLAG_IS_SPRITE = 0x100000000, // c
 		PARTICLE_STATE_DEF_FLAG_HAS_TRANS_SHADOWS = 0x200000000, // c
 		PARTICLE_STATE_DEF_FLAG_HAS_CHILD_EFFECTS = 0x400000000,
-		PARTICLE_STATE_DEF_FLAG_BLOCKS_SIGHT = 0x0,
+		PARTICLE_STATE_DEF_FLAG_BLOCKS_SIGHT = 0x800000000,
 		PARTICLE_STATE_DEF_FLAG_HANDLE_TIME_IN_STATE = 0x0,
 		PARTICLE_STATE_DEF_FLAG_SCALE_BY_DISTANCE = 0x0,
 		PARTICLE_STATE_DEF_FLAG_HAS_VECTOR_FIELD_CURVE = 0x0,
@@ -9219,6 +9401,34 @@ namespace database
 		FxElemDef* elemDefs;
 	}; assert_sizeof(FxEffectDef, 0x40);
 
+	enum FX_FleshType
+	{
+		FX_FLESHTYPE_BODY_NONFATAL = 0x0,
+		FX_FLESHTYPE_BODY_FATAL = 0x1,
+		FX_FLESHTYPE_HEAD_NONFATAL = 0x2,
+		FX_FLESHTYPE_HEAD_FATAL = 0x3,
+		FX_FLESHTYPE_HELMET_NONFATAL = 0x4,
+		FX_FLESHTYPE_HELMET_FATAL = 0x5,
+		FX_FLESHTYPE_ALIEN = 0x6,
+		FX_FLESHTYPE_ALIEN_FATAL = 0x7,
+		FX_FLESHTYPE_SOFT = 0x8,
+		FX_FLESHTYPE_SM_ROBOT_HEAD = 0x9,
+		FX_FLESHTYPE_SM_ROBOT_HEAD_FATAL = 0xA,
+		FX_FLESHTYPE_SM_ROBOT_LIMB = 0xB,
+		FX_FLESHTYPE_SM_ROBOT_LIMB_FATAL = 0xC,
+		FX_FLESHTYPE_SM_ROBOT_TORSO = 0xD,
+		FX_FLESHTYPE_SM_ROBOT_TORSO_FATAL = 0xE,
+		FX_FLESHTYPE_SM_ROBOT_ARMOR = 0xF,
+		FX_FLESHTYPE_LG_ROBOT_HEAD = 0x10,
+		FX_FLESHTYPE_LG_ROBOT_HEAD_FATAL = 0x11,
+		FX_FLESHTYPE_LG_ROBOT_LIMB = 0x12,
+		FX_FLESHTYPE_LG_ROBOT_LIMB_FATAL = 0x13,
+		FX_FLESHTYPE_LG_ROBOT_TORSO = 0x14,
+		FX_FLESHTYPE_LG_ROBOT_TORSO_FATAL = 0x15,
+		FX_FLESHTYPE_LG_ROBOT_ARMOR = 0x16,
+		FX_FLESHTYPE_COUNT = 0x17,
+	};
+
 	struct FxImpactEntry
 	{
 		FxCombinedDef nonflesh[64];
@@ -9457,22 +9667,11 @@ namespace database
 		StructuredDataDef* defs;
 	};
 
-	enum DDLFLags : std::uint8_t
-	{
-		DDL_FLAG_DIRTY = 0x0,
-		DDL_FLAG_CHECKSUM = 0x1,
-		DDL_FLAG_CODE_VERSION = 0x2,
-		DDL_FLAG_USER_FLAGS = 0x4,
-		DDL_FLAG_NO_PADDING = 0x8,
-		DDL_FLAG_RESERVE = 0x10,
-		DDL_FLAG_DDL_CHECKSUM = 0x20,
-	};
-
 	enum DDLType : std::int32_t
 	{
 		DDL_BYTE_TYPE = 0x0,
 		DDL_SHORT_TYPE = 0x1,
-		DDL_BOOL_TYPE = 0x2,
+		DDL_UINT_TYPE = 0x2,
 		DDL_INT_TYPE = 0x3,
 		DDL_UINT64_TYPE = 0x4,
 		DDL_FLOAT_TYPE = 0x5,
@@ -9481,6 +9680,17 @@ namespace database
 		DDL_STRUCT_TYPE = 0x8,
 		DDL_ENUM_TYPE = 0x9,
 		DDL_PAD_TYPE = 0xA,
+	};
+
+	enum DDLFlags : std::uint8_t
+	{
+		DDL_FLAG_DIRTY = 0x0,
+		DDL_FLAG_CHECKSUM = 0x1,
+		DDL_FLAG_CODE_VERSION = 0x2,
+		DDL_FLAG_USER_FLAGS = 0x4,
+		DDL_FLAG_NO_PADDING = 0x8,
+		DDL_FLAG_RESERVE = 0x10,
+		DDL_FLAG_DDL_CHECKSUM = 0x20,
 	};
 
 	struct DDLMember
@@ -10157,38 +10367,39 @@ namespace database
 	struct unk_1453E1B90
 	{
 		const char* name;
-		char __pad0[8];
+		int flags;
+		char __pad0[4];
 	}; assert_sizeof(unk_1453E1B90, 0x10);
 
 	struct unk_1453E1BC0
 	{
-		const char* name;
+		unk_1453E1B90* base;
 	};
 
 	struct unk_1453E1C00
 	{
-		const char* name;
+		unk_1453E1B90* base;
 	};
 
 	struct unk_1453E1C20
 	{
-		const char* name;
+		unk_1453E1B90* base;
 		char __pad0[8];
 	};
 
 	struct unk_1453E1C70
 	{
-		const char* name;
+		unk_1453E1B90* base;
 		unsigned int count;
 		unsigned int* val;
 	};
 
 	union unk_1453E1C80
 	{
-		unk_1453E1BC0 __1;
-		unk_1453E1C00 __2;
-		unk_1453E1C20 __3;
-		unk_1453E1C70 __4;
+		unk_1453E1BC0 __0;
+		unk_1453E1C00 __1;
+		unk_1453E1C20 __2;
+		unk_1453E1C70 __3;
 	};
 
 	enum ScriptablePartReferenceType
@@ -10202,7 +10413,7 @@ namespace database
 
 	struct ScriptablePartReference
 	{
-		unk_1453E1B90 unk01;
+		unk_1453E1B90 base;
 		int type;
 		unk_1453E1C80 u;
 	}; assert_sizeof(ScriptablePartReference, 0x30);
@@ -10390,11 +10601,12 @@ namespace database
 	struct ScriptableEventSoundDef
 	{
 		ScriptableEventBaseDef* base;
-		char __pad0[8];
+		bool stateful;
+		char __pad0[7];
 		const char* tagName;
 		scr_string_t scrTagName;
 		const char* soundAlias;
-		const char* soundAliasCache;
+		SndAliasLookup soundAliasCache;
 		char __pad1[8];
 	}; assert_sizeof(ScriptableEventSoundDef, 56);
 	assert_offsetof(ScriptableEventSoundDef, tagName, 16);
@@ -10404,6 +10616,7 @@ namespace database
 	struct ScriptableEventExplosionDef
 	{
 		ScriptableEventBaseDef* base;
+		WeaponCompleteDef* weapon;
 		const char* tagName;
 		scr_string_t scrTagName;
 		float radius;
@@ -10412,7 +10625,6 @@ namespace database
 		bool stateful;
 		bool allowMissingTag;
 		bool useRootOnMissingTag;
-		char __pad0[8];
 	}; assert_sizeof(ScriptableEventExplosionDef, 48);
 
 	struct ScriptableEventLightDef
@@ -10665,25 +10877,25 @@ namespace database
 	union ScriptableEventDefUnion
 	{
 		ScriptableEventAnonymousDef anonymous;
-		ScriptableEventStateChangeDef stateChange; //
+		ScriptableEventStateChangeDef stateChange;
 		ScriptableEventWaitDef wait;
 		ScriptableEventRandomDef random;
-		ScriptableEventScriptDef script; //
+		ScriptableEventScriptDef script;
 		ScriptableEventModelDef model;
 		ScriptableEventCollisionDef collision;
 		ScriptableEventAnimationDef animation;
 		ScriptableEventHideShowBoneDef hideShowBone;
 		ScriptableEventNoteTrackDef noteTrack;
 		ScriptableEventChunkDynentDef chunkDynent;
-		ScriptableEventSpawnDynentDef spawnDynent; //
-		ScriptableEventPFXDef particleFX; //
-		ScriptableEventSoundDef sound; //
-		ScriptableEventExplosionDef explosion; //
-		ScriptableEventLightDef light; //
+		ScriptableEventSpawnDynentDef spawnDynent;
+		ScriptableEventPFXDef particleFX;
+		ScriptableEventSoundDef sound;
+		ScriptableEventExplosionDef explosion;
+		ScriptableEventLightDef light;
 		ScriptableEventSunDef sun;
 		ScriptableEventRumbleDef rumble;
 		ScriptableEventScreenshakeDef screenshake;
-		ScriptableEventPartDamageDef partDamage; //
+		ScriptableEventPartDamageDef partDamage;
 		ScriptableEventSetMayhemDef setMayhem;
 		ScriptableEventPlayMayhemDef playMayhem;
 		ScriptableEventViewmodelShaderParamDef viewmodelShaderParam;
@@ -10691,9 +10903,9 @@ namespace database
 		ScriptableEventClientViewSelectorDef clientViewSelector;
 		ScriptableEventTeamSelectorDef teamSelector;
 		ScriptableEventAddModelDef addModel;
-		ScriptableEventApplyForceDef applyForce; //
+		ScriptableEventApplyForceDef applyForce;
 		ScriptableEventCompassIconDef compassIcon;
-		ScriptableEventMaterialOverrideDef materialOverride; //
+		ScriptableEventMaterialOverrideDef materialOverride;
 	};
 
 	struct ScriptableEventDef
@@ -10811,7 +11023,7 @@ namespace database
 		unsigned short eventStreamSize;
 		unsigned int ffMemCost;
 		scr_string_t animationTreeName;
-		void* animationTreeDef[2];
+		void* animationTreeDef[2]; // XAnim_s* animationTreeDef[2];
 		unsigned int numXModels;
 		XModel** models;
 	}; assert_sizeof(ScriptableDef, 0x70);
@@ -12019,8 +12231,8 @@ namespace database
 	enum XFileBlock
 	{
 		XFILE_BLOCK_TEMP = 0x0,
-		XFILE_BLOCK_UNK1 = 0x1,
-		XFILE_BLOCK_UNK2 = 0x2,
+		XFILE_BLOCK_TEMP_PRELOAD = 0x1,
+		XFILE_BLOCK_TEMP_POSTLOAD = 0x2,
 		XFILE_BLOCK_IMAGE_STREAM = 0x3,
 		XFILE_BLOCK_SHARED_STREAM = 0x4,
 		XFILE_BLOCK_CALLBACK = 0x5,
@@ -12049,7 +12261,8 @@ namespace database
 	{
 		XBlock blocks[MAX_XFILE_COUNT];
 		unsigned __int64 callbackPos;
-		char __pad0[104];
+		char __pad0[4][24];
+		void* unk1;
 		XStreamFile* shared_ff_data;
 		unsigned int shared_ff_count;
 		unsigned int shared_ff_count2;
@@ -12057,8 +12270,7 @@ namespace database
 		XStreamFile* streamed_images;
 		unsigned int streamed_image_count;
 		int streamed_image_index;
-		char __pad1[0x100]; // unk size
-	};
+	}; assert_sizeof(XZoneMemory, 0x138);
 
 	struct DB_AuthHash
 	{
