@@ -85,6 +85,7 @@ namespace game
 	WEAK symbol<int(XAssetType type, const char* name)> DB_XAssetExists{ 0x140A7C3A0 };
 	WEAK symbol<int(const RawFile* rawfile, char* buf, int size)> DB_GetRawBuffer{ 0x140A77AB0 };
 
+	WEAK symbol<size_t(XAssetType type)> DB_GetXAssetTypeSize{ 0x1409E5BD0 };
 	WEAK symbol<const char* (XAssetType type, XAssetHeader header)> DB_GetXAssetHeaderName{ 0x1409E5BA0 };
 	WEAK symbol<bool(std::int32_t, void(__cdecl*)(XAssetHeader, void*), const void*)> DB_EnumXAssets_FastFile{ 0x140A76CE0 };
 	WEAK symbol<bool(XAssetType type, const char* name)> DB_IsXAssetDefault{ 0x140A780D0 };
@@ -431,6 +432,9 @@ namespace game
 	WEAK symbol<DB_ReadStream> db_stream{ 0x1452A8050 };
 	WEAK symbol<db_z_stream_s> db_zip_stream{ 0x14529DD30 };
 	WEAK symbol<char*> db_zip_memory{ 0x14525B500 };
+
+	WEAK symbol<void*> g_assetPool{ 0x1414663D0 };
+	WEAK symbol<int> g_poolSize{ 0x141466290 };
 
 	WEAK symbol<unsigned __int64> g_streamPos{ 0x145687E30 };
 
