@@ -338,7 +338,7 @@ namespace demonware
 		{
 			std::vector<Item> selectedItems;
 
-			if (lootmap.empty()) 
+			if (lootmap.empty())
 			{
 				console::error("get_random_loot_from_map: Lootmap is empty");
 				return selectedItems;
@@ -350,7 +350,7 @@ namespace demonware
 				return selectedItems;
 			}
 
-			if (luckFactor <= 0) 
+			if (luckFactor <= 0)
 			{
 				console::error("get_random_loot_from_map: Luck factor must be greater than zero");
 				return selectedItems;
@@ -359,7 +359,7 @@ namespace demonware
 			double totalWeight = 0;
 			std::vector<double> adjustedWeights(lootmap.size());
 
-			for (size_t i = 0; i < lootmap.size(); ++i) 
+			for (size_t i = 0; i < lootmap.size(); ++i)
 			{
 				if (!get_loot(lootmap[i]).quality)
 				{
@@ -376,7 +376,7 @@ namespace demonware
 			std::mt19937 gen(rd());
 			std::uniform_real_distribution<> dis(0.0, totalWeight);
 
-			while (selectedItems.size() < itemAmount) 
+			while (selectedItems.size() < itemAmount)
 			{
 				double randomValue = dis(gen);
 				double cumulativeWeight = 0;
@@ -435,7 +435,7 @@ namespace demonware
 		}
 
 		std::vector<Item> all_loot;
-		std::vector<Item> get_all_loot() 
+		std::vector<Item> get_all_loot()
 		{
 			if (!all_loot.empty())
 			{
@@ -506,14 +506,19 @@ namespace demonware
 		std::vector<Item> get_random_loot_ZombieCrate(const float scale = 1.0f, std::uint32_t quality = 0)
 		{
 			std::vector<std::uint32_t> lootmap = combine_mp_lootmaps();
+			size_t cards = quality == 2 ? 3 : 1;
 
 			auto mp = get_random_loot_from_map(lootmap, 2, scale, quality);
-			auto cp = get_random_loot_from_map(lootmap_zombiefatefortune, 1, scale);
+			auto cp = get_random_loot_from_map(lootmap_zombiefatefortune, cards, scale);
 
 			std::vector<Item> items;
 			items.push_back(mp[0]);
 			items.push_back(mp[1]);
-			items.push_back(cp[0]);
+
+			for (size_t i = 0; i < cards; ++i)
+			{
+				items.push_back(cp[i]);
+			}
 
 			return items;
 		}
