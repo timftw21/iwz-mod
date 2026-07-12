@@ -650,7 +650,7 @@ namespace arxan
 				return set_thread_context_stub;
 			}
 
-			if (!utils::nt::is_wine())
+			if (!utils::nt::is_wine() || utils::nt::is_sogen())
 			{
 				if (function == "AddVectoredExceptionHandler")
 				{
@@ -670,7 +670,7 @@ namespace arxan
 			remove_hardware_breakpoints();
 			hide_being_debugged();
 			scheduler::loop(hide_being_debugged, scheduler::pipeline::async);
-			if (!utils::nt::is_wine())
+			if (!utils::nt::is_wine() || utils::nt::is_sogen())
 			{
 				store_debug_functions();
 			}
@@ -690,7 +690,7 @@ namespace arxan
 		{
 			remove_hardware_breakpoints();
 			search_and_patch_integrity_checks();
-			if (!utils::nt::is_wine())
+			if (!utils::nt::is_wine() || utils::nt::is_sogen())
 			{
 				restore_debug_functions();
 			}
