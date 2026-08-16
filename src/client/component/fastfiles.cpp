@@ -19,6 +19,7 @@
 namespace fastfiles
 {
 	static utils::concurrency::container<std::string> current_fastfile;
+	static utils::concurrency::container<std::vector<sound_bank_load_callback>> sound_bank_load_callbacks;
 
 	std::string get_current_fastfile()
 	{
@@ -28,6 +29,14 @@ namespace fastfiles
 			fastfile_copy = fastfile;
 		});
 		return fastfile_copy;
+	}
+
+	void on_sound_bank_loaded(sound_bank_load_callback callback)
+	{
+		sound_bank_load_callbacks.access([&callback](std::vector<sound_bank_load_callback>& callbacks)
+		{
+			callbacks.emplace_back(std::move(callback));
+		});
 	}
 
 	namespace
@@ -103,6 +112,17 @@ namespace fastfiles
 			if (type == game::ASSET_TYPE_SCRIPTFILE && header.scriptfile)
 			{
 				dump_gsc_script(header.scriptfile->name ? header.scriptfile->name : "__unnamed__", header);
+			}
+
+			if (type == game::ASSET_TYPE_SOUND_BANK && header.soundBank)
+			{
+				sound_bank_load_callbacks.access([&header](const std::vector<sound_bank_load_callback>& callbacks)
+				{
+					for (const auto& callback : callbacks)
+					{
+						callback(header.soundBank);
+					}
+				});
 			}
 
 			auto result = db_add_xasset_hook.invoke<game::XAssetHeader>(type, header_ptr);

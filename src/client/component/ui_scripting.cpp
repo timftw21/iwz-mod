@@ -8,6 +8,7 @@
 #include "console/console.hpp"
 #include "fastfiles.hpp"
 #include "filesystem.hpp"
+#include "focus_audio.hpp"
 #include "game_module.hpp"
 #include "localized_strings.hpp"
 #include "party.hpp"
@@ -15,6 +16,7 @@
 #include "scripting.hpp"
 #include "server_list.hpp"
 #include "download.hpp"
+#include "zombies_cast.hpp"
 
 #include "game/ui_scripting/execution.hpp"
 //#include "game/scripting/execution.hpp"
@@ -212,6 +214,21 @@ namespace ui_scripting
 			{
 				return static_cast<bool>(::game::DB_IsXAssetDefault(::game::ASSET_TYPE_MATERIAL,
 					material.data()));
+			};
+
+			game_type["getzombiescharacter"] = [](const game&)
+			{
+				return zombies_cast::get_selection();
+			};
+
+			game_type["setzombiescharacter"] = [](const game&, const int selection)
+			{
+				zombies_cast::set_selection(selection);
+			};
+
+			game_type["isclientfocused"] = [](const game&)
+			{
+				return focus_audio::is_client_focused();
 			};
 
 			auto scheduler = table();

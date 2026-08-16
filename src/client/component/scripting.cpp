@@ -50,6 +50,29 @@ namespace scripting
 			const auto* string = game::SL_ConvertToString(string_value);
 			if (string)
 			{
+				if (!std::strcmp(string, "iwz_gsc_log") || !std::strcmp(string, "iwz_collision_log"))
+				{
+					if (top->type != game::VAR_PRECODEPOS)
+					{
+						const auto message = scripting::script_value(*top).to_string();
+						console::info("%s\n", message.data());
+					}
+					else
+					{
+						console::warn("[IWZ][GSC] received empty diagnostics notification '%s'\n", string);
+					}
+				}
+				else if (!std::strcmp(string, "iwz_spawn_clown"))
+				{
+					std::size_t argument_count = 0;
+					for (auto* value = top; value->type != game::VAR_PRECODEPOS; --value)
+					{
+						++argument_count;
+					}
+
+					console::info("[IWZ][Collision] VM notify iwz_spawn_clown owner=%u args=%zu\n",
+						notify_list_owner_id, argument_count);
+				}
 				event e {};
 				e.name = string;
 				e.entity = notify_list_owner_id;

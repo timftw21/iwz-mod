@@ -6,6 +6,7 @@
 #include "component/command.hpp"
 #include "component/console/console.hpp"
 #include "component/dvars.hpp"
+#include "component/localized_strings.hpp"
 #include "component/scripting.hpp"
 
 #include "script_error.hpp"
@@ -31,6 +32,78 @@ namespace gsc
 
 		std::unordered_map<const char*, const char*> vm_execute_hooks;
 		const char* target_function = nullptr;
+		std::atomic_uint32_t colorized_hint_log_count{0};
+
+		void replace_argument_with_string(const unsigned int index, const std::string& value)
+		{
+			auto* argument = game::scr_VmPub->top - index;
+			const auto previous = *argument;
+			const auto string_value = game::SL_GetString(value.data(), 0);
+
+			game::RemoveRefToValue(previous.type, previous.u);
+			argument->type = game::VAR_STRING;
+			argument->u.stringValue = string_value;
+		}
+
+		void colorize_hint_string_argument(const function_args& args)
+		{
+			if (args.size() == 0)
+			{
+				return;
+			}
+
+			const auto argument = args[0].get_raw();
+			const char* hint_text = nullptr;
+			const char* reference = "<literal>";
+			bool is_localized = false;
+
+			if (argument.type == game::VAR_STRING)
+			{
+				hint_text = game::SL_ConvertToString(argument.u.stringValue);
+			}
+			else if (argument.type == game::VAR_ISTRING)
+			{
+				is_localized = true;
+				reference = game::SL_ConvertToString(argument.u.stringValue);
+				hint_text = localized_strings::lookup(reference);
+			}
+
+			if (hint_text == nullptr)
+			{
+				return;
+			}
+
+			const auto colorized = localized_strings::colorize_key_bindings(hint_text);
+			if (!colorized.has_value())
+			{
+				return;
+			}
+
+			if (is_localized)
+			{
+				if (!localized_strings::override_asset(reference, colorized.value()))
+				{
+					console::warn("[IWZ][HintColor] could not override localization asset '%s'; preserving original hint index\n",
+						reference);
+					return;
+				}
+			}
+			else
+			{
+				replace_argument_with_string(0, colorized.value());
+			}
+
+			const auto log_index = colorized_hint_log_count.fetch_add(1);
+			if (log_index < 24)
+			{
+				console::info("[IWZ][HintColor] colorized %s reference='%s' without allocating a localized hint index\n",
+					is_localized ? "localization asset" : "literal sethintstring", reference);
+			}
+			else if (log_index == 24)
+			{
+				console::info("[IWZ][HintColor] additional sethintstring logs suppressed\n");
+			}
+		}
 
 		function_args get_arguments()
 		{
@@ -301,11 +374,7 @@ namespace gsc
 	public:
 		void post_unpack() override
 		{
-#ifdef DEBUG
 			developer_script = game::Dvar_RegisterBool("developer_script", true, 0, "Enable developer script comments");
-#else
-			developer_script = game::Dvar_RegisterBool("developer_script", false, 0, "Enable developer script comments");
-#endif
 
 			utils::hook::set<uint32_t>(0x140BFD16B + 1, func_table_count); // change builtin func count
 			utils::hook::set<uint32_t>(0x140BFD172 + 4, static_cast<uint32_t>(reverse_b((&func_table))));
@@ -366,17 +435,28 @@ namespace gsc
 				return scripting::script_value{};
 			});
 
-			function::add("getfunction", [](const function_args& args)
+			function::add("getfunction", [](const function_args& args) -> scripting::script_value
 			{
 				const auto filename = args[0].as<std::string>();
 				const auto function = args[1].as<std::string>();
 
-				if (!scripting::script_function_table[filename].contains(function))
+				const auto file = scripting::script_function_table.find(filename);
+				if (file == scripting::script_function_table.end())
 				{
-					throw std::runtime_error("function not found");
+					console::warn("[IWZ][GSC] getfunction could not find '%s::%s'; returning undefined\n",
+						filename.data(), function.data());
+					return scripting::script_value{};
 				}
 
-				return scripting::function{scripting::script_function_table[filename][function]};
+				const auto entry = file->second.find(function);
+				if (entry == file->second.end())
+				{
+					console::warn("[IWZ][GSC] getfunction could not find '%s::%s'; returning undefined\n",
+						filename.data(), function.data());
+					return scripting::script_value{};
+				}
+
+				return scripting::function{entry->second};
 			});
 
 			function::add("replacefunc", [](const function_args& args)
@@ -452,6 +532,21 @@ namespace gsc
 				const auto message = args[0].as<std::string>();
 				game::SV_GameSendServerCommand(client, game::SV_CMD_CAN_IGNORE, utils::string::va("%c \"%s\"", 84, message.data()));
 
+				return scripting::script_value{};
+			});
+
+			method::add("sethintstring", [](const game::scr_entref_t ent, const function_args& args)
+			{
+				colorize_hint_string_argument(args);
+
+				constexpr auto method_id = 0x82F5;
+				const auto original = meth_table[method_id - 0x8000];
+				if (original == nullptr)
+				{
+					throw std::runtime_error("stock sethintstring method is unavailable");
+				}
+
+				original(ent);
 				return scripting::script_value{};
 			});
 

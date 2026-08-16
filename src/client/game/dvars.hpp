@@ -15,8 +15,6 @@ namespace dvars
 	extern game::dvar_t* con_inputDvarInactiveValueColor;
 	extern game::dvar_t* con_inputCmdMatchColor;
 
-	extern game::dvar_t* branding;
-
 	extern game::dvar_t* lui_debug;
 
 	extern game::dvar_t* cg_draw2D;

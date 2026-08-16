@@ -29,6 +29,7 @@ namespace gsc
 
 		std::unordered_map<std::string, std::uint32_t> main_handles;
 		std::unordered_map<std::string, std::uint32_t> init_handles;
+		std::unordered_map<std::string, std::uint32_t> post_load_handles;
 
 		utils::memory::allocator scriptfile_allocator;
 
@@ -74,14 +75,15 @@ namespace gsc
 		{
 			main_handles.clear();
 			init_handles.clear();
+			post_load_handles.clear();
 			loaded_scripts.clear();
 			scriptfile_allocator.clear();
 			free_script_memory();
 		}
 
-		bool read_raw_script_file(const std::string& name, std::string* data)
+		bool read_raw_script_file(const std::string& name, std::string* data, std::string* source_path = nullptr)
 		{
-			if (filesystem::read_file(name, data))
+			if (filesystem::read_file(name, data, source_path))
 			{
 				return true;
 			}
@@ -97,6 +99,11 @@ namespace gsc
 				if (len > 0)
 				{
 					data->pop_back();
+				}
+
+				if (source_path != nullptr)
+				{
+					*source_path = std::format("<rawfile asset:{}>", name);
 				}
 
 				return true;
@@ -151,7 +158,8 @@ namespace gsc
 			}
 
 			std::string source_buffer{};
-			if (!read_raw_script_file(real_name + ".gsc", &source_buffer) || source_buffer.empty())
+			std::string source_path{};
+			if (!read_raw_script_file(real_name + ".gsc", &source_buffer, &source_path) || source_buffer.empty())
 			{
 				return nullptr;
 			}
@@ -202,7 +210,7 @@ namespace gsc
 				loaded_script.devmap = parse_devmap(devmap);
 				loaded_scripts.insert(std::make_pair(file_name, loaded_script));
 
-				console::important("Loaded custom gsc '%s.gsc'", real_name.data());
+				console::important("Loaded custom gsc '%s.gsc' from '%s'", real_name.data(), source_path.data());
 
 				return script_file_ptr;
 			}
@@ -266,6 +274,7 @@ namespace gsc
 
 			const auto main_handle = game::Scr_GetFunctionHandle(name.data(), gsc_ctx->token_id("main"));
 			const auto init_handle = game::Scr_GetFunctionHandle(name.data(), gsc_ctx->token_id("init"));
+			const auto post_load_handle = game::Scr_GetFunctionHandle(name.data(), gsc_ctx->token_id("post_load"));
 
 			if (main_handle)
 			{
@@ -277,6 +286,11 @@ namespace gsc
 			{
 				//console::debug("Loaded '%s::init'\n", name.data());
 				init_handles[name] = init_handle;
+			}
+
+			if (post_load_handle)
+			{
+				post_load_handles[name] = post_load_handle;
 			}
 		}
 
@@ -370,28 +384,34 @@ namespace gsc
 			scr_end_load_scripts_hook.invoke<void>(a1);
 		}
 
-		utils::hook::detour g_load_structs_hook;
-		void g_load_structs_stub(float a1)
-		{
-			for (auto& function_handle : main_handles)
-			{
-				console::redudant("Executing '%s::main'\n", function_handle.first.data());
-				game::RemoveRefToObject(game::Scr_ExecThread(function_handle.second, 0));
-			}
+		utils::hook::detour scr_load_level_hook;
 
-			g_load_structs_hook.invoke<void>(a1);
+		void execute_script_handles(const std::unordered_map<std::string, std::uint32_t>& handles,
+			const char* function_name, const char* stage)
+		{
+			for (const auto& [script_name, function_handle] : handles)
+			{
+				const auto thread_id = game::Scr_ExecThread(function_handle, 0);
+				console::info("[IWZ][GSC] executed '%s::%s' stage=%s handle=%u thread=%u levelEnt=%u\n",
+					script_name.data(), function_name, stage, function_handle, thread_id, *game::levelEntityId);
+
+				if (thread_id)
+				{
+					game::RemoveRefToObject(thread_id);
+				}
+			}
 		}
 
-		utils::hook::detour scr_load_level_hook;
 		void scr_load_level_stub()
 		{
-			for (auto& function_handle : init_handles)
-			{
-				console::redudant("Executing '%s::init'\n", function_handle.first.data());
-				game::RemoveRefToObject(game::Scr_ExecThread(function_handle.second, 0));
-			}
+			execute_script_handles(main_handles, "main", "pre-load");
+			execute_script_handles(init_handles, "init", "pre-load");
 
 			scr_load_level_hook.invoke<void>();
+
+			// Some patches depend on stock level initialization, while existing custom mains
+			// depend on the original pre-load timing. Give those patches an explicit stage.
+			execute_script_handles(post_load_handles, "post_load", "post-load");
 		}
 
 		int db_is_x_asset_default(game::XAssetType type, const char* name)
@@ -494,10 +514,7 @@ namespace gsc
 			utils::hook::call(0x140C09D37, find_script);
 			utils::hook::call(0x140C09D47, db_is_x_asset_default);
 
-			// execute main handle
-			g_load_structs_hook.create(0x140409FB0, g_load_structs_stub);
-
-			// execute init handle
+			// Execute custom main and init handles once the level script VM is active.
 			scr_load_level_hook.create(0x140B51B40, scr_load_level_stub);
 
 			scripting::on_shutdown([](bool free_scripts, bool post_shutdown)

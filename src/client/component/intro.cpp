@@ -11,12 +11,31 @@ namespace intro
 {
 	namespace
 	{
+		game::dvar_t* skip_intro_cinematics;
+
+		bool is_intro_cinematic(const char* name)
+		{
+			if (!name)
+			{
+				return false;
+			}
+
+			const std::string_view cinematic_name{name};
+			return cinematic_name == "startup" || cinematic_name == "default" ||
+				cinematic_name.ends_with("startup.bik") || cinematic_name.ends_with("default.bik");
+		}
+
 		void cinematic_start_playback(const char* name, const int playbackFlags, const int startOffsetMsec, 
 			const bool fillerBink, const int pauseState)
 		{
-			if (name == "startup"s)
+			if (is_intro_cinematic(name))
 			{
 				if (utils::flags::has_flag("nointro"))
+				{
+					return;
+				}
+
+				if (skip_intro_cinematics && skip_intro_cinematics->current.enabled)
 				{
 					return;
 				}
@@ -37,6 +56,9 @@ namespace intro
 	public:
 		void post_unpack() override
 		{
+			skip_intro_cinematics = game::Dvar_RegisterBool("iwz_skip_intro_cinematics", false,
+				game::DVAR_FLAG_SAVED, "Skip the startup intro cinematics");
+
 			utils::hook::call(0x140DD69FF, cinematic_start_playback);
 			utils::hook::call(0x140DD69CF, cinematic_start_playback);
 		}

@@ -1,13 +1,19 @@
 main()
 {
     replacefunc(scripts\cp\agents\gametype_zombie::get_closest_player_near_interaction_point, ::get_closest_player_near_interaction_point_stub);
+    level thread install_door_price_patch();
+    custom_scripts\cp\gsc_diagnostics::emit("Patches", "installed interaction and door-price patches");
+}
 
-    // wait for players to join before determining price of doors
-    determine_door_price_func = getfunction("scripts/cp/maps/cp_zmb/cp_zmb", "post_nondeterministic_func");
-    if (isdefined(determine_door_price_func))
-    {
-        replacefunc(determine_door_price_func, ::determine_door_price_stub);
-    }
+install_door_price_patch()
+{
+    level endon("game_ended");
+
+    while (!isdefined(level.post_nondeterministic_func))
+        scripts\engine\utility::waitframe();
+
+    replacefunc(level.post_nondeterministic_func, ::determine_door_price_stub);
+    custom_scripts\cp\gsc_diagnostics::emit("Patches", "installed door price patch");
 }
 
 get_closest_player_near_interaction_point_stub( var_0 )
