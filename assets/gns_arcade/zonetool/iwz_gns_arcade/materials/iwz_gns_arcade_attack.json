@@ -1,0 +1,33 @@
+{
+    "techniqueSet->name": "2d",
+    "gameFlags": 0,
+    "unkFlags": 0,
+    "sortKey": 41,
+    "renderFlags": 1,
+    "textureAtlasRowCount": 1,
+    "textureAtlasColumnCount": 1,
+    "textureAtlasFrameBlend": 0,
+    "textureAtlasAsArray": 0,
+    "surfaceTypeBits": 0,
+    "stateFlags": 64,
+    "cameraRegion": 4,
+    "materialType": 0,
+    "assetFlags": 0,
+    "constantTable": [
+        {
+            "name": "colorTint",
+            "nameHash": 3054254906,
+            "literal": [1.0, 1.0, 1.0, 1.0]
+        }
+    ],
+    "textureTable": [
+        {
+            "image": "iwz_gns_arcade_attack_art",
+            "semantic": 0,
+            "samplerState": 243,
+            "lastCharacter": 112,
+            "firstCharacter": 99,
+            "typeHash": 2695565377
+        }
+    ]
+}

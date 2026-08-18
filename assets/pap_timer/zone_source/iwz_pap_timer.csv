@@ -1,0 +1,6 @@
+// Load the stock Spaceland sources while building so ZoneTool can resolve the
+// original rubber images. The custom fastfile only contains the housing assets.
+require,techsets_cp_zmb
+require,cp_zmb
+ignore,iwz_pap_timer_external
+xmodel,iwz_pap_timer_housing

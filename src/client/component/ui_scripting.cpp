@@ -6,6 +6,7 @@
 
 #include "command.hpp"
 #include "console/console.hpp"
+#include "custom_music.hpp"
 #include "fastfiles.hpp"
 #include "filesystem.hpp"
 #include "focus_audio.hpp"
@@ -229,6 +230,30 @@ namespace ui_scripting
 			game_type["isclientfocused"] = [](const game&)
 			{
 				return focus_audio::is_client_focused();
+			};
+
+			auto custom_music_table = table();
+			lua["custommusic"] = custom_music_table;
+
+			custom_music_table["rescan"] = custom_music::rescan;
+			custom_music_table["count"] = custom_music::count;
+			custom_music_table["name"] = custom_music::get_name;
+			custom_music_table["extension"] = custom_music::get_extension;
+			custom_music_table["folder"] = custom_music::get_folder;
+			custom_music_table["selectedname"] = custom_music::get_selected_name;
+			custom_music_table["selectedindex"] = custom_music::get_selected_index;
+			custom_music_table["play"] = custom_music::play;
+			custom_music_table["resume"] = custom_music::resume;
+			custom_music_table["isplaying"] = custom_music::is_playing;
+			custom_music_table["claim"] = custom_music::claim;
+			custom_music_table["release"] = custom_music::release;
+			custom_music_table["isclaimed"] = custom_music::is_claimed;
+			custom_music_table["islobbysession"] = custom_music::is_lobby_session_active;
+			custom_music_table["setscene"] = custom_music::set_frontend_scene;
+			custom_music_table["openfolder"] = custom_music::open_folder;
+			custom_music_table["clear"] = []
+			{
+				custom_music::stop(true, "stock lobby music selected");
 			};
 
 			auto scheduler = table();

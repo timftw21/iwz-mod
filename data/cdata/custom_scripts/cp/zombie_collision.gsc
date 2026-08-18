@@ -3,11 +3,7 @@ post_load()
     // Stock zombie setup reads this dvar for every newly spawned agent.
     setdvar("scr_zombie_traversal_push", 0);
 
-    // Disable the engine's additional character-capsule bounce pass. The clown
-    // spawn listener separates normal clown spawns that overlap a player.
-    setdvar("bg_playerEjection", 0);
-
-    collision_log("post-load entry map=" + getdvar("ui_mapname") + " traversalPush=" + getdvar("scr_zombie_traversal_push") + " playerEjection=" + getdvar("bg_playerEjection"));
+    collision_log("post-load entry map=" + getdvar("ui_mapname") + " traversalPush=" + getdvar("scr_zombie_traversal_push"));
 
     level thread listen_for_clown_spawn_requests();
     level thread monitor_zombie_spawns();
@@ -71,9 +67,13 @@ monitor_zombie_spawns()
         definition = level.agent_definition[agent.agent_type];
         if (isdefined(definition["species"]) && definition["species"] == "zombie")
         {
+            // Entity numbers are recycled. Clear any crawler collision state left by
+            // the previous occupant before this agent can enter player movement.
+            iwz_set_agent_crawler(agent, 0);
             agent disable_zombie_player_push();
             collision_log("monitor attached ent=" + agent getentitynumber() + " type=" + agent.agent_type + " playerPush=disabled distance=" + agent.preventplayerpushdist);
             agent thread monitor_zombie_traversal();
+            agent thread monitor_zombie_crawler_bounds();
         }
 
         if (agent.agent_type == "zombie_clown" && !scripts\engine\utility::is_true(agent.iwz_allow_spawn_overlap))
@@ -88,6 +88,44 @@ disable_zombie_player_push()
     // times so neither attacks nor ordinary movement can displace a player.
     self.preventplayerpushdist = 12;
     self _meth_85C9(self.preventplayerpushdist);
+}
+
+monitor_zombie_crawler_bounds()
+{
+    self endon("death");
+    level endon("game_ended");
+
+    // Stock dismemberment lowers only the scripted view height while leaving
+    // both the standing bounds and the standing-agent player-push response.
+    while (!isdefined(self.is_crawler) || !self.is_crawler)
+        wait(0.05);
+
+    before = self physics_getcharactercollisioncapsule();
+
+    // A capsule cannot be shorter than its diameter. Collapse crawlers to that
+    // radius-limited minimum. Keep the stock-style anti-push distance active;
+    // zero disables it and allows the agent response to shove the player back.
+    self disable_zombie_player_push();
+    bounds_applied = iwz_set_agent_collision_bounds(self, before["radius"], before["half_height"], before["radius"]);
+    if (!bounds_applied)
+    {
+        collision_log("crawler collision bounds rejected ent=" + self getentitynumber() + " type=" + self.agent_type +
+            " radius=" + before["radius"] + " halfHeight=" + before["half_height"]);
+        return;
+    }
+
+    // IW7 resolves character contacts after the ordinary player movement trace.
+    // The server bounds above are not sufficient to fix its vertical response, so
+    // record the shortened capsule top for the native collision classifier.
+    iwz_set_agent_crawler(self, 1);
+    self setorigin(self.origin, 1);
+    scripts\engine\utility::waitframe();
+    after = self physics_getcharactercollisioncapsule();
+
+    collision_log("crawler collision bounds shortened ent=" + self getentitynumber() + " type=" + self.agent_type +
+        " beforeRadius=" + before["radius"] + " beforeHalfHeight=" + before["half_height"] +
+        " afterRadius=" + after["radius"] + " afterHalfHeight=" + after["half_height"] +
+        " playerPushDistance=" + self.preventplayerpushdist + " verticalClearanceFilter=1");
 }
 
 monitor_zombie_traversal()

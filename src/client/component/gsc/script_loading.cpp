@@ -152,7 +152,10 @@ namespace gsc
 				return itr->second.ptr;
 			}
 
-			if (game::Com_FrontEnd_IsInFrontEnd())
+			// Gameplay overrides must never leak into the frontend VM. Frontend-specific
+			// patches live under their own namespace so they can observe and patch the
+			// stock frontend scripts without enabling every custom gameplay script.
+			if (game::Com_FrontEnd_IsInFrontEnd() && !real_name.starts_with("custom_scripts/frontend/"))
 			{
 				return nullptr;
 			}
@@ -320,17 +323,21 @@ namespace gsc
 
 		void load_scripts()
 		{
-			if (!game::Com_FrontEnd_IsInFrontEnd())
+			for (const auto& path : filesystem::get_search_paths())
 			{
-				for (const auto& path : filesystem::get_search_paths())
+				if (game::Com_FrontEnd_IsInFrontEnd())
 				{
-					load_scripts(path, "custom_scripts/");
-					load_scripts(path, "custom_scripts/"s + game::Com_GameMode_GetActiveGameModeStr() + "/");
+					load_scripts(path, "custom_scripts/frontend/");
+					load_scripts(path, "custom_scripts/frontend/"s + game::Com_GameMode_GetActiveGameModeStr() + "/");
+					continue;
+				}
 
-					if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_CP || game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_MP)
-					{
-						load_scripts(path, "custom_scripts/cp_mp/");
-					}
+				load_scripts(path, "custom_scripts/");
+				load_scripts(path, "custom_scripts/"s + game::Com_GameMode_GetActiveGameModeStr() + "/");
+
+				if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_CP || game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_MP)
+				{
+					load_scripts(path, "custom_scripts/cp_mp/");
 				}
 			}
 		}

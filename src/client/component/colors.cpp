@@ -1,6 +1,7 @@
 #include <std_include.hpp>
 #include "loader/component_loader.hpp"
 
+#include "console/console.hpp"
 #include "game/game.hpp"
 
 #include <utils/hook.hpp>
@@ -19,16 +20,35 @@ namespace colors
 
 	namespace
 	{
-		enum color_mode_t
+		constexpr DWORD rgba(const unsigned int r, const unsigned int g, const unsigned int b,
+			const unsigned int a = 255)
 		{
-			mode_original,
-			mode_custom,
-			mode_count,
+			return static_cast<DWORD>(r)
+				| (static_cast<DWORD>(g) << 8)
+				| (static_cast<DWORD>(b) << 16)
+				| (static_cast<DWORD>(a) << 24);
+		}
+
+		// The first eight entries are the values from IW's renderer color table.
+		// Entries 8-12 are resolved dynamically below; 13-15 are iw7-mod extensions.
+		constexpr std::array color_table{
+			rgba(0, 0, 0),       // ^0 black
+			rgba(255, 92, 92),   // ^1 red
+			rgba(0, 255, 0),     // ^2 green
+			rgba(230, 200, 25),  // ^3 yellow
+			rgba(0, 0, 255),     // ^4 blue
+			rgba(0, 255, 255),   // ^5 cyan
+			rgba(255, 92, 255),  // ^6 magenta
+			rgba(255, 255, 255), // ^7 white
+			rgba(0, 0, 0),       // ^8 friendly team color
+			rgba(0, 0, 0),       // ^9 enemy team color
+			rgba(0, 0, 0),       // ^: rainbow
+			rgba(0, 0, 0),       // ^; facebook blue
+			rgba(0, 0, 0),       // ^< sky blue
+			rgba(255, 173, 34),  // ^= orange
+			rgba(151, 80, 221),  // ^> purple
+			rgba(205, 133, 63),  // ^? brown
 		};
-		
-		game::dvar_t* r_color_mode = nullptr;
-		
-		std::vector<DWORD> color_table[mode_count];
 
 		DWORD hsv_to_rgb(const hsv_color hsv)
 		{
@@ -36,7 +56,7 @@ namespace colors
 
 			if (hsv.s == 0)
 			{
-				return RGB(hsv.v, hsv.v, hsv.v);
+				return rgba(hsv.v, hsv.v, hsv.v);
 			}
 
 			// converting to 16 bit to prevent overflow
@@ -56,22 +76,22 @@ namespace colors
 			switch (region)
 			{
 			case 0:
-				rgb = RGB(v, t, p);
+				rgb = rgba(v, t, p);
 				break;
 			case 1:
-				rgb = RGB(q, v, p);
+				rgb = rgba(q, v, p);
 				break;
 			case 2:
-				rgb = RGB(p, v, t);
+				rgb = rgba(p, v, t);
 				break;
 			case 3:
-				rgb = RGB(p, q, v);
+				rgb = rgba(p, q, v);
 				break;
 			case 4:
-				rgb = RGB(t, p, v);
+				rgb = rgba(t, p, v);
 				break;
 			default:
-				rgb = RGB(v, p, q);
+				rgb = rgba(v, p, q);
 				break;
 			}
 
@@ -81,25 +101,7 @@ namespace colors
 		int color_index(const char c)
 		{
 			const auto index = c - 48;
-			return (index > MAX_COLOR_INDEX ? 7 : index);
-		}
-
-		char add(const std::int32_t mode, const uint8_t r, const uint8_t g, const uint8_t b)
-		{
-			const char index = '0' + static_cast<char>(color_table[mode].size());
-
-			if (mode == -1)
-			{
-				color_table[mode_original].emplace_back(RGB(r, g, b));
-				color_table[mode_custom].emplace_back(RGB(r, g, b));
-
-			}
-			else
-			{
-				color_table[mode].emplace_back(RGB(r, g, b));
-			}
-
-			return index;
+			return index < 0 || index > MAX_COLOR_INDEX ? 7 : index;
 		}
 
 		void com_clean_name_stub(const char* in, char* out, const int out_size)
@@ -136,7 +138,7 @@ namespace colors
 
 		void rb_lookup_color_stub(const char index, DWORD* color)
 		{
-			*color = RGB(255, 255, 255);
+			*color = rgba(255, 255, 255);
 			
 			switch (index)
 			{
@@ -156,7 +158,7 @@ namespace colors
 				*color = 0xFFFCFF80;
 				break;
 			default:
-				*color = color_table[r_color_mode->current.integer][color_index(index)];
+				*color = color_table[color_index(index)];
 				break;
 			}
 		}
@@ -172,12 +174,6 @@ namespace colors
 				return;
 			}
 			
-			static const char* color_modes[3]{};
-			color_modes[mode_original] = "original";
-			color_modes[mode_custom] = "custom";
-			color_modes[mode_count] = nullptr;
-			r_color_mode = game::Dvar_RegisterEnum("r_colorMode", color_modes, mode_custom, game::DVAR_FLAG_SAVED, "Use original colors or client-patched colors");
-
 			// allows colored name in-game
 			utils::hook::jump(0x140CFA700, com_clean_name_stub, true);
 
@@ -197,39 +193,7 @@ namespace colors
 			// prevent name mismatch check
 			utils::hook::set<uint8_t>(0x140805C10, 0xC3);
 
-			// add colors
-			add(mode_original, 0, 0, 0);		// ^0 black (original)
-			add(mode_original, 255, 0, 0);		// ^1 red (original)
-			add(mode_original, 0, 255, 0);		// ^2 green (original)
-			add(mode_original, 255, 255, 0);	// ^3 yellow (original)
-			add(mode_original, 0, 135, 193);	// ^4 blue (easier to see)
-			add(mode_original, 25, 200, 230);	// ^5 light blue (original)
-			add(mode_original, 255, 92, 255);	// ^6 pink (original)
-			add(mode_original, 255, 255, 255);	// ^7 white (original)
-
-			add(mode_custom, 0, 0, 0); // 0  - Black
-			add(mode_custom, 255, 49, 49); // 1  - Red
-			add(mode_custom, 134, 192, 0); // 2  - Green
-			add(mode_custom, 255, 173, 34); // 3  - Yellow
-			add(mode_custom, 0, 135, 193); // 4  - Blue
-			add(mode_custom, 32, 197, 255); // 5  - Light Blue
-			add(mode_custom, 151, 80, 221); // 6  - Pink
-			add(mode_custom, 255, 255, 255); // 7  - White
-
-			// these are all handled in rb_lookup_color_stub
-			add(-1, 0, 0, 0);		// ^8 friendly team color (original)
-			add(-1, 0, 0, 0);		// ^9 enemy team color (original)
-			add(-1, 0, 0, 0);		// ^: rainbow color code (original is "my party")
-			add(-1, 0, 0, 0);		// ^; facebook blue (original, ';' is an illegal character for infostrings)
-			add(-1, 0, 0, 0);		// ^< sky blue (idek where this comes from)
-
-			add(mode_original, 255, 173, 34);	// ^= orange 
-			add(mode_original, 151, 80, 221);	// ^> purple
-			add(mode_original, 205, 133, 63);	// ^? brown
-
-			add(mode_custom, 255, 173, 34);	// ^= orange 
-			add(mode_custom, 151, 80, 221);	// ^> purple
-			add(mode_custom, 205, 133, 63);	// ^? brown
+			console::info("[IWZ][Colors] installed base-game text palette with extended color codes\n");
 		}
 	};
 }

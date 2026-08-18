@@ -20,6 +20,7 @@ namespace localized_strings
 		utils::concurrency::container<localized_map> localized_overrides;
 		utils::concurrency::container<localized_map> colorized_bindings;
 		utils::concurrency::container<localized_map> localized_asset_overrides;
+		utils::concurrency::container<std::unordered_set<std::string>> logged_asset_override_keys;
 		std::atomic_bool logged_binding_color_fix{false};
 
 		bool colorize_unmarked_bindings(const std::string_view value, std::string& result)
@@ -157,6 +158,36 @@ namespace localized_strings
 		return found;
 	}
 
+	bool apply_registered_override_asset(const std::string& key)
+	{
+		const auto lookup_key = key.starts_with('@') ? key.substr(1) : key;
+		const auto replacement = localized_overrides.access<std::optional<std::string>>([&](const localized_map& map)
+		{
+			const auto entry = map.find(lookup_key);
+			return entry == map.end() ? std::nullopt : std::optional(entry->second);
+		});
+		if (!replacement.has_value())
+		{
+			return false;
+		}
+
+		if (!override_asset(lookup_key, replacement.value()))
+		{
+			console::warn("[IWZ][Localization] could not apply registered asset override key='%s'\n", lookup_key.data());
+			return false;
+		}
+
+		const auto first_application = logged_asset_override_keys.access<bool>([&](auto& keys)
+		{
+			return keys.emplace(lookup_key).second;
+		});
+		if (first_application)
+		{
+			console::info("[IWZ][Localization] applied registered asset override key='%s'\n", lookup_key.data());
+		}
+		return true;
+	}
+
 	void override(const std::string& key, const std::string& value)
 	{
 		localized_overrides.access([&](localized_map& map)
@@ -171,7 +202,16 @@ namespace localized_strings
 		void post_unpack() override
 		{
 			override("MENU_MASTER_VOLUME", "MASTER VOLUME");
+			override("COOP_INTERACTIONS_NEED_MONEY", "^1NEED MORE MONEY!^7");
+			override("IWZ_GNS_ARCADE_START_SPACELAND", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS");
+			override("IWZ_GNS_ARCADE_START_RAVE", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS 2");
+			override("IWZ_GNS_ARCADE_START_SHAOLIN", "Hold [{+usereload,+activate}] to start SKULLBUSTER");
+			override("IWZ_GNS_ARCADE_START_ATTACK", "Hold [{+usereload,+activate}] to start SKULLHOP");
+			override("IWZ_GNS_ARCADE_START_BEAST", "Hold [{+usereload,+activate}] to start SKULLBREAKER");
+			override("IWZ_GNS_ARCADE_START_GENERIC", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS ARCADE");
 			console::info("[IWZ][Localization] installed key-binding colorizer\n");
+			console::info("[IWZ][Localization] overrode COOP_INTERACTIONS_NEED_MONEY with red warning text\n");
+			console::info("[IWZ][GhostsNSkullsArcade] registered per-game activation hints count=5\n");
 
 			seh_string_ed_get_string_hook.create(0x140CBBB10, &seh_string_ed_get_string);
 		}

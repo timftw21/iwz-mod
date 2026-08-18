@@ -1,0 +1,3 @@
+// The frontend already loads IW's native unlit 2D technique. Keep the
+// technique external instead of duplicating its renderer assets.
+techset,2d

@@ -1,0 +1,21 @@
+// Load IW's frontend UI sources while building so ZoneTool can resolve the
+// native 2D technique. The custom fastfile owns the arcade image and material.
+require,techsets_ui
+require,ui
+ignore,iwz_gns_arcade_external
+image,iwz_gns_arcade_spaceland_art
+image,iwz_gns_arcade_rave_art
+image,iwz_gns_arcade_shaolin_art
+image,iwz_gns_arcade_attack_art
+image,iwz_gns_arcade_beast_art
+material,iwz_gns_arcade_spaceland
+material,iwz_gns_arcade_rave
+material,iwz_gns_arcade_shaolin
+material,iwz_gns_arcade_attack
+material,iwz_gns_arcade_beast
+localize,IWZ_GNS_ARCADE_START_SPACELAND
+localize,IWZ_GNS_ARCADE_START_RAVE
+localize,IWZ_GNS_ARCADE_START_SHAOLIN
+localize,IWZ_GNS_ARCADE_START_ATTACK
+localize,IWZ_GNS_ARCADE_START_BEAST
+localize,IWZ_GNS_ARCADE_START_GENERIC

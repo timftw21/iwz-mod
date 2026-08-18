@@ -66,6 +66,7 @@ namespace gsc
 				is_localized = true;
 				reference = game::SL_ConvertToString(argument.u.stringValue);
 				hint_text = localized_strings::lookup(reference);
+				localized_strings::apply_registered_override_asset(reference);
 			}
 
 			if (hint_text == nullptr)
@@ -544,6 +545,21 @@ namespace gsc
 				if (original == nullptr)
 				{
 					throw std::runtime_error("stock sethintstring method is unavailable");
+				}
+
+				original(ent);
+				return scripting::script_value{};
+			});
+
+			method::add("forceusehinton", [](const game::scr_entref_t ent, const function_args& args)
+			{
+				colorize_hint_string_argument(args);
+
+				constexpr auto method_id = 0x80F4;
+				const auto original = meth_table[method_id - 0x8000];
+				if (original == nullptr)
+				{
+					throw std::runtime_error("stock forceusehinton method is unavailable");
 				}
 
 				original(ent);

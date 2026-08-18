@@ -987,7 +987,9 @@ namespace game
 		struct gentity_s
 		{
 			entityState_t s; // 0
-			char __pad0[368 - sizeof(entityState_t)];
+			char __pad0[280 - sizeof(entityState_t)];
+			Bounds box; // 280
+			char __pad1[368 - 280 - sizeof(Bounds)];
 			gclient_s* client; // 368
 			void* turret;
 			void* agent;
@@ -1015,6 +1017,7 @@ namespace game
 		}; static_assert(sizeof(gentity_s) == 1016);
 #pragma pack(pop)
 
+		static_assert(offsetof(gentity_s, box) == 280);
 		static_assert(offsetof(gentity_s, client) == 368);
 		static_assert(offsetof(gentity_s, flags) == 456);
 

@@ -44,9 +44,24 @@ namespace fastfiles
 		utils::hook::detour db_try_load_x_file_internal_hook;
 		utils::hook::detour db_init_load_x_file_hook;
 		utils::hook::detour db_load_x_zone_hook;
+		utils::hook::detour db_load_x_assets_hook;
 		utils::hook::detour db_find_xasset_header_hook;
 		utils::hook::detour db_add_xasset_hook;
 		utils::hook::detour sys_createfile_hook;
+
+		constexpr auto pap_timer_zone = "iwz_pap_timer";
+		constexpr auto gns_arcade_ui_zone = "iwz_gns_arcade";
+
+		bool requires_pap_timer_housing(const char* zone_name)
+		{
+			if (!zone_name)
+			{
+				return false;
+			}
+
+			return zone_name == "cp_rave"s || zone_name == "cp_disco"s ||
+				zone_name == "cp_town"s || zone_name == "cp_final"s;
+		}
 
 		void db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
 			const bool is_base_map, const bool was_paused, const int failure_mode)
@@ -126,6 +141,37 @@ namespace fastfiles
 			}
 
 			auto result = db_add_xasset_hook.invoke<game::XAssetHeader>(type, header_ptr);
+
+			if (type == game::ASSET_TYPE_XMODEL && result.model && result.model->name &&
+				!strcmp(result.model->name, "iwz_pap_timer_housing"))
+			{
+				const auto* material = result.model->numsurfs && result.model->materialHandles
+					? result.model->materialHandles[0]
+					: nullptr;
+				const auto* technique = material && material->techniqueSet && material->techniqueSet->name
+					? material->techniqueSet->name
+					: "<none>";
+				const auto* image0 = material && material->textureCount > 0 && material->textureTable
+					? material->textureTable[0].image
+					: nullptr;
+				const auto* image1 = material && material->textureCount > 1 && material->textureTable
+					? material->textureTable[1].image
+					: nullptr;
+
+				console::info("[IWZ][PaPTimer] model bound material=%s technique=%s textures=%u "
+					"image0=%s(%ux%u streamed=%u) image1=%s(%ux%u streamed=%u)\n",
+					material && material->name ? material->name : "<none>", technique,
+					material ? static_cast<unsigned int>(material->textureCount) : 0,
+					image0 && image0->name ? image0->name : "<none>",
+					image0 ? static_cast<unsigned int>(image0->width) : 0,
+					image0 ? static_cast<unsigned int>(image0->height) : 0,
+					image0 ? static_cast<unsigned int>(image0->streamed) : 0,
+					image1 && image1->name ? image1->name : "<none>",
+					image1 ? static_cast<unsigned int>(image1->width) : 0,
+					image1 ? static_cast<unsigned int>(image1->height) : 0,
+					image1 ? static_cast<unsigned int>(image1->streamed) : 0);
+			}
+
 			return result;
 		}
 
@@ -191,6 +237,38 @@ namespace fastfiles
 			}
 		}
 
+		void db_load_x_assets_stub(game::XZoneInfo* zone_info, const unsigned int zone_count, const char sync_mode)
+		{
+			const game::XZoneInfo* film_zone = nullptr;
+			bool timer_zone_already_queued = false;
+
+			for (auto i = 0u; i < zone_count; ++i)
+			{
+				if (zone_info[i].name && !strcmp(zone_info[i].name, pap_timer_zone))
+				{
+					timer_zone_already_queued = true;
+				}
+				else if (requires_pap_timer_housing(zone_info[i].name))
+				{
+					film_zone = &zone_info[i];
+				}
+			}
+
+			if (!film_zone || timer_zone_already_queued || !fastfiles::exists(pap_timer_zone))
+			{
+				return db_load_x_assets_hook.invoke<void>(zone_info, zone_count, sync_mode);
+			}
+
+			std::vector<game::XZoneInfo> zones;
+			merge(&zones, zone_info, zone_count);
+			zones.push_back({pap_timer_zone, film_zone->allocFlags | game::DB_ZONE_CUSTOM, film_zone->freeFlags});
+
+			console::info("[IWZ][PaPTimer] queueing zone=%s after map=%s allocFlags=0x%X freeFlags=0x%X\n",
+				pap_timer_zone, film_zone->name, film_zone->allocFlags, film_zone->freeFlags);
+
+			return db_load_x_assets_hook.invoke<void>(zones.data(), static_cast<unsigned int>(zones.size()), sync_mode);
+		}
+
 		void load_fastfiles1_stub(game::XZoneInfo* zoneInfo, unsigned int zoneCount, game::DBSyncMode syncMode)
 		{
 			std::vector<game::XZoneInfo> data;
@@ -209,8 +287,11 @@ namespace fastfiles
 					if (fastfiles::exists(name))
 					{
 						data.push_back({ name, flags, free_flags });
+						return true;
 					}
 				}
+
+				return false;
 			};
 
 			// Don't quote me on this:
@@ -222,6 +303,11 @@ namespace fastfiles
 			if (!game::environment::is_dedi())
 			{
 				add_zone("iw7mod_ui_mp", game::DB_ZONE_UI | game::DB_ZONE_CUSTOM, 0);
+				if (add_zone(gns_arcade_ui_zone, game::DB_ZONE_UI | game::DB_ZONE_CUSTOM, 0))
+				{
+					console::info("[IWZ][GhostsNSkullsArcade] queueing frontend artwork zone=%s\n",
+						gns_arcade_ui_zone);
+				}
 			}
 
 			add_zone("mod", game::DB_ZONE_GLOBAL_TIER1 | game::DB_ZONE_CUSTOM, 1);
@@ -464,6 +550,7 @@ namespace fastfiles
 
 			db_find_xasset_header_hook.create(game::DB_FindXAssetHeader, db_find_xasset_header_stub);
 			db_add_xasset_hook.create(0x140A76520, db_add_xasset_stub);
+			db_load_x_assets_hook.create(game::DB_LoadXAssets, db_load_x_assets_stub);
 
 			g_dump_scripts = game::Dvar_RegisterBool("g_dumpScripts", false, game::DVAR_FLAG_NONE, "Dump GSC scripts");
 

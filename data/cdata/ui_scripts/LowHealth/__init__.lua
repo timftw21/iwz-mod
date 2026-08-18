@@ -17,6 +17,8 @@ local STOCK_BLOOD_ALPHA = 0.85
 local DEFAULT_BLOOD_ALPHA = 0.75
 local STOCK_BLOOD_SCALE = 0.10
 local DEFAULT_BLOOD_SCALE = 0.25
+local loggedBloodState = {}
+local loggedWidgetCreation = {}
 
 local function getBloodAlpha()
 	local alpha = Engine.GetDvarFloat("iwz_low_health_blood_alpha")
@@ -115,12 +117,18 @@ local function buildZomPlayerDamageFlash(menu, controller)
 		local bloodState = DataSources.inGame.CP.zombies.playerHealthBlood:GetValue(controllerIndex)
 		if bloodState == 1 then
 			Blood:SetScale(getBloodScale(), 0)
-			print("[IWZ][LowHealth] transition=on controller=" .. tostring(controllerIndex) ..
-				" targetAlpha=" .. tostring(getBloodAlpha()) ..
-				" scale=" .. tostring(getBloodScale()) .. " fadeIn=0ms")
+			if loggedBloodState[controllerIndex] ~= bloodState then
+				print("[IWZ][LowHealth] transition=on controller=" .. tostring(controllerIndex) ..
+					" targetAlpha=" .. tostring(getBloodAlpha()) ..
+					" scale=" .. tostring(getBloodScale()) .. " fadeIn=0ms")
+				loggedBloodState[controllerIndex] = bloodState
+			end
 			ACTIONS.AnimateSequence(self, "bloodOn")
 		elseif bloodState == 0 then
-			print("[IWZ][LowHealth] transition=off controller=" .. tostring(controllerIndex))
+			if loggedBloodState[controllerIndex] ~= bloodState then
+				print("[IWZ][LowHealth] transition=off controller=" .. tostring(controllerIndex))
+				loggedBloodState[controllerIndex] = bloodState
+			end
 			ACTIONS.AnimateSequence(self, "bloodOff")
 		end
 	end)
@@ -133,10 +141,13 @@ local function buildZomPlayerDamageFlash(menu, controller)
 	-- CGLowHealthOverlay draws at its native fullscreen rectangle and ignores
 	-- UIImage transforms. The health model above already controls visibility,
 	-- so use the normal UIImage renderer to make alpha and scale effective.
-	print("[IWZ][LowHealth] widget created controller=" .. tostring(controllerIndex) ..
-		" bloodAlpha=" .. tostring(getBloodAlpha()) ..
-		" bloodScale=" .. tostring(getBloodScale()) ..
-		" renderer=UIImage; damage flash unchanged")
+	if not loggedWidgetCreation[controllerIndex] then
+		print("[IWZ][LowHealth] widget created controller=" .. tostring(controllerIndex) ..
+			" bloodAlpha=" .. tostring(getBloodAlpha()) ..
+			" bloodScale=" .. tostring(getBloodScale()) ..
+			" renderer=UIImage; damage flash unchanged")
+		loggedWidgetCreation[controllerIndex] = true
+	end
 	return self
 end
 
