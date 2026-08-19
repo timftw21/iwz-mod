@@ -67,6 +67,8 @@ tune_powerup_weights()
 
         tune_powerup_weight(loot_type, "grenade_30",
             getdvarint("iwz_powerup_weight_infinite_grenades", 2));
+        tune_powerup_weight(loot_type, "board_windows",
+            getdvarint("iwz_powerup_weight_carpenter", 3));
         tune_powerup_weight(loot_type, "ammo_max",
             getdvarint("iwz_powerup_weight_max_ammo", 12));
         tune_powerup_weight(loot_type, "cash_2",

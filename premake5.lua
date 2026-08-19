@@ -317,7 +317,11 @@ dependson {"tlsdll"}
 
 links {"common"}
 
-prebuildcommands {"pushd %{_MAIN_SCRIPT_DIR}", "tools\\premake5 generate-buildinfo", "popd"}
+prebuildcommands {"pushd %{_MAIN_SCRIPT_DIR}",
+                  "powershell -NoProfile -ExecutionPolicy Bypass -File tools\\validate_ui_script_lifecycle.ps1",
+                  "if errorlevel 1 exit /b 1",
+                  "tools\\premake5 generate-buildinfo",
+                  "popd"}
 
 local COMPUTER_NAME = os.getenv('COMPUTERNAME')
 if COMPUTER_NAME == "JOEL-PC" then

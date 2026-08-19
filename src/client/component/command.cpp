@@ -354,6 +354,32 @@ namespace command
 				game::shared::client_println(client_num, "Unable to teleport to Pack-a-Punch room");
 			}
 		}
+
+		void cmd_test_barrier_tier(const int client_num, const char* command_name, const char* notify_name)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][Challenges] command=%s rejected client=%d reason=not in Zombies\n",
+					command_name, client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, notify_name, {player});
+				console::info("[IWZ][Challenges] command=%s dispatched notify=%s client=%d playerEnt=%d levelEnt=%u\n",
+					command_name, notify_name, client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][Challenges] command=%s dispatch failed client=%d error=%s\n",
+					command_name, client_num, e.what());
+				game::shared::client_println(client_num, "Unable to stage the barrier challenge");
+			}
+		}
 	}
 
 	params::params()
@@ -499,6 +525,8 @@ namespace command
 				"Base team-score interval between Zombies powerup drops (0 preserves stock behavior)");
 			game::Dvar_RegisterInt("iwz_powerup_weight_infinite_grenades", 2, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Infinite Grenades powerup (stock is 5)");
+			game::Dvar_RegisterInt("iwz_powerup_weight_carpenter", 3, 1, 100, game::DVAR_FLAG_SAVED,
+				"Relative drop weight for the Carpenter powerup (stock is 5)");
 			game::Dvar_RegisterInt("iwz_powerup_weight_max_ammo", 12, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Max Ammo powerup (stock is 10)");
 			game::Dvar_RegisterInt("iwz_powerup_weight_double_money", 6, 1, 100, game::DVAR_FLAG_SAVED,
@@ -511,9 +539,13 @@ namespace command
 				"Center-origin scale of the Zombies low-health blood overlay (stock is 0.10; larger pushes blood toward the edges)");
 			game::Dvar_RegisterBool("iwz_double_xp", false, game::DVAR_FLAG_SAVED,
 				"Double Zombies level and weapon XP");
+			game::Dvar_RegisterInt("iwz_challenge_tier5_xp", 2500, 1, 100000, game::DVAR_FLAG_SAVED,
+				"Base XP awarded by Tier 5 Zombies challenges");
+			game::Dvar_RegisterInt("iwz_challenge_splash_duration_ms", 3000, 2500, 10000, game::DVAR_FLAG_SAVED,
+				"Display duration for Zombies challenge progression splashes (stock is 2500 ms)");
 			game::Dvar_RegisterBool("iwz_collision_debug", true, game::DVAR_FLAG_SAVED,
 				"Log zombie traversal collision and test-spawn diagnostics");
-			game::Dvar_RegisterFloat("iwz_zombie_sprint_speed_scale", 0.85f, 0.10f, 1.0f, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterFloat("iwz_zombie_sprint_speed_scale", 0.95f, 0.10f, 1.0f, game::DVAR_FLAG_SAVED,
 				"Movement-rate scale for standard sprinting Zombies (stock is 1.0)");
 
 			utils::hook::jump(0x140BB1DC0, dvar_command_stub, true);
@@ -681,6 +713,26 @@ namespace command
 				}
 
 				cmd_paproom(client_num);
+			});
+
+			add_sv("testBarrierTier1", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_test_barrier_tier(client_num, "testBarrierTier1", "iwz_test_barrier_tier1");
+			});
+
+			add_sv("testBarrierTier5", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_test_barrier_tier(client_num, "testBarrierTier5", "iwz_test_barrier_tier5");
 			});
 
 			add_sv("scene100", [](const int client_num, const params_sv&)
