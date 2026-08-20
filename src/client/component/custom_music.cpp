@@ -23,6 +23,7 @@
 #include <utils/hook.hpp>
 #include <utils/nt.hpp>
 
+#include <charconv>
 #include <cwctype>
 
 namespace custom_music
@@ -600,8 +601,18 @@ namespace custom_music
 					return;
 				}
 
+				const std::string_view argument{params[1]};
+				int index{};
+				const auto [end, error] = std::from_chars(argument.data(), argument.data() + argument.size(), index);
+				if (error != std::errc{} || end != argument.data() + argument.size())
+				{
+					console::warn("[IWZ][CustomMusic] rejected invalid console track index='%s'\n", params[1]);
+					console::info("usage: custommusicplay <zero-based index>\n");
+					return;
+				}
+
 				rescan();
-				play(std::atoi(params[1]));
+				play(index);
 			});
 
 			command::add("custommusicstop", []

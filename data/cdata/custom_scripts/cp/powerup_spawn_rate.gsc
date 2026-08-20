@@ -20,7 +20,7 @@ install_powerup_spawn_rate()
         scripts\engine\utility::waitframe();
     }
 
-    configured_interval = getdvarint("iwz_powerup_drop_base_interval", 1750);
+    configured_interval = getdvarint("iwz_powerup_drop_base_interval", 1900);
     stock_interval = level.powerup_drop_increment;
     stock_threshold = level.score_to_drop;
 
@@ -120,7 +120,7 @@ monitor_powerup_drops()
 
     for (;;)
     {
-        scripts\engine\utility::waitframe();
+        wait(0.25);
 
         if (!isdefined(level.powerup_drop_count))
             continue;

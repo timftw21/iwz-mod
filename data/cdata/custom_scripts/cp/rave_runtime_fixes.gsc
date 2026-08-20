@@ -14,7 +14,7 @@ main()
 
     replacefunc(knife_animation_func, ::load_knife_throw_animation_stub);
     replacefunc(collect_bait_func, ::collect_bait_stub);
-    custom_scripts\cp\gsc_diagnostics::emit("RaveFixes", "installed knife-precache suppression and bait-hint patch");
+    custom_scripts\cp\gsc_diagnostics::emit("RaveFixes", "installed knife-precache suppression and hidden bait interaction");
 }
 
 load_knife_throw_animation_stub()
@@ -30,9 +30,12 @@ collect_bait_stub()
     bait_trigger = spawn("script_model", bait_loc.origin);
     bait_trigger setmodel("tag_origin");
     bait_trigger makeusable();
-    bait_trigger sethintstring("Hold ^3[{+usereload,+activate}]^7 to pick up bait");
+
+    // Retail leaves this usable trigger's hint index unset. The missing
+    // CP_RAVE_PICK_UP_BAIT localization is intentional and should not be
+    // replaced with a visible internal or literal prompt.
     level.bait_model = getent("bait_pickup", "targetname");
-    custom_scripts\cp\gsc_diagnostics::emit("RaveFixes", "created bait trigger with bound and colorized use hint");
+    custom_scripts\cp\gsc_diagnostics::emit("RaveFixes", "created bait trigger with intentionally hidden use hint");
 
     for (;;)
     {
@@ -42,5 +45,6 @@ collect_bait_stub()
         player thread scripts\cp\powers\coop_powers::givepower("power_bait", "secondary", undefined, undefined, undefined, 1, 1);
         wait(0.1);
         level.bait_model hidefromplayer(player);
+        custom_scripts\cp\gsc_diagnostics::emit("RaveFixes", "bait collected player=" + player getentitynumber());
     }
 }

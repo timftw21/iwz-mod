@@ -6,6 +6,12 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/0sh80kdnsvm53rno?svg=true)](https://ci.appveyor.com/project/h1-mod/h1-mod)
 -->
 
+# IWZ-MOD
+
+IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, restored and expanded map behavior, HUD and menu improvements, custom lobby music, progression options, and quality-of-life features such as first-/third-person camera selection.
+
+IWZ-MOD 0.1 includes improvements for every Zombies map, additional fixes for Ghosts 'N Skulls and map quests, and built-in diagnostics for troubleshooting custom scripts. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+
 # IW7-Mod
 
 IW7-Mod is a client for Call of Duty®: Infinite Warfare that adds dedicated servers, hands-on modding utilities, and custom mods that feature content like weapons, models, sounds, and more. ***You must legally own [Call of Duty®: Infinite Warfare](https://store.steampowered.com/app/292730/Call_of_Duty_Infinite_Warfare/)*** to run this mod. Unlicensed or cracked versions of the game are **NOT** supported and will not be given assistance.

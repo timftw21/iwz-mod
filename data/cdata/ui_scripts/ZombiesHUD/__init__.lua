@@ -4,6 +4,51 @@ end
 
 print("[IWZ][ZombiesHUD] shared HUD fixes loading")
 
+local zombiesHudClasses = {
+	{name = "ZMHUD", class = LUI.ZMHUD},
+	{name = "ZMHUDDLC1", class = LUI.ZMHUDDLC1},
+	{name = "ZMHUDDLC2", class = LUI.ZMHUDDLC2},
+	{name = "ZMHUDDLC3", class = LUI.ZMHUDDLC3},
+	{name = "ZMHUDDLC4", class = LUI.ZMHUDDLC4}
+}
+
+local patchedHudClassCount = 0
+
+for _, hudEntry in ipairs(zombiesHudClasses) do
+	local hudClass = hudEntry.class
+
+	if hudClass and hudClass.GetToggleWidgets and not hudClass.iwzHudModePatched then
+		hudClass.iwzHudModePatched = true
+		local hudClassName = hudEntry.name
+		local stockGetToggleWidgets = hudClass.GetToggleWidgets
+		local stockInit = hudClass.init
+
+		hudClass.GetToggleWidgets = function(self)
+			if not Engine.GetDvarBool("iwz_zombies_hud") then
+				return {}, true
+			end
+
+			return stockGetToggleWidgets(self)
+		end
+
+		if stockInit then
+			hudClass.init = function(self, controllerIndex)
+				stockInit(self, controllerIndex)
+				self:addEventHandler("iwz_hud_mode_changed", function(element)
+					LUI.HUD.UpdateWidgetsVisibility(element)
+					print("[IWZ][HUD] refreshed Zombies HUD widgets class=" .. hudClassName ..
+						" enabled=" .. tostring(Engine.GetDvarBool("iwz_zombies_hud")))
+				end)
+			end
+		end
+
+		patchedHudClassCount = patchedHudClassCount + 1
+		print("[IWZ][HUD] installed HUD-only visibility hook class=" .. hudClassName)
+	end
+end
+
+print("[IWZ][HUD] HUD-only visibility hooks ready count=" .. tostring(patchedHudClassCount))
+
 if MenuBuilder.m_types["ConsumableActivate"] == nil then
 	require("inGame.cp.ConsumableActivate")
 end
@@ -218,7 +263,7 @@ else
 		end
 
 		clapboardBuildCount = clapboardBuildCount + 1
-		if clapboardBuildCount <= 3 or clapboardBuildCount % 100 == 0 then
+		if clapboardBuildCount <= 3 or clapboardBuildCount == 100 then
 			print("[IWZ][ZombiesHUD] CPClapboardBase built count=" .. tostring(clapboardBuildCount))
 		end
 
@@ -230,4 +275,342 @@ else
 	-- so install the recovered stock constructor directly instead of wrapping it.
 	MenuBuilder.m_types["CPClapboardBase"] = buildCPClapboardBase
 	print("[IWZ][ZombiesHUD] full CPClapboardBase replacement registered separateTextElements=1 stockFont=64 stockHeight=78 tripleFont=48 tripleHeight=60 extendedFont=36 extendedHeight=46 wordWrap=false boxWidth=114")
+end
+
+do
+	local weaponInfoBuildCount = 0
+	local lastLoggedReserveDigitClass = nil
+
+	local function buildWeaponInfoZM(menu, controller)
+		local self = LUI.UIElement.new()
+		self:SetAnchorsAndPosition(0, 1, 0, 1, 0, 351 * _1080p, 0, 50 * _1080p)
+		self.id = "weaponinfoZM"
+		self._animationSets = {}
+		self._sequences = {}
+
+		local controllerIndex = controller and controller.controllerIndex
+		if not controllerIndex and not Engine.InFrontend() then
+			controllerIndex = self:getRootController()
+		end
+		assert(controllerIndex)
+
+		local box = LUI.UIImage.new()
+		box.id = "box"
+		box:SetAlpha(0.5, 0)
+		box:SetZRotation(180, 0)
+		box:setImage(RegisterMaterial("zm_pc_score_bg"), 0)
+		box:SetUseAA(true)
+		box:SetAnchorsAndPosition(0, 1, 0, 1,
+			_1080p * 100, _1080p * 351, _1080p * 1, _1080p * 48.69)
+		self:addElement(box)
+		self.box = box
+
+		local TextStockAmmo = LUI.UIStyledText.new()
+		TextStockAmmo.id = "TextStockAmmo"
+		TextStockAmmo:SetRGBFromInt(10066329, 0)
+		TextStockAmmo:SetFontSize(20 * _1080p)
+		TextStockAmmo:SetFont(FONTS.GetFont(FONTS.MainBold.File))
+		TextStockAmmo:SetAlignment(LUI.Alignment.Right)
+		TextStockAmmo:SetShadowMinDistance(-0.02, 0)
+		TextStockAmmo:SetShadowMaxDistance(0.02, 0)
+		TextStockAmmo:SetWordWrap(false)
+		local stockReserveLeft = 264.5
+		local stockReserveRight = 296.5
+		local extendedReserveLeft = 270
+		local extendedReserveRight = 300
+		TextStockAmmo:SetAnchorsAndPosition(0, 1, 0, 1,
+			_1080p * stockReserveLeft, _1080p * stockReserveRight,
+			_1080p * 28.69, _1080p * 48.69)
+		TextStockAmmo:BindAlphaToModel(
+			DataSources.inGame.player.currentWeapon.ammoReserveAlpha:GetModel(controllerIndex))
+		local reserveDigitClass = nil
+		TextStockAmmo:SubscribeToModel(
+			DataSources.inGame.player.currentWeapon.stockAmmoDisplay:GetModel(controllerIndex), function()
+				local stockAmmoDisplay =
+					DataSources.inGame.player.currentWeapon.stockAmmoDisplay:GetValue(controllerIndex)
+				if stockAmmoDisplay ~= nil then
+					local numericStockAmmo = math.abs(tonumber(stockAmmoDisplay) or 0)
+					local digitClass = "standard"
+					local fontSize = 20
+					local controlTop = 28.69
+					if numericStockAmmo >= 10000 then
+						digitClass = "five-digit"
+						fontSize = 11
+						controlTop = 37.69
+					elseif numericStockAmmo >= 1000 then
+						digitClass = "four-digit"
+						fontSize = 14
+						controlTop = 34.69
+					end
+
+					if digitClass ~= "standard" then
+						-- The parent HUD masks content shortly after the stock reserve boundary.
+						-- Scale extended counts into that safe region and grow rightward from a
+						-- fixed 6.5-pixel gap after the magazine field.
+						TextStockAmmo:SetFontSize(fontSize * _1080p)
+						TextStockAmmo:SetAlignment(LUI.Alignment.Left)
+						TextStockAmmo:SetAnchorsAndPosition(0, 1, 0, 1,
+							_1080p * extendedReserveLeft, _1080p * extendedReserveRight,
+							_1080p * controlTop, _1080p * 48.69)
+					else
+						TextStockAmmo:SetFontSize(fontSize * _1080p)
+						TextStockAmmo:SetAlignment(LUI.Alignment.Right)
+						TextStockAmmo:SetAnchorsAndPosition(0, 1, 0, 1,
+							_1080p * stockReserveLeft, _1080p * stockReserveRight,
+							_1080p * 28.69, _1080p * 48.69)
+					end
+					TextStockAmmo:setText(stockAmmoDisplay, 0)
+
+					if digitClass ~= reserveDigitClass then
+						reserveDigitClass = digitClass
+						if digitClass ~= lastLoggedReserveDigitClass then
+							lastLoggedReserveDigitClass = digitClass
+							print("[IWZ][ZombiesHUD] reserve ammo layout value=" ..
+								tostring(stockAmmoDisplay) .. " class=" .. digitClass ..
+								" font=" .. tostring(fontSize) .. " controlTop=" .. tostring(controlTop) ..
+								" wordWrap=false bounds=" ..
+								tostring(digitClass ~= "standard" and extendedReserveLeft or stockReserveLeft) ..
+								".." .. tostring(digitClass ~= "standard" and extendedReserveRight or stockReserveRight) ..
+								" alignment=" .. tostring(digitClass ~= "standard" and "left" or "right"))
+						end
+					end
+				end
+			end)
+		self:addElement(TextStockAmmo)
+		self.TextStockAmmo = TextStockAmmo
+
+		local TextLeftClipAmmo = LUI.UIStyledText.new()
+		TextLeftClipAmmo.id = "TextLeftClipAmmo"
+		TextLeftClipAmmo:SetRGBFromTable(SWATCHES.HUD.normal, 0)
+		TextLeftClipAmmo:SetAlpha(0.92, 0)
+		TextLeftClipAmmo:SetDepth(15, 0)
+		TextLeftClipAmmo:SetDotPitchEnabled(true)
+		TextLeftClipAmmo:SetDotPitchX(0, 0)
+		TextLeftClipAmmo:SetDotPitchY(0, 0)
+		TextLeftClipAmmo:SetDotPitchContrast(0, 0)
+		TextLeftClipAmmo:SetDotPitchMode(0)
+		TextLeftClipAmmo:SetFontSize(48 * _1080p)
+		TextLeftClipAmmo:SetFont(FONTS.GetFont(FONTS.MainBold.File))
+		TextLeftClipAmmo:SetAlignment(LUI.Alignment.Right)
+		TextLeftClipAmmo:SetShadowMinDistance(-0.02, 0)
+		TextLeftClipAmmo:SetShadowMaxDistance(0.02, 0)
+		TextLeftClipAmmo:SetAnchorsAndPosition(0, 1, 0, 1,
+			_1080p * 102, _1080p * 179, _1080p * 7, _1080p * 55)
+		TextLeftClipAmmo:SubscribeToModel(
+			DataSources.inGame.player.currentWeapon.clipAmmoLeftDisplay:GetModel(controllerIndex), function()
+				local clipAmmoLeftDisplay =
+					DataSources.inGame.player.currentWeapon.clipAmmoLeftDisplay:GetValue(controllerIndex)
+				if clipAmmoLeftDisplay ~= nil then
+					TextLeftClipAmmo:setText(clipAmmoLeftDisplay, 0)
+				end
+			end)
+		self:addElement(TextLeftClipAmmo)
+		self.TextLeftClipAmmo = TextLeftClipAmmo
+
+		local TextRightClipAmmo = LUI.UIStyledText.new()
+		TextRightClipAmmo.id = "TextRightClipAmmo"
+		TextRightClipAmmo:SetRGBFromTable(SWATCHES.HUD.normal, 0)
+		TextRightClipAmmo:SetDotPitchEnabled(true)
+		TextRightClipAmmo:SetDotPitchX(0, 0)
+		TextRightClipAmmo:SetDotPitchY(0, 0)
+		TextRightClipAmmo:SetDotPitchContrast(0, 0)
+		TextRightClipAmmo:SetDotPitchMode(0)
+		TextRightClipAmmo:SetFontSize(48 * _1080p)
+		TextRightClipAmmo:SetFont(FONTS.GetFont(FONTS.MainBold.File))
+		TextRightClipAmmo:SetAlignment(LUI.Alignment.Right)
+		TextRightClipAmmo:SetShadowMinDistance(-0.2, 0)
+		TextRightClipAmmo:SetShadowMaxDistance(0.8, 0)
+		TextRightClipAmmo:SetAnchorsAndPosition(0, 1, 0, 1,
+			_1080p * 184, _1080p * 263.5, _1080p * 2, _1080p * 50)
+		TextRightClipAmmo:BindAlphaToModel(
+			DataSources.inGame.player.currentWeapon.ammoInfoAlpha:GetModel(controllerIndex))
+		TextRightClipAmmo:SubscribeToModel(
+			DataSources.inGame.player.currentWeapon.clipAmmoRightDisplay:GetModel(controllerIndex), function()
+				local clipAmmoRightDisplay =
+					DataSources.inGame.player.currentWeapon.clipAmmoRightDisplay:GetValue(controllerIndex)
+				if clipAmmoRightDisplay ~= nil then
+					TextRightClipAmmo:setText(clipAmmoRightDisplay, 0)
+				end
+			end)
+		self:addElement(TextRightClipAmmo)
+		self.TextRightClipAmmo = TextRightClipAmmo
+
+		local weaponDescriptionZM = MenuBuilder.BuildRegisteredType("weaponDescriptionZM", {
+			controllerIndex = controllerIndex
+		})
+		weaponDescriptionZM.id = "weaponDescriptionZM"
+		weaponDescriptionZM:SetAnchorsAndPosition(0, 1, 0, 1,
+			_1080p * -13.5, _1080p * 286.5, _1080p * -133.13, _1080p * -83.13)
+		self:addElement(weaponDescriptionZM)
+		self.weaponDescriptionZM = weaponDescriptionZM
+
+		local bar = LUI.UIImage.new()
+		bar.id = "bar"
+		bar:SetAlpha(0.3, 0)
+		bar:SetUseAA(true)
+		bar:SetAnchorsAndPosition(0, 1, 0, 1,
+			_1080p * 182, _1080p * 184, _1080p * 3, _1080p * 46.69)
+		self:addElement(bar)
+		self.bar = bar
+
+		self._animationSets.DefaultAnimationSet = function()
+			self._sequences.DefaultSequence = function()
+			end
+
+			TextStockAmmo:RegisterAnimationSequence("NoStockAmmo", {
+				{
+					function()
+						return self.TextStockAmmo:SetRGBFromTable(SWATCHES.HUD.warning, 0)
+					end
+				}
+			})
+			self._sequences.NoStockAmmo = function()
+				TextStockAmmo:AnimateSequence("NoStockAmmo")
+			end
+
+			TextStockAmmo:RegisterAnimationSequence("HasStockAmmo", {
+				{
+					function()
+						return self.TextStockAmmo:SetRGBFromInt(12566463, 0)
+					end
+				}
+			})
+			self._sequences.HasStockAmmo = function()
+				TextStockAmmo:AnimateSequence("HasStockAmmo")
+			end
+
+			box:RegisterAnimationSequence("ShowLeftClipAmmo", {
+				{
+					function()
+						return self.box:SetAnchorsAndPosition(0, 1, 0, 1,
+							_1080p * 156, _1080p * 351, _1080p * 1, _1080p * 48.69, 0)
+					end
+				}
+			})
+			TextLeftClipAmmo:RegisterAnimationSequence("ShowLeftClipAmmo", {
+				{
+					function()
+						return self.TextLeftClipAmmo:SetAlpha(1, 0)
+					end
+				}
+			})
+			bar:RegisterAnimationSequence("ShowLeftClipAmmo", {
+				{
+					function()
+						return self.bar:SetAlpha(0.5, 0)
+					end
+				}
+			})
+			self._sequences.ShowLeftClipAmmo = function()
+				box:AnimateSequence("ShowLeftClipAmmo")
+				TextLeftClipAmmo:AnimateSequence("ShowLeftClipAmmo")
+				bar:AnimateSequence("ShowLeftClipAmmo")
+			end
+
+			box:RegisterAnimationSequence("HideLeftClipAmmo", {
+				{
+					function()
+						return self.box:SetAnchorsAndPosition(0, 1, 0, 1,
+							_1080p * 156, _1080p * 351, _1080p * 1, _1080p * 48.69, 0)
+					end
+				}
+			})
+			TextLeftClipAmmo:RegisterAnimationSequence("HideLeftClipAmmo", {
+				{
+					function()
+						return self.TextLeftClipAmmo:SetAlpha(0, 0)
+					end
+				}
+			})
+			bar:RegisterAnimationSequence("HideLeftClipAmmo", {
+				{
+					function()
+						return self.bar:SetAlpha(0, 0)
+					end
+				}
+			})
+			self._sequences.HideLeftClipAmmo = function()
+				box:AnimateSequence("HideLeftClipAmmo")
+				TextLeftClipAmmo:AnimateSequence("HideLeftClipAmmo")
+				TextRightClipAmmo:AnimateSequence("HideLeftClipAmmo")
+				bar:AnimateSequence("HideLeftClipAmmo")
+			end
+		end
+
+		self._animationSets.DefaultAnimationSet()
+		TextStockAmmo:SubscribeToModel(
+			DataSources.inGame.player.currentWeapon.stockAmmo:GetModel(controllerIndex), function()
+				local stockAmmo = DataSources.inGame.player.currentWeapon.stockAmmo:GetValue(controllerIndex)
+				if stockAmmo ~= nil and stockAmmo <= 0 then
+					ACTIONS.AnimateSequence(self, "NoStockAmmo")
+				end
+				if stockAmmo ~= nil and stockAmmo > 0 then
+					ACTIONS.AnimateSequence(self, "HasStockAmmo")
+				end
+			end)
+
+		local updateDualWieldLayout = function()
+			local isDualWielding =
+				DataSources.inGame.player.currentWeapon.isDualWielding:GetValue(controllerIndex)
+			local isMeleeWeapon =
+				DataSources.inGame.player.currentWeapon.isMeleeWeapon:GetValue(controllerIndex)
+			if isDualWielding ~= nil and isDualWielding == true and
+				isMeleeWeapon ~= nil and isMeleeWeapon == false then
+				ACTIONS.AnimateSequence(self, "ShowLeftClipAmmo")
+			end
+			if isDualWielding ~= nil and isDualWielding == false then
+				ACTIONS.AnimateSequence(self, "HideLeftClipAmmo")
+			end
+		end
+
+		self:SubscribeToModel(
+			DataSources.inGame.player.currentWeapon.isDualWielding:GetModel(controllerIndex),
+			updateDualWieldLayout)
+		self:SubscribeToModel(
+			DataSources.inGame.player.currentWeapon.isMeleeWeapon:GetModel(controllerIndex),
+			updateDualWieldLayout)
+		self:SubscribeToModel(
+			DataSources.inGame.player.currentWeapon.isMeleeWeapon:GetModel(controllerIndex), function()
+				local isMeleeWeapon =
+					DataSources.inGame.player.currentWeapon.isMeleeWeapon:GetValue(controllerIndex)
+				if isMeleeWeapon ~= nil and isMeleeWeapon == true then
+					ACTIONS.AnimateSequence(self, "HideLeftClipAmmo")
+				end
+			end)
+
+		weaponInfoBuildCount = weaponInfoBuildCount + 1
+		if weaponInfoBuildCount <= 3 or weaponInfoBuildCount == 100 then
+			print("[IWZ][ZombiesHUD] weaponinfoZM built count=" .. tostring(weaponInfoBuildCount))
+		end
+
+		return self
+	end
+
+	local function installWeaponInfoReplacement(source)
+		-- As with CPClapboardBase above, generated registry entries are factory
+		-- trampolines and cannot safely be wrapped. Install the recovered stock
+		-- constructor with only the reserve-ammo text geometry changed.
+		MenuBuilder.m_types["weaponinfoZM"] = buildWeaponInfoZM
+		print("[IWZ][ZombiesHUD] full weaponinfoZM replacement registered source=" .. source ..
+			" stockBoxWidth=32 extendedBoxWidth=30 extendedLeft=270 extendedRight=300 " ..
+			"magazineGap=6.5 fourDigitFont=14 fiveDigitFont=11 wordWrap=false maxDigits=5")
+	end
+
+	if MenuBuilder.m_types["weaponinfoZM"] ~= nil then
+		installWeaponInfoReplacement("existing-type")
+	else
+		-- weaponinfoZM is loaded lazily with the Zombies HUD. Requiring it while the
+		-- custom-script loader is active re-enters HKS package loading, so replace its
+		-- one future registration and restore the global registrar immediately.
+		local originalRegisterType = MenuBuilder.registerType
+		MenuBuilder.registerType = function(typeName, constructor)
+			local result = originalRegisterType(typeName, constructor)
+			if typeName == "weaponinfoZM" then
+				MenuBuilder.registerType = originalRegisterType
+				installWeaponInfoReplacement("deferred-registration")
+			end
+			return result
+		end
+		print("[IWZ][ZombiesHUD] deferred weaponinfoZM replacement armed")
+	end
 end

@@ -879,6 +879,7 @@ namespace game
 		assert_offsetof(playerState_s, viewangles, 440);
 		assert_offsetof(playerState_s, weapState, 1620);
 		assert_offsetof(playerState_s, weapFlags, 2188);
+		assert_offsetof(playerState_s, fWeaponPosFrac, 2196);
 
 		struct usercmd_s
 		{

@@ -396,14 +396,17 @@ arcade_game_ended()
         winning_team = "allies";
     }
 
-    splash = 6;
-    if (won)
-        splash = 5;
+    // Arcade borrows direct_to_boss_fight during setup to suppress the normal
+    // Zombies intro/Scene presentation. The stock endgame reads that same flag
+    // as a Boss Battle result, adjusts the Scene from an uninitialized boss
+    // timer, and shows the selected map's "boss defeated in" splash. End the
+    // borrowed state before entering the shared post-game flow and clear any
+    // stale boss presentation omnvars.
+    level.direct_to_boss_fight = undefined;
+    setomnvar("zm_boss_splash", 0);
+    setomnvar("zm_boss_id", -1);
 
-    setomnvar("zm_boss_id", level.iwz_gns_arcade_selection);
-    setomnvar("zm_boss_splash", splash);
-
-    arcade_log("native game completed: selection=" + level.iwz_gns_arcade_selection + " won=" + won + " failing=" + level.processing_ghost_wave_failing + " splash=" + splash + " result=" + result);
+    arcade_log("native game completed: selection=" + level.iwz_gns_arcade_selection + " won=" + won + " failing=" + level.processing_ghost_wave_failing + " result=" + result + " directChallengeCleared=1 bossSplash=0 bossId=-1");
 
     // Stock Ghosts N Skulls has now restored player state and shown its score
     // splash. Finish through the same endgame path as Boss Battle so the normal

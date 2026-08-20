@@ -70,6 +70,7 @@ namespace filesystem
 
 			fs_startup_hook.invoke<void>(name);
 
+			console::info("[IWZ][FS] search-path priority is registration-based; the first listed path wins raw-file collisions\n");
 			fs_display_path();
 			console::info("----------------------\n");
 		}
@@ -205,6 +206,9 @@ namespace filesystem
 	{
 		std::vector<std::string> paths{};
 
+		// Preserve register_path's push-front priority. Raw files and GSC use the
+		// first match; LUI deliberately traverses the resulting list in reverse so
+		// higher-priority scripts are installed last.
 		for (const auto& path : get_search_paths_internal())
 		{
 			paths.push_back(path.generic_string());
@@ -218,8 +222,6 @@ namespace filesystem
 			}
 		}
 
-		std::sort(paths.begin(), paths.end());
-
 		return paths;
 	}
 
@@ -227,8 +229,8 @@ namespace filesystem
 	{
 		std::vector<std::string> paths{};
 
-		auto paths_oridinal = get_search_paths();
-		for (auto i = paths_oridinal.rbegin(); i != paths_oridinal.rend(); ++i)
+		auto paths_original = get_search_paths();
+		for (auto i = paths_original.rbegin(); i != paths_original.rend(); ++i)
 		{
 			paths.push_back(*i);
 		}

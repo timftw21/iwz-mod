@@ -10,7 +10,6 @@
 
 #include "game/game.hpp"
 
-#include "game/scripting/event.hpp"
 #include "game/scripting/execution.hpp"
 #include "game/scripting/functions.hpp"
 
@@ -72,14 +71,6 @@ namespace scripting
 
 					console::info("[IWZ][Collision] VM notify iwz_spawn_clown owner=%u args=%zu\n",
 						notify_list_owner_id, argument_count);
-				}
-				event e {};
-				e.name = string;
-				e.entity = notify_list_owner_id;
-
-				for (auto* value = top; value->type != game::VAR_PRECODEPOS; --value)
-				{
-					e.arguments.emplace_back(*value);
 				}
 			}
 
@@ -287,6 +278,7 @@ namespace scripting
 		void post_unpack() override
 		{
 			vm_notify_hook.create(0x140C10460, vm_notify_stub);
+			console::info("[IWZ][GSC] VM notify diagnostics installed without unused event materialization\n");
 
 			scr_add_class_field_hook.create(0x140C061F0, scr_add_class_field_stub);
 

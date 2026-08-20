@@ -5,10 +5,11 @@ main()
 
     boat_path_func = getfunction("scripts/cp/maps/cp_rave/cp_rave_boat", "packboat_path");
     boat_countdown_func = getfunction("scripts/cp/maps/cp_rave/cp_rave_boat", "packboat_countdown");
+    setup_boat_sounds_func = getfunction("scripts/cp/maps/cp_rave/cp_rave_boat", "setup_boat_sounds");
     level.iwz_rave_boat_stop_and_drop_players = getfunction("scripts/cp/maps/cp_rave/cp_rave_boat", "stop_and_drop_players");
     level.iwz_rave_boat_stop_and_wait_for_use = getfunction("scripts/cp/maps/cp_rave/cp_rave_boat", "stop_and_wait_for_boat_use");
 
-    if (!isdefined(boat_path_func) || !isdefined(boat_countdown_func) ||
+    if (!isdefined(boat_path_func) || !isdefined(boat_countdown_func) || !isdefined(setup_boat_sounds_func) ||
         !isdefined(level.iwz_rave_boat_stop_and_drop_players) || !isdefined(level.iwz_rave_boat_stop_and_wait_for_use))
     {
         boat_speed_log("installation failed: a stock Rave boat function was unavailable");
@@ -17,7 +18,8 @@ main()
 
     replacefunc(boat_path_func, ::packboat_path_boosted);
     replacefunc(boat_countdown_func, ::packboat_countdown_boosted);
-    boat_speed_log("installed map-safe Rave boat function replacements");
+    replacefunc(setup_boat_sounds_func, ::setup_boat_sounds_synchronized);
+    boat_speed_log("installed map-safe Rave boat path, countdown, and audio replacements");
 }
 
 post_load()
@@ -81,6 +83,95 @@ install_rave_boat_speed()
     level thread monitor_rave_boat_speed();
 }
 
+setup_boat_sounds_synchronized()
+{
+    if (!isdefined(level.boat_vehicle.sfx_front))
+        level.boat_vehicle.sfx_front = spawn("script_model", level.boat_vehicle.origin);
+
+    if (!isdefined(level.boat_vehicle.sfx_rear))
+        level.boat_vehicle.sfx_rear = spawn("script_model", level.boat_vehicle.origin);
+
+    wait(0.05);
+    level.boat_vehicle.sfx_front linkto(level.boat_vehicle, "tag_body");
+    level.boat_vehicle.sfx_rear linkto(level.boat_vehicle, "tag_motor");
+    wait(0.05);
+    level.boat_vehicle.sfx_front playsound("scn_boatride_startup");
+    level.boat_vehicle.sfx_rear playsound("scn_boatride_startup_lsrs");
+
+    mode = get_active_rave_boat_speed_mode();
+    handoff_time = 5.15;
+
+    if (mode == "boosted")
+        handoff_time = 1.25;
+
+    boat_speed_log("audio cue=startup mode=" + mode + " handoff=" + handoff_time);
+    wait handoff_time;
+
+    if (mode == "boosted")
+        stop_rave_boat_scene_sounds("startup-to-moving");
+
+    level.boat_vehicle thread boatride_sfx_synchronized();
+}
+
+boatride_sfx_synchronized()
+{
+    level endon("boatride_over");
+    level endon("game_ended");
+
+    mode = get_active_rave_boat_speed_mode();
+
+    if (isdefined(level.boat_vehicle.sfx_front))
+    {
+        level.boat_vehicle.sfx_front playsoundonmovingent("scn_boatride_01");
+        level.boat_vehicle.sfx_rear playsoundonmovingent("scn_boatride_01_lsrs");
+        boat_speed_log("audio cue=scn_boatride_01 mode=" + mode);
+    }
+
+    path_node = getvehiclenode(level.boat_start_node.target, "targetname");
+
+    for (;;)
+    {
+        path_node waittill("trigger");
+
+        if (isdefined(path_node.name) && path_node.name == "rave_boat_sound_2")
+        {
+            if (mode == "boosted")
+                stop_rave_boat_scene_sounds("moving-01-to-moving-02");
+
+            if (isdefined(level.boat_vehicle.sfx_front))
+            {
+                level.boat_vehicle.sfx_front playsoundonmovingent("scn_boatride_02");
+                level.boat_vehicle.sfx_rear playsoundonmovingent("scn_boatride_02_lsrs");
+                boat_speed_log("audio cue=scn_boatride_02 mode=" + mode + " node=" + get_rave_boat_node_name(path_node));
+            }
+        }
+
+        if (!isdefined(path_node.target))
+            break;
+
+        path_node = getvehiclenode(path_node.target, "targetname");
+    }
+}
+
+stop_rave_boat_scene_sounds(context)
+{
+    stopped_emitters = 0;
+
+    if (isdefined(level.boat_vehicle.sfx_front))
+    {
+        level.boat_vehicle.sfx_front stopsounds();
+        stopped_emitters++;
+    }
+
+    if (isdefined(level.boat_vehicle.sfx_rear))
+    {
+        level.boat_vehicle.sfx_rear stopsounds();
+        stopped_emitters++;
+    }
+
+    boat_speed_log("audio stopped obsolete cue context=" + context + " emitters=" + stopped_emitters);
+}
+
 packboat_path_boosted(boat_interaction)
 {
     path_node = getvehiclenode(level.boat_start_node.target, "targetname");
@@ -95,6 +186,9 @@ packboat_path_boosted(boat_interaction)
             switch (path_node.script_noteworthy)
             {
                 case "island_stop":
+                    if (get_active_rave_boat_speed_mode() == "boosted")
+                        stop_rave_boat_scene_sounds("moving-02-to-island-return");
+
                     [[level.iwz_rave_boat_stop_and_drop_players]]("island_dropoff_player");
                     break;
 

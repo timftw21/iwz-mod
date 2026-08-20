@@ -2,3 +2,7 @@
 .vscode
 build/
 /docs/
+/.tmp/
+/minidumps/
+/*.obj
+/iw7-mod.exe

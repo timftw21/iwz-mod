@@ -19,7 +19,9 @@
 namespace fastfiles
 {
 	static utils::concurrency::container<std::string> current_fastfile;
+	static utils::concurrency::container<std::vector<localize_load_callback>> localize_load_callbacks;
 	static utils::concurrency::container<std::vector<sound_bank_load_callback>> sound_bank_load_callbacks;
+	static utils::concurrency::container<std::vector<weapon_load_callback>> weapon_load_callbacks;
 
 	std::string get_current_fastfile()
 	{
@@ -31,9 +33,25 @@ namespace fastfiles
 		return fastfile_copy;
 	}
 
+	void on_localize_loaded(localize_load_callback callback)
+	{
+		localize_load_callbacks.access([&callback](std::vector<localize_load_callback>& callbacks)
+		{
+			callbacks.emplace_back(std::move(callback));
+		});
+	}
+
 	void on_sound_bank_loaded(sound_bank_load_callback callback)
 	{
 		sound_bank_load_callbacks.access([&callback](std::vector<sound_bank_load_callback>& callbacks)
+		{
+			callbacks.emplace_back(std::move(callback));
+		});
+	}
+
+	void on_weapon_loaded(weapon_load_callback callback)
+	{
+		weapon_load_callbacks.access([&callback](std::vector<weapon_load_callback>& callbacks)
 		{
 			callbacks.emplace_back(std::move(callback));
 		});
@@ -124,6 +142,17 @@ namespace fastfiles
 		{
 			auto header = *header_ptr;
 			
+			if (type == game::ASSET_TYPE_LOCALIZE_ENTRY && header.localize)
+			{
+				localize_load_callbacks.access([&header](const std::vector<localize_load_callback>& callbacks)
+				{
+					for (const auto& callback : callbacks)
+					{
+						callback(header.localize);
+					}
+				});
+			}
+
 			if (type == game::ASSET_TYPE_SCRIPTFILE && header.scriptfile)
 			{
 				dump_gsc_script(header.scriptfile->name ? header.scriptfile->name : "__unnamed__", header);
@@ -136,6 +165,17 @@ namespace fastfiles
 					for (const auto& callback : callbacks)
 					{
 						callback(header.soundBank);
+					}
+				});
+			}
+
+			if (type == game::ASSET_TYPE_WEAPON && header.weapon)
+			{
+				weapon_load_callbacks.access([&header](const std::vector<weapon_load_callback>& callbacks)
+				{
+					for (const auto& callback : callbacks)
+					{
+						callback(header.weapon);
 					}
 				});
 			}

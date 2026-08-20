@@ -33,6 +33,8 @@ namespace gsc
 		std::unordered_map<const char*, const char*> vm_execute_hooks;
 		const char* target_function = nullptr;
 		std::atomic_uint32_t colorized_hint_log_count{0};
+		std::atomic_bool logged_shaolin_decade_fix{false};
+		std::unordered_set<std::string> logged_missing_localized_hint_assets;
 
 		void replace_argument_with_string(const unsigned int index, const std::string& value)
 		{
@@ -43,6 +45,34 @@ namespace gsc
 			game::RemoveRefToValue(previous.type, previous.u);
 			argument->type = game::VAR_STRING;
 			argument->u.stringValue = string_value;
+		}
+
+		void correct_shaolin_intro_text_argument(const function_args& args)
+		{
+			if (args.size() == 0)
+			{
+				return;
+			}
+
+			const auto argument = args[0].get_raw();
+			if (argument.type != game::VAR_ISTRING)
+			{
+				return;
+			}
+
+			const auto* reference = game::SL_ConvertToString(argument.u.stringValue);
+			if (reference == nullptr || _stricmp(reference, "CP_DISCO_INTRO_LINE_1") != 0)
+			{
+				return;
+			}
+
+			const std::string reference_copy = reference;
+			replace_argument_with_string(0, "Sometime in the 1970s");
+			if (!logged_shaolin_decade_fix.exchange(true))
+			{
+				console::info("[IWZ][ShaolinIntro] replaced settext reference='%s' value='Sometime in the 1970s'\n",
+					reference_copy.data());
+			}
 		}
 
 		void colorize_hint_string_argument(const function_args& args)
@@ -65,6 +95,10 @@ namespace gsc
 			{
 				is_localized = true;
 				reference = game::SL_ConvertToString(argument.u.stringValue);
+				if (reference == nullptr)
+				{
+					return;
+				}
 				hint_text = localized_strings::lookup(reference);
 				localized_strings::apply_registered_override_asset(reference);
 			}
@@ -84,10 +118,14 @@ namespace gsc
 			{
 				if (!localized_strings::override_asset(reference, colorized.value()))
 				{
-					console::warn("[IWZ][HintColor] could not override localization asset '%s'; preserving original hint index\n",
-						reference);
+					if (logged_missing_localized_hint_assets.emplace(reference).second)
+					{
+						console::warn("[IWZ][HintColor] localization asset '%s' is absent; preserving its hint index and retrying future materialization\n",
+							reference);
+					}
 					return;
 				}
+				logged_missing_localized_hint_assets.erase(reference);
 			}
 			else
 			{
@@ -398,6 +436,8 @@ namespace gsc
 				if (free_scripts && post_shutdown)
 				{
 					vm_execute_hooks.clear();
+					logged_missing_localized_hint_assets.clear();
+					colorized_hint_log_count = 0;
 				}
 			});
 
@@ -545,6 +585,21 @@ namespace gsc
 				if (original == nullptr)
 				{
 					throw std::runtime_error("stock sethintstring method is unavailable");
+				}
+
+				original(ent);
+				return scripting::script_value{};
+			});
+
+			method::add("settext", [](const game::scr_entref_t ent, const function_args& args)
+			{
+				correct_shaolin_intro_text_argument(args);
+
+				constexpr auto method_id = 0x834D;
+				const auto original = meth_table[method_id - 0x8000];
+				if (original == nullptr)
+				{
+					throw std::runtime_error("stock settext method is unavailable");
 				}
 
 				original(ent);

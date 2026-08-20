@@ -380,6 +380,41 @@ namespace command
 				game::shared::client_println(client_num, "Unable to stage the barrier challenge");
 			}
 		}
+
+		void cmd_give_petn(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][AttackFixes] givePetn rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			const auto* mapname = game::Dvar_FindVar("ui_mapname");
+			if (!mapname || !mapname->current.string || _stricmp(mapname->current.string, "cp_town") != 0)
+			{
+				console::warn("[IWZ][AttackFixes] givePetn rejected client=%d reason=not on cp_town\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available on Attack of the Radioactive Thing");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_give_petn", {player});
+				console::info("[IWZ][AttackFixes] givePetn dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][AttackFixes] givePetn dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to give the requested chemical");
+			}
+		}
 	}
 
 	params::params()
@@ -521,7 +556,7 @@ namespace command
 		{
 			game::Dvar_RegisterBool("iwz_gsc_diagnostics", true, game::DVAR_FLAG_SAVED,
 				"Enable diagnostics emitted by custom GSC patches");
-			game::Dvar_RegisterInt("iwz_powerup_drop_base_interval", 1750, 0, 10000, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterInt("iwz_powerup_drop_base_interval", 1900, 0, 10000, game::DVAR_FLAG_SAVED,
 				"Base team-score interval between Zombies powerup drops (0 preserves stock behavior)");
 			game::Dvar_RegisterInt("iwz_powerup_weight_infinite_grenades", 2, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Infinite Grenades powerup (stock is 5)");
@@ -713,6 +748,16 @@ namespace command
 				}
 
 				cmd_paproom(client_num);
+			});
+
+			add_sv("givePetn", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_give_petn(client_num);
 			});
 
 			add_sv("testBarrierTier1", [](const int client_num, const params_sv&)

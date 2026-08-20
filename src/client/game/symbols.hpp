@@ -345,6 +345,8 @@ namespace game
 	
 	WEAK symbol<DB_AssetEntry*(void* this_, const char* name, XAssetType type)> DB_AssetEntryTable_FindAsset{0x1403B57F0};
 	WEAK symbol<void(msg_t* msg, char* data, std::int32_t length)> MSG_Init{ 0x140BB2F60 };
+	WEAK symbol<std::int32_t(msg_t* msg, std::int32_t bits)> MSG_ReadBits{ 0x140BB3290 };
+	WEAK symbol<void(msg_t* msg, std::int32_t data, std::int32_t bits)> MSG_WriteBits{ 0x140BB4180 };
 	WEAK symbol<void(msg_t* msg, std::string data)> MSG_WriteString{ 0x140BB4620 };
 	WEAK symbol<void(msg_t* msg, const void* data, std::int32_t length)> MSG_WriteData{ 0x140BB4340 };
 	WEAK symbol<void(msg_t* msg, std::int32_t data)> MSG_WriteByte{ 0x140BB4320 };

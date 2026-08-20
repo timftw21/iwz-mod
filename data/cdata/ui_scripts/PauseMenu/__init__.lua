@@ -17,6 +17,7 @@ local originalCPPauseMenu = MenuBuilder.m_types["CPPauseMenu"]
 
 local weaponSplashTable = "cp/zombies/zombie_splashtable.csv"
 local weaponRankTable = "mp/weaponRankTable.csv"
+local weaponUnlockTable = "mp/unlocks/CPWeaponUnlocks.csv"
 
 local function logWeaponWidget(message)
 	print("[IWZ][WeaponLevelWidget] " .. message)
@@ -93,6 +94,42 @@ local function getWeaponXP(controllerIndex, weaponRef, field)
 	return tonumber(value), nil
 end
 
+local function getWeaponUnlockData(controllerIndex, weaponRef)
+	-- cp_weaponrank.gsc gates weapon XP with this exact CP rank/table check.
+	-- The stored rank and column 7 are zero-based; column 2 is the matching
+	-- player-facing level printed by the stock unlock UI.
+	local lookupOK, rawUnlockRank = pcall(Engine.TableLookup, weaponUnlockTable, 0, weaponRef, 7)
+	if not lookupOK or rawUnlockRank == nil then
+		return nil, "unlock rank lookup unavailable: " .. tostring(rawUnlockRank)
+	end
+
+	-- Standard rows store their rank gate in column 7. DLC/merit rows reuse that
+	-- column for the first criterion's numeric threshold, but cp_weaponrank.gsc
+	-- still interprets it as a rank. Mirror that runtime behavior exactly; an
+	-- absent or blank numeric value has the same zero-gate result as GSC's int().
+	local unlockRank = tonumber(rawUnlockRank) or 0
+	local rankOK, playerRank = pcall(
+		Engine.GetPlayerDataEx,
+		controllerIndex,
+		CoD.StatsGroup.Coop,
+		"progression",
+		"playerLevel",
+		"rank"
+	)
+	playerRank = tonumber(playerRank)
+	if not rankOK or not playerRank then
+		return nil, "player Zombies rank unavailable: " .. tostring(playerRank)
+	end
+
+	local displayLevel = tonumber(Engine.TableLookup(weaponUnlockTable, 0, weaponRef, 2)) or unlockRank + 1
+	return {
+		isLocked = playerRank < unlockRank,
+		playerRank = playerRank,
+		unlockRank = unlockRank,
+		displayLevel = displayLevel
+	}, nil
+end
+
 local function hideWeaponLevelWidget(widget, weaponAsset, reason)
 	widget:SetAlpha(0, 0)
 
@@ -138,6 +175,51 @@ local function refreshWeaponLevelWidget(widget, controllerIndex)
 		return
 	end
 
+	local icon, iconSource = getWeaponLevelIcon(weaponRef)
+	if not icon then
+		hideWeaponLevelWidget(widget, weaponAsset, "weapon icon unavailable")
+		return
+	end
+
+	local unlockData, unlockError = getWeaponUnlockData(controllerIndex, weaponRef)
+	if not unlockData then
+		hideWeaponLevelWidget(widget, weaponAsset, unlockError)
+		return
+	end
+
+	if unlockData.isLocked then
+		widget.ProgressBar:SetProgress(0)
+		widget.RankIcon:setImage(RegisterMaterial(icon), 0)
+		widget.RankIcon:SetRGBFromInt(8421504, 0)
+		widget.RankIcon:SetAlpha(0.35, 0)
+		widget.RankNumber:SetAlpha(0, 0)
+		widget.LockIcon:SetAlpha(1, 0)
+		widget.RankXPLabel:setText(ToUpperCase(Engine.Localize("MENU_LOCKED")) .. ":", 0)
+		widget.RankXPValue:setText(
+			"LVL " .. tostring(unlockData.displayLevel),
+			0
+		)
+		widget:SetAlpha(1, 0)
+
+		local state = table.concat({ "locked", weaponRef, unlockData.playerRank, unlockData.unlockRank, icon }, ":")
+		if widget.iwzLoggedState ~= state then
+			widget.iwzLoggedState = state
+			logWeaponWidget(
+				"locked controller=" .. controllerIndex
+					.. " asset=" .. weaponAsset
+					.. " ref=" .. weaponRef
+					.. " playerRank=" .. unlockData.playerRank
+					.. " requiredRank=" .. unlockData.unlockRank
+					.. " displayLevel=" .. unlockData.displayLevel
+					.. " requirementFormat=LVL noWrap=1 lockedColon=1"
+					.. " icon=" .. icon
+					.. " iconSource=" .. iconSource
+					.. " source=cp_weaponrank.gsc/CPWeaponUnlocks.csv"
+			)
+		end
+		return
+	end
+
 	local ok, levelData = pcall(Cac.GetWeaponLevelData, weaponRef, controllerIndex)
 	if not ok or not levelData then
 		hideWeaponLevelWidget(widget, weaponAsset, "weapon level data unavailable: " .. tostring(levelData))
@@ -158,20 +240,32 @@ local function refreshWeaponLevelWidget(widget, controllerIndex)
 	end
 
 	local currentXP = mpXP + cpXP
-	local rankOK, currentRank = pcall(Cac.GetWeaponRankForXP, currentXP)
-	currentRank = tonumber(currentRank)
-	if not rankOK or not currentRank then
+	local rankOK, rawCurrentRank = pcall(Cac.GetWeaponRankForXP, currentXP)
+	rawCurrentRank = tonumber(rawCurrentRank)
+	if not rankOK or not rawCurrentRank then
 		hideWeaponLevelWidget(widget, weaponAsset, "current weapon rank unavailable")
 		return
 	end
 
-	local currentLevel = tonumber(levelData.currentLevel) or currentRank + 1
-	local maxLevel = tonumber(levelData.maxLevel) or maxRank + 1
-
-	local icon, iconSource = getWeaponLevelIcon(weaponRef)
-	if not icon then
-		hideWeaponLevelWidget(widget, weaponAsset, "weapon icon unavailable")
-		return
+	-- Stock cp_weaponrank.gsc explicitly caps the XP-derived rank at the root
+	-- weapon's maximum. The LUI helper can return the uncapped shared MP+CP rank.
+	local currentRank = math.min(rawCurrentRank, maxRank)
+	local currentLevel = currentRank + 1
+	local maxLevel = maxRank + 1
+	if currentRank ~= rawCurrentRank then
+		local clampState = table.concat({ weaponRef, rawCurrentRank, maxRank, currentXP }, ":")
+		if widget.iwzRankClampState ~= clampState then
+			widget.iwzRankClampState = clampState
+			logWeaponWidget(
+				"clamped rank ref=" .. weaponRef
+					.. " rawRank=" .. rawCurrentRank
+					.. " maxRank=" .. maxRank
+					.. " xp=" .. currentXP
+					.. " source=cp_weaponrank.gsc"
+			)
+		end
+	else
+		widget.iwzRankClampState = nil
 	end
 
 	local isMaxLevel = currentRank >= maxRank
@@ -195,6 +289,9 @@ local function refreshWeaponLevelWidget(widget, controllerIndex)
 	widget.ProgressBar:SetProgress(progress)
 	widget.RankIcon:setImage(RegisterMaterial(icon), 0)
 	widget.RankIcon:SetRGBFromInt(16777215, 0)
+	widget.RankIcon:SetAlpha(1, 0)
+	widget.RankNumber:SetAlpha(1, 0)
+	widget.LockIcon:SetAlpha(0, 0)
 	widget.RankNumber:setText(tostring(currentLevel), 0)
 
 	if isMaxLevel then
@@ -215,8 +312,11 @@ local function refreshWeaponLevelWidget(widget, controllerIndex)
 				.. " asset=" .. weaponAsset
 				.. " ref=" .. weaponRef
 				.. " level=" .. currentLevel .. "/" .. maxLevel
+				.. " rawRank=" .. rawCurrentRank
 				.. " xp=" .. currentXP .. " (mp=" .. mpXP .. " cp=" .. cpXP .. ")"
 				.. " xpNeeded=" .. xpNeeded
+				.. " playerRank=" .. unlockData.playerRank
+				.. " requiredRank=" .. unlockData.unlockRank
 				.. " icon=" .. icon
 				.. " iconSource=" .. iconSource
 		)
@@ -253,6 +353,25 @@ local function buildWeaponLevelWidget(controllerIndex)
 		_1080p * 100
 	)
 
+	-- Stock UnlockCriteria uses icon_slot_locked. Overlay that familiar glyph on
+	-- the dimmed weapon silhouette while the XP lane explains the required level.
+	local LockIcon = LUI.UIImage.new()
+	LockIcon.id = "LockIcon"
+	LockIcon:setImage(RegisterMaterial("icon_slot_locked"), 0)
+	LockIcon:SetAlpha(0, 0)
+	LockIcon:SetAnchorsAndPosition(
+		0,
+		1,
+		0,
+		1,
+		_1080p * 57,
+		_1080p * 93,
+		_1080p * 50,
+		_1080p * 86
+	)
+	widget:addElement(LockIcon)
+	widget.LockIcon = LockIcon
+
 	-- Stock RankProgression gives both XP fields a 200px lane. The weapon and
 	-- player circles only need a 110px lane between them, so constrain the child
 	-- bounds as well as relocating the parent widget.
@@ -276,6 +395,11 @@ local function buildWeaponLevelWidget(controllerIndex)
 		0,
 		_1080p * 36
 	)
+	-- The stock 36px XP value fits this lane for numbers, but the full localized
+	-- word "Level" wraps before its value. Use the compact "LVL &&1" treatment
+	-- for the locked state and keep the lane single-line so it cannot grow toward the
+	-- adjacent player progression widget.
+	widget.RankXPValue:SetWordWrap(false)
 
 	local currentWeapon = DataSources.inGame
 		and DataSources.inGame.player
@@ -287,6 +411,21 @@ local function buildWeaponLevelWidget(controllerIndex)
 		end)
 	else
 		logWeaponWidget("held-weapon data source unavailable controller=" .. controllerIndex)
+	end
+
+	local cpPlayerData = DataSources.alwaysLoaded
+		and DataSources.alwaysLoaded.playerData
+		and DataSources.alwaysLoaded.playerData.CP
+	local playerRank = cpPlayerData
+		and cpPlayerData.progression
+		and cpPlayerData.progression.playerLevel
+		and cpPlayerData.progression.playerLevel.rank
+	if playerRank then
+		widget:SubscribeToModel(playerRank:GetModel(controllerIndex), function()
+			refreshWeaponLevelWidget(widget, controllerIndex)
+		end)
+	else
+		logWeaponWidget("player Zombies rank data source unavailable controller=" .. controllerIndex)
 	end
 
 	refreshWeaponLevelWidget(widget, controllerIndex)

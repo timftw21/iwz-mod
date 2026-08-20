@@ -22,6 +22,16 @@ local xpRateLabels = {
 	"DOUBLE XP"
 }
 
+local hudModeLabels = {
+	"NO HUD",
+	"STANDARD"
+}
+
+local cameraPerspectiveLabels = {
+	"FIRST-PERSON",
+	"THIRD-PERSON"
+}
+
 local function isIwzDoubleXPEnabled()
 	return Engine.IsAliensMode() and Engine.GetDvarBool("iwz_double_xp")
 end
@@ -107,13 +117,24 @@ local function buildDvarToggleButton(controllerIndex, id, title, description, dv
 	LUI.AddUIArrowTextButtonLogic(button, controllerIndex, {
 		labels = labels or toggleLabels,
 		action = function(index)
-			Engine.SetDvarBool(dvar, index == 2)
+			local enabled = index == 2
+			Engine.SetDvarBool(dvar, enabled)
 
 			if dvar == "iwz_double_xp" then
 				button:dispatchEventToRoot({
 					name = "iwz_xp_rate_changed"
 				})
-				print("[IWZ][DoubleXP] option changed enabled=" .. tostring(index == 2))
+				print("[IWZ][DoubleXP] option changed enabled=" .. tostring(enabled))
+			elseif dvar == "iwz_zombies_hud" then
+				button:dispatchEventToRoot({
+					name = "iwz_hud_mode_changed",
+					enabled = enabled
+				})
+				print("[IWZ][HUD] option changed enabled=" .. tostring(enabled) ..
+					" mode=" .. (enabled and "standard" or "no_hud"))
+			elseif dvar == "cg_thirdPerson" then
+				print("[IWZ][Camera] option changed thirdPerson=" .. tostring(enabled) ..
+					" perspective=" .. (enabled and "third-person" or "first-person"))
 			end
 		end,
 		defaultValue = currentValue,
@@ -357,7 +378,7 @@ local function buildNameColorButton(controllerIndex, refreshName)
 	return button
 end
 
-local function buildGameOptions(_, controllerIndex)
+local function buildClientOptions(_, controllerIndex)
 	local playerName, refreshName = buildPlayerNameButton(controllerIndex)
 	local nameColor = buildNameColorButton(controllerIndex, refreshName)
 
@@ -385,6 +406,27 @@ local function buildGameOptions(_, controllerIndex)
 			"Switch Zombies level and weapon progression between regular XP and double XP. Key progression is not affected.",
 			"iwz_double_xp",
 			xpRateLabels
+		)
+	}
+end
+
+local function buildZombiesOptions(_, controllerIndex)
+	return {
+		buildDvarToggleButton(
+			controllerIndex,
+			"CameraPerspective",
+			"CAMERA PERSPECTIVE",
+			"Switch gameplay between first-person and third-person camera perspectives.",
+			"cg_thirdPerson",
+			cameraPerspectiveLabels
+		),
+		buildDvarToggleButton(
+			controllerIndex,
+			"ZombiesHUD",
+			"HUD",
+			"Choose between the standard in-game Zombies HUD and no HUD.",
+			"iwz_zombies_hud",
+			hudModeLabels
 		)
 	}
 end
@@ -562,41 +604,70 @@ local PCOptionsButtons = MenuBuilder.m_types["PCOptionsButtons"]
 MenuBuilder.m_types["PCOptionsButtons"] = function(menu, controller)
 	local self = PCOptionsButtons(menu, controller)
 	local controllerIndex = controller and controller.controllerIndex or self:getRootController()
-	local gameOptions = MenuBuilder.BuildRegisteredType("GenericButton", {
+	local clientOptions = MenuBuilder.BuildRegisteredType("GenericButton", {
 		controllerIndex = controllerIndex
 	})
-	gameOptions.id = "GameOptions"
-	gameOptions:SetAnchorsAndPosition(0, 0, 0, 1, 0, 0, 0, _1080p * 30)
-	gameOptions.buttonDescription = "Configure iwz-mod client and startup behavior."
-	gameOptions.Text:setText("GAME OPTIONS", 0)
-	gameOptions.Text:SetAlignment(LUI.Alignment.Left)
+	clientOptions.id = "ClientOptions"
+	clientOptions:SetAnchorsAndPosition(0, 0, 0, 1, 0, 0, 0, _1080p * 30)
+	clientOptions.buttonDescription = "Configure iwz-mod client and startup behavior."
+	clientOptions.Text:setText("CLIENT OPTIONS", 0)
+	clientOptions.Text:SetAlignment(LUI.Alignment.Left)
 
-	gameOptions:addEventHandler("button_over", function()
+	clientOptions:addEventHandler("button_over", function()
 		self:processEvent({
 			name = "category_button_over"
 		})
 	end)
 
-	gameOptions:addEventHandler("button_action", function(_, event)
+	clientOptions:addEventHandler("button_action", function(_, event)
 		self:processEvent({
 			name = "category_changed",
-			title = "GAME OPTIONS",
-			createOptions = buildGameOptions,
+			title = "CLIENT OPTIONS",
+			createOptions = buildClientOptions,
 			noFocus = event.mouse
 		})
 	end)
 
-	gameOptions:addElementBefore(self.VideoOptions)
-	self.GameOptions = gameOptions
+	clientOptions:addElementBefore(self.VideoOptions)
+	self.ClientOptions = clientOptions
+
+	local zombiesOptions = MenuBuilder.BuildRegisteredType("GenericButton", {
+		controllerIndex = controllerIndex
+	})
+	zombiesOptions.id = "ZombiesOptions"
+	zombiesOptions:SetAnchorsAndPosition(0, 0, 0, 1, 0, 0, 0, _1080p * 30)
+	zombiesOptions.buttonDescription = "Configure Infinite Warfare Zombies gameplay and presentation."
+	zombiesOptions.Text:setText("ZOMBIES OPTIONS", 0)
+	zombiesOptions.Text:SetAlignment(LUI.Alignment.Left)
+
+	zombiesOptions:addEventHandler("button_over", function()
+		self:processEvent({
+			name = "category_button_over"
+		})
+	end)
+
+	zombiesOptions:addEventHandler("button_action", function(_, event)
+		self:processEvent({
+			name = "category_changed",
+			title = "ZOMBIES OPTIONS",
+			createOptions = buildZombiesOptions,
+			noFocus = event.mouse
+		})
+	end)
+
+	zombiesOptions:addElementBefore(self.VideoOptions)
+	self.ZombiesOptions = zombiesOptions
 
 	self:addEventHandler("menu_create", function()
 		self:processEvent({
 			name = "category_changed",
-			title = "GAME OPTIONS",
-			createOptions = buildGameOptions,
+			title = "CLIENT OPTIONS",
+			createOptions = buildClientOptions,
 			noFocus = true
 		})
 	end)
+
+	print("[IWZ][Options] installed categories client=CLIENT OPTIONS zombies=ZOMBIES OPTIONS")
 
 	return self
 end
