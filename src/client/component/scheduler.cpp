@@ -65,6 +65,22 @@ namespace scheduler
 				});
 			}
 
+			std::size_t clear()
+			{
+				std::size_t count = 0;
+				callbacks_.access([&count](task_list& tasks)
+				{
+					count += tasks.size();
+					tasks.clear();
+				});
+				new_callbacks_.access([&count](task_list& tasks)
+				{
+					count += tasks.size();
+					tasks.clear();
+				});
+				return count;
+			}
+
 		private:
 			utils::concurrency::container<task_list> new_callbacks_;
 			utils::concurrency::container<task_list, std::recursive_mutex> callbacks_;
@@ -157,6 +173,12 @@ namespace scheduler
 			callback();
 			return cond_end;
 		}, type, delay);
+	}
+
+	std::size_t clear(const pipeline type)
+	{
+		assert(type >= 0 && type < pipeline::count);
+		return pipelines[type].clear();
 	}
 
 	void on_game_initialized(const std::function<void()>& callback, const pipeline type,

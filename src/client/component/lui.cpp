@@ -14,11 +14,6 @@ namespace lui
 {
 	void print_debug_lui(const char* msg, ...)
 	{
-		if (!dvars::lui_debug || !dvars::lui_debug->current.enabled)
-		{
-			return;
-		}
-
 		char buffer[0x1000]{ 0 };
 
 		va_list ap;
@@ -28,7 +23,23 @@ namespace lui
 
 		va_end(ap);
 
-		console::debug(buffer);
+		const auto lower_message = utils::string::to_lower(buffer);
+		const auto is_error = lower_message.find("error") != std::string::npos ||
+			lower_message.find("assert") != std::string::npos ||
+			lower_message.find("stack traceback") != std::string::npos ||
+			lower_message.find("failed") != std::string::npos;
+
+		// Runtime LUI failures must remain visible in release logs even when the
+		// verbose developer stream is disabled. The old console::debug call was
+		// compiled out of release builds, leaving recovery loops without a cause.
+		if (is_error)
+		{
+			console::error("[IWZ][LUI][Engine] %s", buffer);
+		}
+		else if (dvars::lui_debug && dvars::lui_debug->current.enabled)
+		{
+			console::info("[IWZ][LUI][Engine] %s", buffer);
+		}
 	}
 
 	class component final : public component_interface

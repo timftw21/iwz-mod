@@ -50,7 +50,7 @@ namespace ui_scripting
 	{
 		std::unordered_map<game::hks::cclosure*, std::function<arguments(const function_arguments& args)>> converted_functions;
 
-		utils::hook::detour hks_start_hook;
+		utils::hook::detour lui_cod_init_hook;
 		utils::hook::detour hks_shutdown_hook;
 		utils::hook::detour hks_package_require_hook;
 
@@ -71,6 +71,8 @@ namespace ui_scripting
 		};
 
 		globals_t globals{};
+		game::hks::lua_State* active_lui_state{};
+		std::uint64_t lui_generation{};
 
 		bool is_loaded_script(const std::string& name)
 		{
@@ -139,23 +141,77 @@ namespace ui_scripting
 			}
 		}
 
-		void load_scripts(const std::string& script_dir)
+		struct script_candidate
 		{
-			if (!utils::io::directory_exists(script_dir))
+			std::string logical_name;
+			std::string root_script;
+			std::string data;
+			std::size_t priority;
+		};
+
+		void load_scripts()
+		{
+			std::vector<script_candidate> candidates{};
+			std::unordered_map<std::string, std::string> selected_roots{};
+			std::size_t duplicate_count = 0;
+
+			// Search paths are ordered from highest to lowest priority. Build one
+			// effective overlay before executing anything so a packaged copy and an
+			// AppData copy of the same logical script cannot both stack global hooks.
+			const auto search_paths = filesystem::get_search_paths();
+			for (std::size_t priority = 0; priority < search_paths.size(); ++priority)
 			{
-				return;
+				const auto& path = search_paths[priority];
+				const auto script_dir = path + "/ui_scripts/";
+				if (!utils::io::directory_exists(script_dir))
+				{
+					continue;
+				}
+
+				for (const auto& script : utils::io::list_files(script_dir))
+				{
+					std::string data{};
+					const auto root_script = script + "/__init__.lua";
+					if (!std::filesystem::is_directory(script) || !utils::io::read_file(root_script, &data))
+					{
+						continue;
+					}
+
+					const auto logical_name = std::filesystem::path(script).filename().generic_string();
+					const auto logical_key = utils::string::to_lower(logical_name);
+					if (const auto existing = selected_roots.find(logical_key); existing != selected_roots.end())
+					{
+						++duplicate_count;
+						console::info("[IWZ][LUI] ignored lower-priority duplicate script='%s' selected='%s' ignored='%s'\n",
+							logical_name.data(), existing->second.data(), root_script.data());
+						continue;
+					}
+
+					selected_roots.emplace(logical_key, root_script);
+					candidates.push_back({logical_name, root_script, std::move(data), priority});
+				}
 			}
 
-			const auto scripts = utils::io::list_files(script_dir);
-
-			for (const auto& script : scripts)
+			std::ranges::sort(candidates, [](const script_candidate& left, const script_candidate& right)
 			{
-				std::string data{};
-				if (std::filesystem::is_directory(script) && utils::io::read_file(script + "/__init__.lua", &data))
+				// Preserve the established low-to-high root execution order so shared
+				// AppData foundations load before install-only extensions. Within one
+				// root, make the directory order deterministic.
+				if (left.priority != right.priority)
 				{
-					print_loading_script(script);
-					load_script(script + "/__init__.lua", data);
+					return left.priority > right.priority;
 				}
+
+				return utils::string::to_lower(left.logical_name) < utils::string::to_lower(right.logical_name);
+			});
+
+			console::info("[IWZ][LUI] effective script overlay selected=%zu duplicatesIgnored=%zu priority=first-search-path-wins\n",
+				candidates.size(), duplicate_count);
+
+			for (const auto& candidate : candidates)
+			{
+				print_loading_script(std::filesystem::path(candidate.root_script).parent_path().generic_string());
+				load_script(candidate.root_script, candidate.data);
 			}
 		}
 
@@ -340,10 +396,7 @@ namespace ui_scripting
 			load_script("lua_json", lua_json);
 			*/
 
-			for (const auto& path : filesystem::get_search_paths_rev())
-			{
-				load_scripts(path + "/ui_scripts/");		
-			}
+			load_scripts();
 		}
 
 		void try_start()
@@ -358,20 +411,60 @@ namespace ui_scripting
 			}
 		}
 
-		int hks_start_stub()
+		void lui_cod_init_stub(const bool frontend, const bool error_recovery)
 		{
-			auto result = hks_start_hook.invoke<int>();
-			if (result)
+			lui_cod_init_hook.invoke<void>(frontend, error_recovery);
+
+			const auto state = *game::hks::lua_state;
+			if (state == nullptr)
 			{
-				try_start();
+				console::error("[IWZ][LUI] custom scripts not loaded: LUI_CoD_Init completed without an HKS state\n");
+				return;
 			}
-			return result;
+
+			// LUI_CoD_Init owns the complete HKS VM lifecycle and exposes whether the
+			// engine is constructing a normal UI or a minimal recovery UI. The old
+			// lower-level HKS hook could not distinguish those lifecycles.
+			if (active_lui_state == state)
+			{
+				console::warn("[IWZ][LUI] ignored duplicate initialization for generation=%llu state=%p\n",
+					lui_generation, state);
+				return;
+			}
+
+			active_lui_state = state;
+			++lui_generation;
+
+			// Error recovery intentionally starts a minimal stock VM. Injecting the
+			// complete custom overlay into it can make recovery fail again, producing
+			// an init/shutdown loop until the map transition times out.
+			if (error_recovery)
+			{
+				globals = {};
+				console::warn("[IWZ][LUI] preserving minimal error-recovery VM generation=%llu state=%p frontend=%d customScripts=skipped\n",
+					lui_generation, state, frontend);
+				return;
+			}
+
+			console::info("[IWZ][LUI] loading custom scripts generation=%llu state=%p frontend=%d errorRecovery=%d\n",
+				lui_generation, state, frontend, error_recovery);
+			try_start();
+			console::info("[IWZ][LUI] custom scripts ready generation=%llu loaded=%zu\n",
+				lui_generation, globals.loaded_scripts.size());
 		}
 
 		void hks_shutdown_stub()
 		{
+			// Lua scheduler callbacks own registry references in the active HKS VM.
+			// Destroy them while that VM is still alive so they cannot execute in a
+			// replacement VM or unref an unrelated replacement registry.
+			const auto cancelled_callbacks = scheduler::clear(scheduler::pipeline::lui);
+			console::info("[IWZ][LUI] shutting down custom scripts generation=%llu state=%p loaded=%zu callbacks=%zu\n",
+				lui_generation, active_lui_state, globals.loaded_scripts.size(), cancelled_callbacks);
+
 			converted_functions.clear();
 			globals = {};
+			active_lui_state = nullptr;
 			return hks_shutdown_hook.invoke<void>();
 		}
 
@@ -509,7 +602,7 @@ namespace ui_scripting
 			hks_load_hook.create(0x1411E0B00, hks_load_stub);
 
 			hks_package_require_hook.create(0x1411C7F00, hks_package_require_stub);
-			hks_start_hook.create(0x1406023A0, hks_start_stub);
+			lui_cod_init_hook.create(0x140615090, lui_cod_init_stub);
 			hks_shutdown_hook.create(0x1406124B0, hks_shutdown_stub);
 
 			// replace LUA engine calls

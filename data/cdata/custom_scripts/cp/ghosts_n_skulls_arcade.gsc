@@ -27,6 +27,13 @@ post_load()
     previous_direct_challenge_state = scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight();
     level.direct_to_boss_fight = 1;
 
+    // This mode temporarily uses direct_to_boss_fight for presentation, but
+    // the stock endgame also interprets it as proof that a timed Boss Battle
+    // ran. Own the shared endgame boundary so every exit path restores the
+    // borrowed state before stock reads the uninitialized boss timer.
+    level.iwz_gns_stock_endgame_func = level.endgame;
+    level.endgame = ::arcade_endgame;
+
     level.disable_start_spawn_on_navmesh = 1;
     level.getspawnpoint = ::get_arcade_staging_spawn_point;
     level.disableplayerdamage = 1;
@@ -37,7 +44,7 @@ post_load()
     setnojipscore(1);
 
     arcade_log("launch armed: selection=" + selection + " game='" + get_arcade_game_name(selection) + "' map=" + level.script + " staging=afterlife");
-    arcade_log("direct challenge state activated post-load: previous=" + previous_direct_challenge_state + " introMusicSuppressed=1 scenePresentationSuppressed=1");
+    arcade_log("direct challenge state activated post-load: previous=" + previous_direct_challenge_state + " introMusicSuppressed=1 scenePresentationSuppressed=1 endgameBoundaryWrapped=1");
     level thread hold_normal_waves();
     level thread scripts\cp\zombies\direct_boss_fight::disable_things_in_afterlife_arcade();
     level thread launch_arcade_game();
@@ -396,22 +403,26 @@ arcade_game_ended()
         winning_team = "allies";
     }
 
-    // Arcade borrows direct_to_boss_fight during setup to suppress the normal
-    // Zombies intro/Scene presentation. The stock endgame reads that same flag
-    // as a Boss Battle result, adjusts the Scene from an uninitialized boss
-    // timer, and shows the selected map's "boss defeated in" splash. End the
-    // borrowed state before entering the shared post-game flow and clear any
-    // stale boss presentation omnvars.
-    level.direct_to_boss_fight = undefined;
-    setomnvar("zm_boss_splash", 0);
-    setomnvar("zm_boss_id", -1);
-
-    arcade_log("native game completed: selection=" + level.iwz_gns_arcade_selection + " won=" + won + " failing=" + level.processing_ghost_wave_failing + " result=" + result + " directChallengeCleared=1 bossSplash=0 bossId=-1");
+    arcade_log("native game completed: selection=" + level.iwz_gns_arcade_selection + " won=" + won + " failing=" + level.processing_ghost_wave_failing + " result=" + result + " routingThroughSharedEndgameBoundary=1");
 
     // Stock Ghosts N Skulls has now restored player state and shown its score
     // splash. Finish through the same endgame path as Boss Battle so the normal
     // post-game Play Again and Exit actions retain all party/lobby behavior.
     level thread [[level.endgame]](winning_team, result);
+}
+
+arcade_endgame(winning_team, result)
+{
+    // Stock _endgame.gsc unconditionally calls adjust_wave_num(), which reads
+    // level.bosstimer whenever direct_to_boss_fight is true. Arcade mode never
+    // creates that timer, so clear the presentation-only state for native,
+    // manual, and error exits before delegating to the original endgame.
+    level.direct_to_boss_fight = undefined;
+    setomnvar("zm_boss_splash", 0);
+    setomnvar("zm_boss_id", -1);
+
+    arcade_log("shared endgame boundary restored directChallenge=0 bossSplash=0 bossId=-1 team=" + winning_team + " result=" + result);
+    [[level.iwz_gns_stock_endgame_func]](winning_team, result);
 }
 
 vector_to_log_string(value)
