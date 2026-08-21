@@ -81,14 +81,14 @@ namespace fastfiles
 				zone_name == "cp_town"s || zone_name == "cp_final"s;
 		}
 
-		void db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
+		bool db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
 			const bool is_base_map, const bool was_paused, const int failure_mode)
 		{
 			current_fastfile.access([&](std::string& fastfile)
 			{
 				fastfile = zone_name;
 			});
-			return db_try_load_x_file_internal_hook.invoke<void>(zone_name, zone_flags, is_base_map, was_paused, failure_mode);
+			return db_try_load_x_file_internal_hook.invoke<bool>(zone_name, zone_flags, is_base_map, was_paused, failure_mode);
 		}
 
 		void db_init_load_x_file_stub(const char* name, std::uint64_t offset)

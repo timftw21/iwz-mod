@@ -5,6 +5,7 @@
 
 #include "component/console/console.hpp"
 
+#include <utils/flags.hpp>
 #include <utils/string.hpp>
 #include <utils/io.hpp>
 
@@ -14,12 +15,206 @@ DECLSPEC_NORETURN void WINAPI exit_hook(const int code)
 	exit(code);
 }
 
+namespace
+{
+	struct affinity_mapping
+	{
+		std::vector<DWORD_PTR> logical_order;
+		std::vector<DWORD_PTR> physical_first_order;
+		size_t physical_core_count{};
+		bool heterogeneous{};
+	};
+
+	struct processor_core
+	{
+		DWORD_PTR mask{};
+		BYTE efficiency_class{};
+	};
+
+	DWORD_PTR take_lowest_processor(DWORD_PTR& mask)
+	{
+		const auto processor = mask & (~mask + 1);
+		mask &= ~processor;
+		return processor;
+	}
+
+	affinity_mapping build_affinity_mapping()
+	{
+		affinity_mapping result{};
+
+		DWORD_PTR process_mask{};
+		DWORD_PTR system_mask{};
+		if (!GetProcessAffinityMask(GetCurrentProcess(), &process_mask, &system_mask) || !process_mask)
+		{
+			console::warn("[IWZ][CPU] physical-first affinity unavailable: GetProcessAffinityMask failed (%lu)\n",
+				GetLastError());
+			return result;
+		}
+
+		auto remaining_process_mask = process_mask;
+		while (remaining_process_mask)
+		{
+			result.logical_order.emplace_back(take_lowest_processor(remaining_process_mask));
+		}
+
+		WORD process_group{};
+		GROUP_AFFINITY current_affinity{};
+		if (GetThreadGroupAffinity(GetCurrentThread(), &current_affinity))
+		{
+			process_group = current_affinity.Group;
+		}
+
+		DWORD buffer_size{};
+		GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &buffer_size);
+		if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || !buffer_size)
+		{
+			console::warn("[IWZ][CPU] physical-first affinity unavailable: topology size query failed (%lu)\n",
+				GetLastError());
+			return result;
+		}
+
+		std::vector<unsigned char> buffer(buffer_size);
+		if (!GetLogicalProcessorInformationEx(RelationProcessorCore,
+			reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(buffer.data()), &buffer_size))
+		{
+			console::warn("[IWZ][CPU] physical-first affinity unavailable: topology query failed (%lu)\n",
+				GetLastError());
+			return result;
+		}
+
+		std::vector<processor_core> cores;
+		for (size_t offset = 0; offset < buffer_size;)
+		{
+			const auto* info = reinterpret_cast<const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*>(
+				buffer.data() + offset);
+			if (!info->Size || offset + info->Size > buffer_size)
+			{
+				break;
+			}
+
+			if (info->Relationship == RelationProcessorCore)
+			{
+				for (WORD index = 0; index < info->Processor.GroupCount; ++index)
+				{
+					const auto& group_mask = info->Processor.GroupMask[index];
+					if (group_mask.Group == process_group)
+					{
+						const auto core_mask = static_cast<DWORD_PTR>(group_mask.Mask) & process_mask;
+						if (core_mask)
+						{
+							cores.emplace_back(processor_core{core_mask, info->Processor.EfficiencyClass});
+						}
+					}
+				}
+			}
+
+			offset += info->Size;
+		}
+
+		std::ranges::sort(cores, [](const processor_core& left, const processor_core& right)
+		{
+			if (left.efficiency_class != right.efficiency_class)
+			{
+				return left.efficiency_class > right.efficiency_class;
+			}
+
+			return (left.mask & (~left.mask + 1)) < (right.mask & (~right.mask + 1));
+		});
+
+		result.physical_core_count = cores.size();
+		if (!cores.empty())
+		{
+			const auto first_efficiency_class = cores.front().efficiency_class;
+			result.heterogeneous = std::ranges::any_of(cores, [first_efficiency_class](const processor_core& core)
+			{
+				return core.efficiency_class != first_efficiency_class;
+			});
+		}
+
+		while (!cores.empty())
+		{
+			auto found_processor = false;
+			for (auto& core : cores)
+			{
+				if (core.mask)
+				{
+					result.physical_first_order.emplace_back(take_lowest_processor(core.mask));
+					found_processor = true;
+				}
+			}
+
+			if (!found_processor)
+			{
+				break;
+			}
+		}
+
+		if (result.physical_first_order.size() != result.logical_order.size())
+		{
+			console::warn("[IWZ][CPU] physical-first affinity unavailable: topology covered %zu of %zu logical processors\n",
+				result.physical_first_order.size(), result.logical_order.size());
+			result.physical_first_order.clear();
+			return result;
+		}
+
+		console::info("[IWZ][CPU] affinity policy=physical-first physicalCores=%zu logicalProcessors=%zu "
+			"heterogeneous=%u remap=%s\n", result.physical_core_count, result.logical_order.size(),
+			result.heterogeneous ? 1u : 0u,
+			result.physical_first_order == result.logical_order ? "not-required" : "enabled");
+		return result;
+	}
+
+	DWORD_PTR get_physical_first_affinity(const DWORD_PTR requested_mask)
+	{
+		static const auto stock_affinity = utils::flags::has_flag("stock_cpu_affinity");
+		if (stock_affinity)
+		{
+			static const auto logged = []
+			{
+				console::info("[IWZ][CPU] affinity policy=stock reason=command-line-opt-out\n");
+				return true;
+			}();
+			(void)logged;
+			return requested_mask;
+		}
+
+		static const auto mapping = build_affinity_mapping();
+		if (!requested_mask || mapping.physical_first_order.empty())
+		{
+			return requested_mask;
+		}
+
+		const auto requested = std::ranges::find(mapping.logical_order, requested_mask);
+		if (requested == mapping.logical_order.end())
+		{
+			return requested_mask;
+		}
+
+		const auto index = static_cast<size_t>(std::distance(mapping.logical_order.begin(), requested));
+		const auto remapped_mask = mapping.physical_first_order[index];
+		if (remapped_mask != requested_mask)
+		{
+			static std::mutex log_mutex;
+			static std::unordered_set<DWORD_PTR> logged_masks;
+			std::lock_guard lock(log_mutex);
+			if (logged_masks.emplace(requested_mask).second)
+			{
+				console::info("[IWZ][CPU] affinity logicalIndex=%zu requested=0x%llX applied=0x%llX\n", index,
+					static_cast<unsigned long long>(requested_mask),
+					static_cast<unsigned long long>(remapped_mask));
+			}
+		}
+
+		return remapped_mask;
+	}
+}
+
 DWORD_PTR WINAPI set_thread_affinity_mask(HANDLE hThread, DWORD_PTR dwThreadAffinityMask)
 {
 	component_loader::post_unpack();
 	MH_ApplyQueued();
 
-	return SetThreadAffinityMask(hThread, dwThreadAffinityMask);
+	return SetThreadAffinityMask(hThread, get_physical_first_affinity(dwThreadAffinityMask));
 }
 
 FARPROC load_binary(uint64_t* base_address)
@@ -81,30 +276,62 @@ void enable_dpi_awareness()
 	}
 }
 
-void limit_parallel_dll_loading()
+void restore_parallel_dll_loading()
 {
 	const utils::nt::library self;
 	const auto registry_path = R"(Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\)" + self.
 		get_name();
 
 	HKEY key = nullptr;
-	if (RegCreateKeyA(HKEY_LOCAL_MACHINE, registry_path.data(), &key) == ERROR_SUCCESS)
+	auto status = RegOpenKeyExA(HKEY_LOCAL_MACHINE, registry_path.data(), 0, KEY_QUERY_VALUE, &key);
+	if (status == ERROR_FILE_NOT_FOUND)
 	{
-		RegCloseKey(key);
+		console::info("[IWZ][Startup] Windows parallel loader enabled; legacy throttle absent\n");
+		return;
 	}
-
-	key = nullptr;
-	if (RegOpenKeyExA(
-		HKEY_LOCAL_MACHINE, registry_path.data(), 0,
-		KEY_ALL_ACCESS, &key) != ERROR_SUCCESS)
+	if (status != ERROR_SUCCESS)
 	{
+		console::warn("[IWZ][Startup] unable to inspect legacy MaxLoaderThreads throttle (%ld)\n", status);
 		return;
 	}
 
-	DWORD value = 1;
-	RegSetValueExA(key, "MaxLoaderThreads", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&value), sizeof(value));
-
+	DWORD value{};
+	DWORD value_type{};
+	DWORD value_size = sizeof(value);
+	status = RegQueryValueExA(key, "MaxLoaderThreads", nullptr, &value_type,
+		reinterpret_cast<BYTE*>(&value), &value_size);
 	RegCloseKey(key);
+
+	if (status == ERROR_FILE_NOT_FOUND)
+	{
+		console::info("[IWZ][Startup] Windows parallel loader enabled; legacy throttle absent\n");
+		return;
+	}
+	if (status != ERROR_SUCCESS)
+	{
+		console::warn("[IWZ][Startup] unable to read legacy MaxLoaderThreads throttle (%ld)\n", status);
+		return;
+	}
+
+	status = RegOpenKeyExA(HKEY_LOCAL_MACHINE, registry_path.data(), 0, KEY_SET_VALUE, &key);
+	if (status != ERROR_SUCCESS)
+	{
+		console::warn("[IWZ][Startup] legacy MaxLoaderThreads throttle is still active; removal failed (%ld)\n",
+			status);
+		return;
+	}
+
+	status = RegDeleteValueA(key, "MaxLoaderThreads");
+	RegCloseKey(key);
+	if (status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND)
+	{
+		console::info("[IWZ][Startup] removed legacy MaxLoaderThreads=%lu throttle; Windows parallel loader enabled\n",
+			value_type == REG_DWORD ? value : 0);
+	}
+	else
+	{
+		console::warn("[IWZ][Startup] legacy MaxLoaderThreads throttle removal failed (%ld)\n", status);
+	}
 }
 
 int main()
@@ -117,9 +344,7 @@ int main()
 	FARPROC entry_point;
 	enable_dpi_awareness();
 
-	// This requires admin privilege, but I suppose many
-	// people will start with admin rights if it crashes.
-	limit_parallel_dll_loading();
+	restore_parallel_dll_loading();
 
 	srand(uint32_t(time(nullptr)));
 	remove_crash_file();
