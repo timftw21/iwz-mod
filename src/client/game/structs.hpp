@@ -849,6 +849,13 @@ namespace game
 			unsigned __int16 weaponIdx;
 		};
 
+		struct PlayerGestureState
+		{
+			int state;
+			unsigned int gestureIndex;
+			char __pad0[24];
+		}; assert_sizeof(PlayerGestureState, 0x20);
+
 		struct playerState_s
 		{
 			int commandTime;
@@ -866,18 +873,27 @@ namespace game
 			GameModeFlagContainer<EntityStateFlagsCommon, EntityStateFlagsSP, EntityStateFlagsMP, 32> eFlags;
 			char __pad2[92];
 			vec3_t viewangles;
-			char __pad3[1168];
-			PlayerActiveWeaponState weapState[2];
+			char __pad3[640];
+			PlayerGestureState gestureState[2];
 			char __pad4[464];
+			PlayerActiveWeaponState weapState[2];
+			char __pad5[420];
+			unsigned short offhandGestureWeaponHandle;
+			char __pad6[18];
+			unsigned int offhandGestureFlags;
+			char __pad7[20];
 			GameModeFlagContainer<PWeaponFlagsCommon, PWeaponFlagsSP, PWeaponFlagsMP, 64> weapFlags;
 			float fWeaponPosFrac;
-			char __pad5[0x4000];
+			char __pad8[0x4000];
 		}; // unk size
 		assert_offsetof(playerState_s, pm_type, 4);
 		assert_offsetof(playerState_s, delta_angles, 132);
 		assert_offsetof(playerState_s, eFlags, 344);
 		assert_offsetof(playerState_s, viewangles, 440);
+		assert_offsetof(playerState_s, gestureState, 0x444);
 		assert_offsetof(playerState_s, weapState, 1620);
+		assert_offsetof(playerState_s, offhandGestureWeaponHandle, 0x860);
+		assert_offsetof(playerState_s, offhandGestureFlags, 0x874);
 		assert_offsetof(playerState_s, weapFlags, 2188);
 		assert_offsetof(playerState_s, fWeaponPosFrac, 2196);
 

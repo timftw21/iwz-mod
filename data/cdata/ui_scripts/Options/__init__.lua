@@ -504,17 +504,51 @@ if DoubleXPNotifications and not LUI.iwzDoubleXPNotificationsPatched then
 	print("[IWZ][DoubleXP] notification refresh hook installed")
 end
 
+local function attachSubtitlesLayer(root, source)
+	if not root or not Engine.IsAliensMode() or Engine.InFrontend() or root.subtitlesLayer then
+		return false
+	end
+
+	root.subtitlesLayer = root:AddLayer(LUI.SubtitlesLayer.new(root._controllerIndex), {
+		exclusive = false
+	})
+	print("[IWZ][Subtitles] attached native layer source=" .. tostring(source) ..
+		" controller=" .. tostring(root._controllerIndex) .. " root=" .. tostring(root.id))
+	return true
+end
+
 local LUIRootInit = LUI.UIRoot.init
 
-LUI.UIRoot.init = function(self, controllerIndex, name)
-	LUIRootInit(self, controllerIndex, name)
-
-	if Engine.IsAliensMode() and not Engine.InFrontend() and not self.subtitlesLayer then
-		self.subtitlesLayer = self:AddLayer(LUI.SubtitlesLayer.new(self._controllerIndex), {
-			exclusive = false
-		})
+if LUIRootInit then
+	LUI.UIRoot.init = function(root, ...)
+		local result = LUIRootInit(root, ...)
+		attachSubtitlesLayer(root, "init")
+		return result
 	end
 end
+
+local LUIRootSetupRoot = LUI.UIRoot.setupRoot
+
+if LUIRootSetupRoot then
+	LUI.UIRoot.setupRoot = function(root, ...)
+		local result = LUIRootSetupRoot(root, ...)
+		attachSubtitlesLayer(root, "setupRoot")
+		return result
+	end
+end
+
+local existingSubtitleRootsAttached = 0
+
+if LUI.roots then
+	for _, root in pairs(LUI.roots) do
+		if attachSubtitlesLayer(root, "existingRoot") then
+			existingSubtitleRootsAttached = existingSubtitleRootsAttached + 1
+		end
+	end
+end
+
+print("[IWZ][Subtitles] native layer hook installed existingRootsAttached=" ..
+	tostring(existingSubtitleRootsAttached))
 
 local function suppressFocusPause(event)
 	if not event or event.name ~= "pause" or not Engine.IsAliensMode() or game:isclientfocused() then
@@ -670,4 +704,53 @@ MenuBuilder.m_types["PCOptionsButtons"] = function(menu, controller)
 	print("[IWZ][Options] installed categories client=CLIENT OPTIONS zombies=ZOMBIES OPTIONS")
 
 	return self
+end
+
+local OptionsMenu = MenuBuilder.m_types["OptionsMenu"]
+local loggedBrightnessGuideMove = false
+
+if OptionsMenu then
+	MenuBuilder.m_types["OptionsMenu"] = function(menu, controller)
+		local self = OptionsMenu(menu, controller)
+		local brightnessGuide = self:getChildById("brightness_guide_id")
+
+		if brightnessGuide then
+			local left = _1080p * 130
+			local top = _1080p * 455
+			local state = {
+				leftAnchor = true,
+				rightAnchor = false,
+				topAnchor = true,
+				bottomAnchor = false,
+				left = left,
+				top = top,
+				width = 255,
+				height = 210,
+				alpha = 0
+			}
+
+			brightnessGuide:registerAnimationState("default", state)
+			brightnessGuide:registerAnimationState("visible", {
+				leftAnchor = true,
+				rightAnchor = false,
+				topAnchor = true,
+				bottomAnchor = false,
+				left = left,
+				top = top,
+				width = 255,
+				height = 210,
+				alpha = 1
+			})
+			brightnessGuide:animateToState("default", 0)
+
+			if not loggedBrightnessGuideMove then
+				print("[IWZ][Options] moved brightness guide below Voice Options left=130 top=455")
+				loggedBrightnessGuideMove = true
+			end
+		end
+
+		return self
+	end
+else
+	print("[IWZ][Options] OptionsMenu unavailable; brightness guide layout patch not installed")
 end

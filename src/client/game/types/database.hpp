@@ -5614,7 +5614,9 @@ namespace database
 		bool splitAnimsAkimbo;
 		bool blendToDemeanorLoop;
 		bool blendOutRaise;
-	};
+	}; assert_sizeof(GestureWeaponSettings, 0x10);
+	assert_offsetof(GestureWeaponSettings, useLeftIdleAkimbo, 0xC);
+	assert_offsetof(GestureWeaponSettings, splitAnimsAkimbo, 0xD);
 
 	struct GestureDirectionalSettings
 	{
@@ -5691,6 +5693,7 @@ namespace database
 		GestureLookAroundSettings lookAroundSettings;
 	}; assert_sizeof(Gesture, 0xA8);
 	assert_offsetof(Gesture, anims, 24);
+	assert_offsetof(Gesture, weaponSettings, 0x20);
 
 	struct LocalizeEntry
 	{

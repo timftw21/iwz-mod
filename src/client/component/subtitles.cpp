@@ -22,7 +22,9 @@ namespace subtitles
 {
 	namespace
 	{
-		constexpr auto subtitle_config_path = "subtitles/zombies.json";
+		constexpr std::array subtitle_config_paths = {
+			"subtitles/spaceland.json",
+		};
 		constexpr auto alias_dump_path = "iw7-mod/subtitles/sound_aliases.csv";
 		constexpr auto audio_export_directory = "iw7-mod/subtitles/audio";
 		constexpr std::uint32_t sab_magic = 0x23585532;
@@ -69,7 +71,51 @@ namespace subtitles
 		};
 
 		using subtitle_map = std::unordered_map<std::string, subtitle_definition>;
-		utils::concurrency::container<subtitle_map> subtitle_definitions;
+		using subtitle_id_map = std::unordered_map<std::uint32_t, subtitle_definition>;
+		struct subtitle_maps
+		{
+			subtitle_map aliases;
+			subtitle_map audio_assets;
+			subtitle_id_map audio_asset_ids;
+		};
+		struct patch_statistics
+		{
+			size_t banks;
+			size_t variants;
+			size_t named_assets;
+			size_t id_matches;
+			size_t name_matches;
+			size_t alias_matches;
+			size_t patched;
+		};
+		struct original_subtitle
+		{
+			std::uint32_t asset_id;
+			std::string alias_name;
+			const char* text;
+			bool force;
+		};
+
+		utils::concurrency::container<subtitle_maps> subtitle_definitions;
+		utils::concurrency::container<std::unordered_map<database::SndAlias*, original_subtitle>>
+			original_subtitles;
+
+		std::string normalize_audio_asset(std::string value)
+		{
+			std::replace(value.begin(), value.end(), '/', '\\');
+			return utils::string::to_lower(value);
+		}
+
+		std::uint32_t sound_asset_hash(const std::string_view value)
+		{
+			std::uint32_t hash = 5381;
+			for (const auto character : value)
+			{
+				hash = 65599 * hash + static_cast<unsigned char>(character);
+			}
+
+			return hash ? hash : 1;
+		}
 
 		struct alias_audio
 		{
@@ -363,132 +409,272 @@ namespace subtitles
 			return results;
 		}
 
-		size_t patch_sound_bank(database::SndBank* bank)
+		size_t patch_sound_bank(database::SndBank* bank, const bool refresh_originals,
+			patch_statistics* statistics = nullptr)
 		{
 			if (!bank || !bank->alias)
 			{
 				return 0;
 			}
 
-			return subtitle_definitions.access<size_t>([bank](const subtitle_map& definitions)
+			if (statistics)
 			{
-				size_t patched{};
+				++statistics->banks;
+			}
 
-				for (unsigned int i = 0; i < bank->aliasCount; ++i)
+			return original_subtitles.access<size_t>([bank, refresh_originals, statistics](auto& originals)
+			{
+				return subtitle_definitions.access<size_t>([bank, refresh_originals, statistics, &originals](
+					const subtitle_maps& definitions)
 				{
-					auto& alias_list = bank->alias[i];
-					if (!alias_list.head)
+					size_t patched{};
+
+					for (unsigned int i = 0; i < bank->aliasCount; ++i)
 					{
-						continue;
-					}
-
-					const auto list_name = alias_list.aliasName ?
-						utils::string::to_lower(alias_list.aliasName) : std::string{};
-
-					for (auto j = 0; j < alias_list.count; ++j)
-					{
-						auto& alias = alias_list.head[j];
-						const auto alias_name = alias.aliasName ?
-							utils::string::to_lower(alias.aliasName) : list_name;
-						auto definition = definitions.find(alias_name);
-
-						if (definition == definitions.end() && alias_name != list_name)
+						auto& alias_list = bank->alias[i];
+						if (!alias_list.head)
 						{
-							definition = definitions.find(list_name);
+							continue;
 						}
 
-						if (definition != definitions.end())
+						const auto list_name = alias_list.aliasName ?
+							utils::string::to_lower(alias_list.aliasName) : std::string{};
+
+						for (auto j = 0; j < alias_list.count; ++j)
 						{
-							alias.subtitle = definition->second.text;
-							alias.flags.ForceSubtitle = definition->second.force;
-							++patched;
+							auto& alias = alias_list.head[j];
+							const auto asset_name = alias.assetFileName ?
+								normalize_audio_asset(alias.assetFileName) : std::string{};
+							const auto alias_name = alias.aliasName ?
+								utils::string::to_lower(alias.aliasName) : list_name;
+							if (statistics)
+							{
+								++statistics->variants;
+								statistics->named_assets += !asset_name.empty();
+							}
+
+							auto original = originals.find(&alias);
+							if (refresh_originals || original == originals.end() ||
+								original->second.asset_id != alias.assetId ||
+								original->second.alias_name != alias_name)
+							{
+								original = originals.insert_or_assign(&alias, original_subtitle{
+									alias.assetId, alias_name, alias.subtitle,
+									alias.flags.ForceSubtitle != 0,
+								}).first;
+							}
+
+							alias.subtitle = original->second.text;
+							alias.flags.ForceSubtitle = original->second.force;
+
+							const subtitle_definition* selected_definition{};
+							if (alias.assetId)
+							{
+								const auto id_definition = definitions.audio_asset_ids.find(alias.assetId);
+								if (id_definition != definitions.audio_asset_ids.end())
+								{
+									selected_definition = &id_definition->second;
+									if (statistics)
+									{
+										++statistics->id_matches;
+									}
+								}
+							}
+
+							if (!selected_definition && !asset_name.empty())
+							{
+								const auto name_definition = definitions.audio_assets.find(asset_name);
+								if (name_definition != definitions.audio_assets.end())
+								{
+									selected_definition = &name_definition->second;
+									if (statistics)
+									{
+										++statistics->name_matches;
+									}
+								}
+							}
+
+							if (!selected_definition)
+							{
+								auto alias_definition = definitions.aliases.find(alias_name);
+								if (alias_definition == definitions.aliases.end() && alias_name != list_name)
+								{
+									alias_definition = definitions.aliases.find(list_name);
+								}
+
+								if (alias_definition != definitions.aliases.end())
+								{
+									selected_definition = &alias_definition->second;
+									if (statistics)
+									{
+										++statistics->alias_matches;
+									}
+								}
+							}
+
+							if (selected_definition)
+							{
+								alias.subtitle = selected_definition->text;
+								alias.flags.ForceSubtitle = selected_definition->force;
+								++patched;
+								if (statistics)
+								{
+									++statistics->patched;
+								}
+							}
 						}
 					}
-				}
 
-				return patched;
+					return patched;
+				});
 			});
 		}
 
-		size_t patch_loaded_sound_banks()
+		void patch_new_sound_bank(database::SndBank* bank)
 		{
-			size_t patched{};
-			game::DB_EnumXAssets(game::ASSET_TYPE_SOUND_BANK, [&patched](const game::XAssetHeader header)
+			patch_statistics statistics{};
+			const auto patched = patch_sound_bank(bank, true, &statistics);
+			if (patched)
 			{
-				patched += patch_sound_bank(header.soundBank);
+				console::info("[Subtitles] Patched %zu aliases in newly loaded bank \"%s\" "
+					"(matches: %zu asset ID, %zu asset path, %zu alias)\n", patched,
+					bank->name ? bank->name : "", statistics.id_matches, statistics.name_matches,
+					statistics.alias_matches);
+			}
+		}
+
+		patch_statistics patch_loaded_sound_banks()
+		{
+			patch_statistics statistics{};
+			game::DB_EnumXAssets(game::ASSET_TYPE_SOUND_BANK, [&statistics](const game::XAssetHeader header)
+			{
+				patch_sound_bank(header.soundBank, false, &statistics);
 			});
-			return patched;
+			return statistics;
 		}
 
 		void reload_subtitles()
 		{
-			const auto buffer = filesystem::read_file(subtitle_config_path);
-			if (buffer.empty())
-			{
-				console::warn("[Subtitles] Could not find %s\n", subtitle_config_path);
-				return;
-			}
-
-			subtitle_map definitions;
+			subtitle_maps definitions;
+			std::unordered_map<std::uint32_t, std::string> audio_asset_id_names;
+			size_t loaded_configs{};
+			console::info("[Subtitles] Active manifest: %s (zombies.json disabled)\n",
+				subtitle_config_paths.front());
 			try
 			{
-				const auto data = nlohmann::json::parse(buffer);
-				if (!data.is_object())
+				for (const auto* config_path : subtitle_config_paths)
 				{
-					throw std::runtime_error("the root value must be an object");
-				}
-
-				for (auto entry = data.begin(); entry != data.end(); ++entry)
-				{
-					if (entry.key().starts_with('_'))
+					const auto buffer = filesystem::read_file(config_path);
+					if (buffer.empty())
 					{
+						console::warn("[Subtitles] Could not find %s\n", config_path);
 						continue;
 					}
 
-					std::string text;
-					bool force{};
-
-					if (entry.value().is_string())
+					const auto data = nlohmann::json::parse(buffer);
+					if (!data.is_object())
 					{
-						text = entry.value().get<std::string>();
-					}
-					else if (entry.value().is_object() && entry.value().contains("text") &&
-						entry.value()["text"].is_string())
-					{
-						text = entry.value()["text"].get<std::string>();
-						force = entry.value().value("force", false);
-					}
-					else
-					{
-						throw std::runtime_error("entry \"" + entry.key() +
-							"\" must be a string or an object containing a text string");
+						throw std::runtime_error(std::string{config_path} +
+							" root value must be an object");
 					}
 
-					if (entry.key().empty() || text.empty())
+					for (auto entry = data.begin(); entry != data.end(); ++entry)
 					{
-						throw std::runtime_error("subtitle aliases and text cannot be empty");
+						if (entry.key().starts_with('_'))
+						{
+							continue;
+						}
+
+						std::string text;
+						std::string audio_asset;
+						bool force{};
+
+						if (entry.value().is_string())
+						{
+							text = entry.value().get<std::string>();
+						}
+						else if (entry.value().is_object() && entry.value().contains("text") &&
+							entry.value()["text"].is_string())
+						{
+							text = entry.value()["text"].get<std::string>();
+							force = entry.value().value("force", false);
+							if (entry.value().contains("asset"))
+							{
+								if (!entry.value()["asset"].is_string())
+								{
+									throw std::runtime_error("entry \"" + entry.key() +
+										"\" asset must be a string");
+								}
+
+								audio_asset = entry.value()["asset"].get<std::string>();
+							}
+						}
+						else
+						{
+							throw std::runtime_error("entry \"" + entry.key() +
+								"\" must be a string or an object containing a text string");
+						}
+
+						if (entry.key().empty() || text.empty())
+						{
+							throw std::runtime_error("subtitle keys and text cannot be empty");
+						}
+
+						const auto* stable_text = utils::memory::get_allocator()->duplicate_string(text);
+						localized_strings::override(text, text);
+						if (!audio_asset.empty())
+						{
+							const auto normalized_asset = normalize_audio_asset(audio_asset);
+							const auto asset_id = sound_asset_hash(normalized_asset);
+							const auto [asset_id_name, inserted] = audio_asset_id_names.emplace(
+								asset_id, normalized_asset);
+							if (!inserted && asset_id_name->second != normalized_asset)
+							{
+								throw std::runtime_error(utils::string::va(
+									"audio assets \"%s\" and \"%s\" collide at sound asset ID 0x%08X",
+									asset_id_name->second.data(), normalized_asset.data(), asset_id));
+							}
+
+							definitions.audio_assets[normalized_asset] = {stable_text, force};
+							definitions.audio_asset_ids[asset_id] = {stable_text, force};
+						}
+						else
+						{
+							definitions.aliases[utils::string::to_lower(entry.key())] =
+								{stable_text, force};
+						}
 					}
 
-					const auto* stable_text = utils::memory::get_allocator()->duplicate_string(text);
-					localized_strings::override(text, text);
-					definitions[utils::string::to_lower(entry.key())] = {stable_text, force};
+					++loaded_configs;
 				}
 			}
 			catch (const std::exception& error)
 			{
-				console::error("[Subtitles] Failed to parse %s: %s\n", subtitle_config_path, error.what());
+				console::error("[Subtitles] Failed to parse subtitle config: %s\n", error.what());
 				return;
 			}
 
-			const auto definition_count = definitions.size();
-			subtitle_definitions.access([&definitions](subtitle_map& current)
+			if (!loaded_configs)
+			{
+				console::warn("[Subtitles] No subtitle configuration files were loaded\n");
+				return;
+			}
+
+			const auto alias_count = definitions.aliases.size();
+			const auto audio_asset_count = definitions.audio_assets.size();
+			const auto audio_asset_id_count = definitions.audio_asset_ids.size();
+			subtitle_definitions.access([&definitions](subtitle_maps& current)
 			{
 				current = std::move(definitions);
 			});
 
-			const auto patched_count = patch_loaded_sound_banks();
-			console::info("[Subtitles] Loaded %zu definitions and patched %zu active sound aliases\n",
-				definition_count, patched_count);
+			const auto statistics = patch_loaded_sound_banks();
+			console::info("[Subtitles] Loaded %zu alias and %zu audio-asset definitions (%zu hashed IDs) "
+				"from %zu files; patched %zu active sound aliases across %zu banks "
+				"(%zu variants, %zu named assets; matches: %zu asset ID, %zu asset path, %zu alias)\n",
+				alias_count, audio_asset_count, audio_asset_id_count, loaded_configs, statistics.patched,
+				statistics.banks, statistics.variants, statistics.named_assets, statistics.id_matches,
+				statistics.name_matches, statistics.alias_matches);
 		}
 
 		void dump_sound_aliases(const command::params& params)
@@ -623,7 +809,7 @@ namespace subtitles
 				return;
 			}
 
-			fastfiles::on_sound_bank_loaded(patch_sound_bank);
+			fastfiles::on_sound_bank_loaded(patch_new_sound_bank);
 			command::add("iwz_reload_subtitles", reload_subtitles);
 			command::add("iwz_dump_sound_aliases", dump_sound_aliases);
 			command::add("iwz_export_sound_alias", export_sound_alias);

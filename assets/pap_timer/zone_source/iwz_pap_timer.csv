@@ -1,6 +1,8 @@
-// Load the stock Spaceland sources while building so ZoneTool can resolve the
-// original rubber images. The custom fastfile only contains the housing assets.
+// Resolve the stock world technique and rubber textures while building. The
+// runtime loads this zone after the selected film, then restores the omitted
+// housing as a BSP surface using the packaged baked-lightmap crop.
 require,techsets_cp_zmb
 require,cp_zmb
 ignore,iwz_pap_timer_external
-xmodel,iwz_pap_timer_housing
+material,w/iwz_pap_timer_housing
+gfxlightmap,iwz_pap_timer

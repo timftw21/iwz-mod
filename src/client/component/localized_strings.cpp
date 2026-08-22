@@ -301,6 +301,7 @@ namespace localized_strings
 		{
 			override("MENU_MASTER_VOLUME", "MASTER VOLUME");
 			override("COOP_INTERACTIONS_NEED_MONEY", "^1NEED MORE MONEY!^7");
+			override("CP_ZMB_INTERACTIONS_NEED_TICKETS", "^1NEED MORE TICKETS!^7");
 			override("CP_ZMB_GHOST_TRACKING", "Tracking...");
 			override("CP_ZMB_GHOST_OBJECTIVE", "Destroy all skulls before they escape!");
 			override("IWZ_GNS_ARCADE_START_SPACELAND", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS");
@@ -314,7 +315,7 @@ namespace localized_strings
 				apply_registered_override(asset, "asset-load");
 			});
 			console::info("[IWZ][Localization] installed key-binding colorizer\n");
-			console::info("[IWZ][Localization] registered asset-load overrides including COOP_INTERACTIONS_NEED_MONEY red warning text\n");
+			console::info("[IWZ][Localization] registered red interaction warnings moneyKey=COOP_INTERACTIONS_NEED_MONEY ticketKey=CP_ZMB_INTERACTIONS_NEED_TICKETS\n");
 			console::info("[IWZ][GhostsNSkullsHUD] registered shared text overrides tracking='Tracking...' objectivePunctuation=exclamation escapedPunctuationVerified=3\n");
 			console::info("[IWZ][GhostsNSkullsArcade] registered per-game activation hints count=5\n");
 

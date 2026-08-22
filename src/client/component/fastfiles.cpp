@@ -1,6 +1,7 @@
 #include <std_include.hpp>
 #include "loader/component_loader.hpp"
 #include "fastfiles.hpp"
+#include "pap_timer.hpp"
 
 #include "game/game.hpp"
 
@@ -67,19 +68,7 @@ namespace fastfiles
 		utils::hook::detour db_add_xasset_hook;
 		utils::hook::detour sys_createfile_hook;
 
-		constexpr auto pap_timer_zone = "iwz_pap_timer";
 		constexpr auto gns_arcade_ui_zone = "iwz_gns_arcade";
-
-		bool requires_pap_timer_housing(const char* zone_name)
-		{
-			if (!zone_name)
-			{
-				return false;
-			}
-
-			return zone_name == "cp_rave"s || zone_name == "cp_disco"s ||
-				zone_name == "cp_town"s || zone_name == "cp_final"s;
-		}
 
 		bool db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
 			const bool is_base_map, const bool was_paused, const int failure_mode)
@@ -158,17 +147,6 @@ namespace fastfiles
 				dump_gsc_script(header.scriptfile->name ? header.scriptfile->name : "__unnamed__", header);
 			}
 
-			if (type == game::ASSET_TYPE_SOUND_BANK && header.soundBank)
-			{
-				sound_bank_load_callbacks.access([&header](const std::vector<sound_bank_load_callback>& callbacks)
-				{
-					for (const auto& callback : callbacks)
-					{
-						callback(header.soundBank);
-					}
-				});
-			}
-
 			if (type == game::ASSET_TYPE_WEAPON && header.weapon)
 			{
 				weapon_load_callbacks.access([&header](const std::vector<weapon_load_callback>& callbacks)
@@ -182,34 +160,22 @@ namespace fastfiles
 
 			auto result = db_add_xasset_hook.invoke<game::XAssetHeader>(type, header_ptr);
 
-			if (type == game::ASSET_TYPE_XMODEL && result.model && result.model->name &&
-				!strcmp(result.model->name, "iwz_pap_timer_housing"))
+			if (type == game::ASSET_TYPE_SOUND_BANK && result.soundBank)
 			{
-				const auto* material = result.model->numsurfs && result.model->materialHandles
-					? result.model->materialHandles[0]
-					: nullptr;
-				const auto* technique = material && material->techniqueSet && material->techniqueSet->name
-					? material->techniqueSet->name
-					: "<none>";
-				const auto* image0 = material && material->textureCount > 0 && material->textureTable
-					? material->textureTable[0].image
-					: nullptr;
-				const auto* image1 = material && material->textureCount > 1 && material->textureTable
-					? material->textureTable[1].image
-					: nullptr;
+				sound_bank_load_callbacks.access([&result](const std::vector<sound_bank_load_callback>& callbacks)
+				{
+					for (const auto& callback : callbacks)
+					{
+						callback(result.soundBank);
+					}
+				});
+			}
 
-				console::info("[IWZ][PaPTimer] model bound material=%s technique=%s textures=%u "
-					"image0=%s(%ux%u streamed=%u) image1=%s(%ux%u streamed=%u)\n",
-					material && material->name ? material->name : "<none>", technique,
-					material ? static_cast<unsigned int>(material->textureCount) : 0,
-					image0 && image0->name ? image0->name : "<none>",
-					image0 ? static_cast<unsigned int>(image0->width) : 0,
-					image0 ? static_cast<unsigned int>(image0->height) : 0,
-					image0 ? static_cast<unsigned int>(image0->streamed) : 0,
-					image1 && image1->name ? image1->name : "<none>",
-					image1 ? static_cast<unsigned int>(image1->width) : 0,
-					image1 ? static_cast<unsigned int>(image1->height) : 0,
-					image1 ? static_cast<unsigned int>(image1->streamed) : 0);
+			if (type == game::ASSET_TYPE_GFXWORLD || type == game::ASSET_TYPE_MATERIAL ||
+				type == game::ASSET_TYPE_GFXLIGHTMAP)
+			{
+				const auto source_zone = get_current_fastfile();
+				pap_timer::on_asset_loaded(type, result, source_zone.c_str());
 			}
 
 			return result;
@@ -284,27 +250,29 @@ namespace fastfiles
 
 			for (auto i = 0u; i < zone_count; ++i)
 			{
-				if (zone_info[i].name && !strcmp(zone_info[i].name, pap_timer_zone))
+				if (zone_info[i].name && !strcmp(zone_info[i].name, pap_timer::get_zone_name()))
 				{
 					timer_zone_already_queued = true;
 				}
-				else if (requires_pap_timer_housing(zone_info[i].name))
+				else if (pap_timer::requires_housing(zone_info[i].name))
 				{
 					film_zone = &zone_info[i];
 				}
 			}
 
-			if (!film_zone || timer_zone_already_queued || !fastfiles::exists(pap_timer_zone))
+			if (!film_zone || timer_zone_already_queued || !fastfiles::exists(pap_timer::get_zone_name()))
 			{
 				return db_load_x_assets_hook.invoke<void>(zone_info, zone_count, sync_mode);
 			}
 
 			std::vector<game::XZoneInfo> zones;
 			merge(&zones, zone_info, zone_count);
-			zones.push_back({pap_timer_zone, film_zone->allocFlags | game::DB_ZONE_CUSTOM, film_zone->freeFlags});
+			zones.push_back({pap_timer::get_zone_name(), film_zone->allocFlags | game::DB_ZONE_CUSTOM,
+				film_zone->freeFlags});
 
-			console::info("[IWZ][PaPTimer] queueing zone=%s after map=%s allocFlags=0x%X freeFlags=0x%X\n",
-				pap_timer_zone, film_zone->name, film_zone->allocFlags, film_zone->freeFlags);
+			console::info("[IWZ][PaPTimer] queueing BSP restoration zone=%s after map=%s "
+				"allocFlags=0x%X freeFlags=0x%X\n",
+				pap_timer::get_zone_name(), film_zone->name, film_zone->allocFlags, film_zone->freeFlags);
 
 			return db_load_x_assets_hook.invoke<void>(zones.data(), static_cast<unsigned int>(zones.size()), sync_mode);
 		}

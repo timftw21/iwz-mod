@@ -338,6 +338,32 @@ namespace command
 			}
 		}
 
+		void cmd_win_gns(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][GhostsNSkullsArcade] winGNS rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_gns_win", {player});
+				console::info("[IWZ][GhostsNSkullsArcade] winGNS dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][GhostsNSkullsArcade] winGNS dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to finish Ghosts N Skulls");
+			}
+		}
+
 		void cmd_paproom(const int client_num)
 		{
 			try
@@ -758,6 +784,16 @@ namespace command
 				}
 
 				cmd_give_petn(client_num);
+			});
+
+			add_sv("winGNS", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_win_gns(client_num);
 			});
 
 			add_sv("testBarrierTier1", [](const int client_num, const params_sv&)

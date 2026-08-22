@@ -1,5 +1,11 @@
 post_load()
 {
+    // The listener is available for both the IWZ arcade launch and a Ghosts N
+    // Skulls game entered from the stock maps. GSC performs the authoritative
+    // active-game check so the native command cannot force unrelated endgames.
+    level thread listen_for_gns_win_requests();
+    arcade_log("winGNS listener installed map=" + level.script + " arcadeMode=" + getdvarint("iwz_gns_arcade", 0));
+
     if (!getdvarint("iwz_gns_arcade", 0))
         return;
 
@@ -26,11 +32,17 @@ post_load()
     // not start the stock Boss Battle staging setup alongside this mode.
     previous_direct_challenge_state = scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight();
     level.direct_to_boss_fight = 1;
+    // direct_boss_fight::init() establishes this invariant when it owns the
+    // flag. Arcade mode borrows the flag after init, so it must establish the
+    // matching timer state itself even though no Boss Battle timer is started.
+    level.bosstimer = 0;
 
     // This mode temporarily uses direct_to_boss_fight for presentation, but
     // the stock endgame also interprets it as proof that a timed Boss Battle
-    // ran. Own the shared endgame boundary so every exit path restores the
-    // borrowed state before stock reads the uninitialized boss timer.
+    // ran. cp_gamelogic::endgame calls adjust_wave_num directly rather than
+    // through level.endgame, so own that single shared boundary as well as the
+    // callback to cover native, manual, and error-driven exits.
+    replacefunc(scripts\cp\zombies\direct_boss_fight::adjust_wave_num, ::arcade_adjust_wave_num);
     level.iwz_gns_stock_endgame_func = level.endgame;
     level.endgame = ::arcade_endgame;
 
@@ -44,10 +56,70 @@ post_load()
     setnojipscore(1);
 
     arcade_log("launch armed: selection=" + selection + " game='" + get_arcade_game_name(selection) + "' map=" + level.script + " staging=afterlife");
-    arcade_log("direct challenge state activated post-load: previous=" + previous_direct_challenge_state + " introMusicSuppressed=1 scenePresentationSuppressed=1 endgameBoundaryWrapped=1");
+    arcade_log("direct challenge state activated post-load: previous=" + previous_direct_challenge_state + " bossTimerInitialized=" + level.bosstimer + " introMusicSuppressed=1 scenePresentationSuppressed=1 adjustWaveBoundaryReplaced=1 endgameBoundaryWrapped=1");
     level thread hold_normal_waves();
     level thread scripts\cp\zombies\direct_boss_fight::disable_things_in_afterlife_arcade();
     level thread launch_arcade_game();
+}
+
+listen_for_gns_win_requests()
+{
+    level endon("game_ended");
+
+    for (;;)
+    {
+        level waittill("iwz_gns_win", player);
+        player force_gns_win();
+    }
+}
+
+force_gns_win()
+{
+    if (!isdefined(self) || !isplayer(self))
+    {
+        arcade_log("winGNS rejected: invalid player");
+        return;
+    }
+
+    if (!scripts\engine\utility::is_true(level.gns_active))
+    {
+        arcade_log("winGNS rejected: Ghosts N Skulls is not active playerEnt=" + (self getentitynumber()) + " map=" + level.script);
+        self iprintlnbold("Ghosts N Skulls is not active");
+        return;
+    }
+
+    if (scripts\engine\utility::is_true(level.processing_ghost_wave_failing))
+    {
+        arcade_log("winGNS rejected: failure cleanup already active playerEnt=" + (self getentitynumber()) + " map=" + level.script);
+        self iprintlnbold("Ghosts N Skulls is already ending");
+        return;
+    }
+
+    if (scripts\engine\utility::is_true(level.iwz_gns_win_pending))
+    {
+        arcade_log("winGNS ignored: victory sequence already pending playerEnt=" + (self getentitynumber()) + " map=" + level.script);
+        return;
+    }
+
+    level.iwz_gns_win_pending = true;
+    arcade_log("winGNS accepted: playerEnt=" + (self getentitynumber()) + " map=" + level.script + " arcadeMode=" + getdvarint("iwz_gns_arcade", 0) + " configuredWaves=" + level.gns_num_of_wave);
+    self iprintlnbold("Ghosts N Skulls victory triggered");
+
+    // Use the stock success entry point. It owns HUD teardown, score display,
+    // player restoration, analytics, each map's reward callback, and gns_end_func.
+    scripts\cp\maps\cp_zmb\cp_zmb_ghost_wave::game_won_sequence();
+    level thread observe_forced_win_completion();
+}
+
+observe_forced_win_completion()
+{
+    level endon("game_ended");
+
+    while (scripts\engine\utility::is_true(level.gns_active))
+        scripts\engine\utility::waitframe();
+
+    level.iwz_gns_win_pending = undefined;
+    arcade_log("winGNS native completion observed map=" + level.script);
 }
 
 get_arcade_staging_spawn_point()
@@ -413,16 +485,33 @@ arcade_game_ended()
 
 arcade_endgame(winning_team, result)
 {
-    // Stock _endgame.gsc unconditionally calls adjust_wave_num(), which reads
-    // level.bosstimer whenever direct_to_boss_fight is true. Arcade mode never
-    // creates that timer, so clear the presentation-only state for native,
-    // manual, and error exits before delegating to the original endgame.
+    restore_arcade_endgame_state("level-endgame-callback", result);
+    arcade_log("shared endgame callback continuing team=" + winning_team + " result=" + result);
+    [[level.iwz_gns_stock_endgame_func]](winning_team, result);
+}
+
+arcade_adjust_wave_num(result)
+{
+    // Both dumps show this is the sole unconditional Boss Battle call in the
+    // stock CP endgame. Restore the borrowed flag here even when an exit path
+    // invoked cp_gamelogic::endgame without going through level.endgame.
+    restore_arcade_endgame_state("stock-adjust-wave-boundary", result);
+}
+
+restore_arcade_endgame_state(source, result)
+{
+    direct_challenge_before = scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight();
+    boss_timer_before = "undefined";
+
+    if (isdefined(level.bosstimer))
+        boss_timer_before = "" + level.bosstimer;
+
     level.direct_to_boss_fight = undefined;
+    level.bosstimer = undefined;
     setomnvar("zm_boss_splash", 0);
     setomnvar("zm_boss_id", -1);
 
-    arcade_log("shared endgame boundary restored directChallenge=0 bossSplash=0 bossId=-1 team=" + winning_team + " result=" + result);
-    [[level.iwz_gns_stock_endgame_func]](winning_team, result);
+    arcade_log("endgame state restored: source=" + source + " directChallengeBefore=" + direct_challenge_before + " bossTimerBefore=" + boss_timer_before + " result=" + result + " bossSplash=0 bossId=-1");
 }
 
 vector_to_log_string(value)

@@ -1,3 +1,3 @@
-// The custom material reuses IW's native model-lit technique. It must remain
-// an external reference because every supported film already loads it.
-techset,mopw_l_sm_replace_i0c0s0n0p0
+// Every supported film loads this native world-lightmapped technique before
+// iwz_pap_timer, so keep it external instead of duplicating shader assets.
+techset,w_l_sm_replace_i0c0s0n0p0

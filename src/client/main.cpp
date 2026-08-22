@@ -3,6 +3,7 @@
 #include "loader/component_loader.hpp"
 #include "game/game.hpp"
 
+#include "component/asset_streaming.hpp"
 #include "component/console/console.hpp"
 
 #include <utils/flags.hpp>
@@ -207,12 +208,39 @@ namespace
 
 		return remapped_mask;
 	}
+
+	void initialize_game_hooks()
+	{
+		static std::once_flag initialize_once;
+		std::call_once(initialize_once, []()
+		{
+			const auto thread_id = GetCurrentThreadId();
+			asset_streaming::bootstrap_log("startupHooks phase=begin ownerThread=%lu", thread_id);
+
+			component_loader::post_unpack();
+			const auto status = MH_ApplyQueued();
+
+			asset_streaming::bootstrap_log("startupHooks phase=complete ownerThread=%lu minHookStatus=%s", thread_id,
+				MH_StatusToString(status));
+			if (status == MH_OK)
+			{
+				console::info("[IWZ][StartupHooks] component hooks installed atomically ownerThread=%lu\n", thread_id);
+			}
+			else
+			{
+				console::error("[IWZ][StartupHooks] failed to apply component hooks ownerThread=%lu status=%s\n",
+					thread_id, MH_StatusToString(status));
+			}
+		});
+	}
 }
 
 DWORD_PTR WINAPI set_thread_affinity_mask(HANDLE hThread, DWORD_PTR dwThreadAffinityMask)
 {
-	component_loader::post_unpack();
-	MH_ApplyQueued();
+	// The game can issue its first affinity requests concurrently. Hook creation and the
+	// final MinHook apply must be one blocking transaction so no engine thread can run
+	// while only a prefix of the component hooks is active.
+	initialize_game_hooks();
 
 	return SetThreadAffinityMask(hThread, get_physical_first_affinity(dwThreadAffinityMask));
 }
