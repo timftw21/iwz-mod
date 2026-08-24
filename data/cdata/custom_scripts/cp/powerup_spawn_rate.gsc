@@ -20,7 +20,27 @@ install_powerup_spawn_rate()
         scripts\engine\utility::waitframe();
     }
 
-    configured_interval = getdvarint("iwz_powerup_drop_base_interval", 1900);
+    configured_interval = getdvarint("iwz_powerup_drop_base_interval", 2250);
+    interval_revision = getdvarint("iwz_powerup_drop_interval_revision", 0);
+
+    // The dvar is archived, so existing installations retain the old 1900
+    // default in config_mp.cfg even after the executable's default changes.
+    // Migrate that exact old default once while preserving deliberate custom
+    // values.
+    if (interval_revision < 1)
+    {
+        previous_interval = configured_interval;
+        if (configured_interval == 1900)
+        {
+            configured_interval = 2250;
+            setdvar("iwz_powerup_drop_base_interval", configured_interval);
+        }
+
+        setdvar("iwz_powerup_drop_interval_revision", 1);
+        powerup_log("interval migration revision=1 previous=" + previous_interval +
+            " current=" + configured_interval +
+            " migrated=" + int(previous_interval == 1900));
+    }
     stock_interval = level.powerup_drop_increment;
     stock_threshold = level.score_to_drop;
 

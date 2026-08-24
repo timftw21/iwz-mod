@@ -17,7 +17,7 @@ main()
     level.iwz_attack_set_chemical = set_chemical;
     replacefunc(can_use_interaction, ::can_use_interaction_stub);
     replacefunc(nuke_fx, ::nuke_fx_stub);
-    attack_fix_log("installed airborne Alien Fuse use and off-grid nuke VFX patches; stock battery state preserved for UI filtering");
+    attack_fix_log("installed scoped Attack interaction-use and off-grid nuke VFX patches; stock battery state preserved for UI filtering");
 }
 
 post_load()
@@ -71,11 +71,16 @@ configure_attack_interaction_geometry()
     level endon("game_ended");
     scripts\engine\utility::flag_wait("interactions_initialized");
 
-    // Elvira registers her interaction immediately after setting the shared
-    // initialization flag, so allow that final registration to complete.
-    wait(0.1);
+    // cp_interaction starts a background pass that drops every interaction
+    // struct to the floor. Attack's stock update_struct_positions waits ten
+    // seconds before repairing quest selectors for exactly that reason; run
+    // our model-aligned corrections after the same pass has settled.
+    wait(10.25);
 
     configure_alien_fuse_interactions();
+    configure_bomb_part_interactions();
+    level thread monitor_alien_fuse_trigger_focus();
+    level thread monitor_car_mirror_interaction();
     level thread monitor_elvira_mirror_interaction();
 }
 
@@ -103,10 +108,10 @@ configure_alien_fuse_interactions()
         if (closest_fuses.size > 1)
             fuse_origin = (closest_fuses[0].origin + closest_fuses[1].origin) * 0.5;
 
-        // Keep the map-authored reachable height. Only correct the horizontal
-        // position to the visible models and move it out through the cabinet
-        // opening. Moving the use point to the model's elevated Z puts the native
-        // interaction selection point inside the shelf and defeats jumping.
+        // The stock floor-normalization pass moves this selector roughly 100
+        // units below the visible fuses. Align it with the models, then move it
+        // horizontally through the cabinet opening so both the proximity search
+        // and the look-at trigger resolve against the prop the player can see.
         outward = (old_origin[0] - fuse_origin[0], old_origin[1] - fuse_origin[1], 0);
         if (distancesquared((0, 0, 0), outward) > 0.01)
             outward = vectornormalize(outward) * 24;
@@ -114,7 +119,7 @@ configure_alien_fuse_interactions()
             outward = (0, 24, 0);
 
         interaction.origin = (fuse_origin[0] + outward[0],
-            fuse_origin[1] + outward[1], old_origin[2]);
+            fuse_origin[1] + outward[1], fuse_origin[2]);
         interaction.custom_search_dist = 192;
         adjusted++;
 
@@ -125,6 +130,176 @@ configure_alien_fuse_interactions()
 
     attack_fix_log("Alien Fuse geometry configured interactions=" + adjusted +
         " models=" + fuse_models.size);
+}
+
+configure_bomb_part_interactions()
+{
+    part_interactions = scripts\engine\utility::getstructarray("bomb_teleporter_part", "script_noteworthy");
+    adjusted = 0;
+
+    foreach (interaction in part_interactions)
+    {
+        if (!isdefined(interaction.target))
+            continue;
+
+        part = getent(interaction.target, "targetname");
+        if (!isdefined(part))
+            continue;
+
+        old_origin = interaction.origin;
+
+        // cp_interaction drops every interaction struct to the floor during
+        // startup. Put these small quest-part selectors back on their linked
+        // visible models so the use trigger is not hidden below nearby terrain.
+        interaction.origin = part.origin;
+        interaction.custom_search_dist = 128;
+        adjusted++;
+
+        attack_fix_log("aligned bomb-part interaction target=" + interaction.target +
+            " model=" + part.model + " old=" + old_origin + " new=" + interaction.origin +
+            " searchDist=" + interaction.custom_search_dist);
+    }
+
+    if (isdefined(level.interactions) &&
+        isdefined(level.interactions["bomb_teleporter_part"]))
+    {
+        // The stock projector-part callback silently rejects every stance but
+        // prone. The selector is already a normal look-at use trigger, so keep
+        // the quest behavior while removing that undocumented stance gate.
+        level.interactions["bomb_teleporter_part"].activation_func = ::take_bomb_part_stub;
+        attack_fix_log("removed prone-only gate from the projector bomb part");
+    }
+    else
+        attack_fix_log("bomb-part callback unavailable during geometry setup");
+
+    attack_fix_log("bomb-part geometry configured interactions=" + adjusted +
+        " discovered=" + part_interactions.size);
+}
+
+take_bomb_part_stub(interaction, player)
+{
+    if (!isdefined(interaction) || !isdefined(player) || !isdefined(interaction.target))
+        return;
+
+    part = getent(interaction.target, "targetname");
+    if (!isdefined(part))
+        return;
+
+    part_model = part.model;
+    switch (part_model)
+    {
+        case "cp_town_teleporter_device_projector":
+            scripts\cp\utility::set_quest_icon(16);
+            break;
+        case "cp_town_teleporter_device_pipes":
+            scripts\cp\utility::set_quest_icon(17);
+            break;
+        default:
+            scripts\cp\utility::set_quest_icon(18);
+            break;
+    }
+
+    playfx(level._effect["generic_pickup"], part.origin);
+    pickup_sound = "zmb_item_pickup";
+    if (!soundexists(pickup_sound))
+        pickup_sound = "part_pickup";
+
+    if (soundexists(pickup_sound))
+        player playlocalsound(pickup_sound);
+    else
+        attack_fix_log("bomb-part pickup sound unavailable aliases=zmb_item_pickup,part_pickup");
+
+    level.teleporter_pieces_found++;
+    scripts\cp\cp_interaction::remove_from_current_interaction_list(interaction);
+    part delete();
+
+    attack_fix_log("collected bomb part target=" + interaction.target +
+        " model=" + part_model + " player=" + player getentitynumber());
+}
+
+monitor_alien_fuse_trigger_focus()
+{
+    level endon("game_ended");
+
+    for (;;)
+    {
+        foreach (player in level.players)
+        {
+            if (!isdefined(player) || !isdefined(player.interaction_trigger) ||
+                !isdefined(player.last_interaction_point))
+                continue;
+
+            interaction = player.last_interaction_point;
+            if (!isdefined(interaction.script_noteworthy) ||
+                interaction.script_noteworthy != "pap_fusebox")
+                continue;
+
+            // set_interaction_point substitutes the player's eye Z for the
+            // selector's Z. That points the close-range look cone below the
+            // elevated prop. Keep this one trigger focused on the corrected,
+            // cabinet-front selector while the player jumps into use range.
+            trigger_origin = interaction.origin;
+            if (distancesquared(player.interaction_trigger.origin, trigger_origin) > 0.01)
+            {
+                player.interaction_trigger dontinterpolate();
+                player.interaction_trigger.origin = trigger_origin;
+            }
+
+            if (!scripts\engine\utility::is_true(player.iwz_tracking_fuse_trigger))
+            {
+                player.iwz_tracking_fuse_trigger = 1;
+                attack_fix_log("focused Alien Fuse trigger on visible prop player=" +
+                    player getentitynumber() + " trigger=" + trigger_origin);
+            }
+        }
+
+        wait(0.05);
+    }
+}
+
+monitor_car_mirror_interaction()
+{
+    level endon("game_ended");
+
+    mirror_interactions = scripts\engine\utility::getstructarray("mirror", "script_noteworthy");
+    car_interaction = undefined;
+    foreach (interaction in mirror_interactions)
+    {
+        if (isdefined(interaction.name) && interaction.name == "car_mirror")
+        {
+            car_interaction = interaction;
+            break;
+        }
+    }
+
+    if (!isdefined(car_interaction))
+    {
+        attack_fix_log("car-mirror interaction unavailable candidates=" + mirror_interactions.size);
+        return;
+    }
+
+    while (!scripts\engine\utility::is_true(level.car_mirror_hit))
+        wait(0.1);
+
+    ground_mirror = getent("car_mirror_ground", "targetname");
+    if (!isdefined(ground_mirror))
+    {
+        attack_fix_log("fallen car-mirror model unavailable after crowbar hit");
+        return;
+    }
+
+    old_origin = car_interaction.origin;
+    car_interaction.origin = ground_mirror.origin;
+    car_interaction.custom_search_dist = 120;
+    attack_fix_log("aligned fallen car-mirror interaction old=" + old_origin +
+        " new=" + car_interaction.origin + " searchDist=" + car_interaction.custom_search_dist);
+
+    while (!isdefined(level.mirrors_picked_up) ||
+        !isdefined(level.mirrors_picked_up["car_mirror"]))
+        wait(0.1);
+
+    scripts\cp\cp_interaction::remove_from_current_interaction_list(car_interaction);
+    attack_fix_log("removed collected car-mirror selector from the active interaction list");
 }
 
 nuke_fx_stub(powerup, authored_anchors)

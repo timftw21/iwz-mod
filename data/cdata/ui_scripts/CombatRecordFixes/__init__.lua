@@ -24,10 +24,15 @@ if MenuBuilder.m_types["CPCombatRecordCardsListMenu"] == nil then
 	require("frontEnd.cp.CPCombatRecordCardsListMenu")
 end
 
+if MenuBuilder.m_types["FilterPopup"] == nil then
+	require("frontEnd.CommonPopups")
+end
+
 local originalMapListMenu = MenuBuilder.m_types["CPCombatRecordMapListMenu"]
 local originalMapValueButton = MenuBuilder.m_types["CPCombatRecordMapValueButton"]
 local originalWeaponListMenu = MenuBuilder.m_types["CPCombatRecordWeaponListMenu"]
 local originalCardsListMenu = MenuBuilder.m_types["CPCombatRecordCardsListMenu"]
+local originalFilterPopup = MenuBuilder.m_types["FilterPopup"]
 
 local loggedHelperBarFix = false
 local loggedMissingHelperBar = false
@@ -36,6 +41,121 @@ local loggedFilmRowFix = false
 local loggedMissingFilmRow = false
 local loggedMissingBossTime = false
 local loggedFilmStencilFix = false
+local loggedFilterArrowFix = false
+local loggedMissingFilterArrows = false
+local loggedWeaponDescriptionSpacing = false
+
+local WHITE = 16777215
+
+local function normalizeWeaponDescription(description, source, weaponRef)
+	if type(description) ~= "string" or description == "" then
+		return description
+	end
+
+	-- Stock weapon prose uses double ASCII spaces between sentences. Limit the
+	-- normalization to those spaces so newlines and localization control codes
+	-- remain untouched.
+	local normalized, replacementCount = string.gsub(description, "  +", " ")
+	if replacementCount > 0 and not loggedWeaponDescriptionSpacing then
+		print("[IWZ][CombatRecordFixes] normalized Zombies weapon description spacing" ..
+			" source=" .. tostring(source) .. " weapon=" .. tostring(weaponRef) ..
+			" replacements=" .. tostring(replacementCount))
+		loggedWeaponDescriptionSpacing = true
+	end
+
+	return normalized
+end
+
+if Cac and Cac.GetWeaponDesc and Cac.GetWeaponLootDesc and
+	not Cac.iwzWeaponDescriptionSpacingInstalled then
+	local stockGetWeaponDesc = Cac.GetWeaponDesc
+	local stockGetWeaponLootDesc = Cac.GetWeaponLootDesc
+	Cac.iwzWeaponDescriptionSpacingInstalled = true
+
+	Cac.GetWeaponDesc = function(weaponRef, ...)
+		local description = stockGetWeaponDesc(weaponRef, ...)
+		if not Engine.IsAliensMode() then
+			return description
+		end
+
+		return normalizeWeaponDescription(description, "base", weaponRef)
+	end
+
+	Cac.GetWeaponLootDesc = function(weaponRef, lootItemID, ...)
+		local description = stockGetWeaponLootDesc(weaponRef, lootItemID, ...)
+		if not Engine.IsAliensMode() then
+			return description
+		end
+
+		return normalizeWeaponDescription(description, "loot", weaponRef)
+	end
+
+	print("[IWZ][CombatRecordFixes] installed shared Zombies weapon description spacing normalization")
+else
+	print("[IWZ][CombatRecordFixes] shared weapon description spacing install skipped" ..
+		" reason=Cac-functions-unavailable-or-installed")
+end
+
+if LOADOUT and LOADOUT.MakeBaseWeaponsListDataSource and
+	not LOADOUT.iwzWeaponDescriptionSpacingInstalled then
+	local stockMakeBaseWeaponsListDataSource = LOADOUT.MakeBaseWeaponsListDataSource
+	LOADOUT.iwzWeaponDescriptionSpacingInstalled = true
+
+	LOADOUT.MakeBaseWeaponsListDataSource = function(...)
+		local weaponClasses = stockMakeBaseWeaponsListDataSource(...)
+		if not Engine.IsAliensMode() then
+			return weaponClasses
+		end
+
+		return weaponClasses:Decorate(function(_, weaponClass)
+			return {
+				weapons = weaponClass.weapons:Decorate(function(_, weapon, controllerIndex)
+					local weaponRef = weapon.ref:GetValue(controllerIndex)
+					return {
+						desc = weapon.desc:Filter(
+							"iwz_zombies_weapon_description_spacing",
+							function(description)
+								return normalizeWeaponDescription(
+									description, "base-list", weaponRef)
+							end)
+					}
+				end)
+			}
+		end)
+	end
+
+	print("[IWZ][CombatRecordFixes] installed Zombies base weapon list description" ..
+		" spacing normalization surfaces=WeaponKits,CombatRecord")
+else
+	print("[IWZ][CombatRecordFixes] base weapon list spacing install skipped" ..
+		" reason=LOADOUT.MakeBaseWeaponsListDataSource-unavailable-or-installed")
+end
+
+local function findDescendantByID(element, id)
+	local child = element and element:getFirstChild()
+	while child do
+		if child.id == id then
+			return child
+		end
+
+		local descendant = findDescendantByID(child, id)
+		if descendant then
+			return descendant
+		end
+
+		child = child:getNextSibling()
+	end
+
+	return nil
+end
+
+local function forceArrowImageWhite(image)
+	local setRGBFromInt = image.SetRGBFromInt
+	image.SetRGBFromInt = function(element, _, duration)
+		return setRGBFromInt(element, WHITE, duration)
+	end
+	image:SetRGBFromInt(WHITE, 0)
+end
 
 local COMBAT_RECORD_MODEL_PATH = ZombiesUtils.CombatRecordMenuModelPath
 
@@ -161,6 +281,39 @@ local function buildAllCardsDataSource(controllerIndex)
 		return cards[index + 1]
 	end
 	return source
+end
+
+if originalFilterPopup then
+	MenuBuilder.m_types["FilterPopup"] = function(menu, controller)
+		local self = originalFilterPopup(menu, controller)
+
+		if Engine.IsAliensMode() then
+			local typeButton = findDescendantByID(self, "TypeButton")
+			local leftImage = typeButton and typeButton.ArrowLeft and
+				typeButton.ArrowLeft.Image
+			local rightImage = typeButton and typeButton.ArrowRight and
+				typeButton.ArrowRight.Image
+
+			if leftImage and rightImage then
+				-- MenuLeftArrow/MenuRightArrow animate back to black on every input.
+				-- Pin these popup-local instances to the white list-arrow color.
+				forceArrowImageWhite(leftImage)
+				forceArrowImageWhite(rightImage)
+
+				if not loggedFilterArrowFix then
+					print("[IWZ][CombatRecordFixes] pinned filter option arrows to white")
+					loggedFilterArrowFix = true
+				end
+			elseif not loggedMissingFilterArrows then
+				print("[IWZ][CombatRecordFixes] filter option arrow images unavailable during popup construction")
+				loggedMissingFilterArrows = true
+			end
+		end
+
+		return self
+	end
+else
+	print("[IWZ][CombatRecordFixes] Filter popup unavailable; arrow color patch not installed")
 end
 
 if originalMapValueButton then

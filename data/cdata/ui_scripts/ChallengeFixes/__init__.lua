@@ -26,21 +26,38 @@ local MERIT_SUBCATEGORY_COLUMN = 6
 local CAREER_SUBCATEGORY = "zmcareer"
 local CAREER_REWARD_XP = 5000
 local MASTER_REWARD_XP = 10000
+local NAMED_CHALLENGE_REWARDS = {
+	mt_dlc3_troll = 2500,
+	mt_dlc3_troll2 = 2500,
+	mt_dlc2_troll = 5000,
+	mt_dlc4_troll = 10000,
+	mt_dlc4_troll2 = 50000
+}
 local CHALLENGE_REQUIREMENTS = {
+	mt_purchased_weapon = {20, 40, 60, 80, 100},
+	mt_revives = {5, 10, 15, 20, 25},
+	mt_purchase_perks = {20, 40, 60, 80, 100},
+	mt_faf_uses = {20, 40, 60, 80, 100},
 	mt_dlc1_all_ziplines = {5, 10, 15, 20, 25},
 	mt_dlc1_sasquatch_kills = {20, 40, 60, 80, 100},
 	mt_dlc1_charms_added = {3, 6, 9, 12, 15},
 	mt_dlc1_challenge_badge = {5, 10, 15, 20, 25},
 	mt_dlc2_roller_skaters = {20, 40, 60, 80, 100},
 	mt_dlc2_chi_master = {3, 6, 9, 12, 15},
+	mt_dlc2_trap_kills = {40, 80, 120, 160, 200},
+	mt_dlc3_cleaver_kills = {40, 80, 120, 160, 200},
+	mt_dlc3_crowbar_kills = {40, 80, 120, 160, 200},
+	mt_dlc3_crab_mini = {20, 40, 60, 80, 100},
+	mt_dlc3_elvira_summon = {2, 4, 6, 8, 10},
 	mt_dlc4_entangler_kills = {20, 40, 60, 80, 100},
 	mt_dlc4_special_wave_kills = {20, 40, 60, 80, 100}
 }
-local REWARD_PROJECTION_VERSION = 4
+local REWARD_PROJECTION_VERSION = 6
 
 local loggedCareerReward = false
 local loggedMasterReward = false
 local loggedChallengeRequirement = {}
+local loggedNamedChallengeReward = {}
 
 if CallingCardUtils and CallingCardUtils.GetChallengeEntry and
 	CallingCardUtils.iwzRewardProjectionVersion ~= REWARD_PROJECTION_VERSION then
@@ -71,7 +88,16 @@ if CallingCardUtils and CallingCardUtils.GetChallengeEntry and
 				end
 			end
 
-			if entry.isMasterChallenge then
+			local namedReward = NAMED_CHALLENGE_REWARDS[meritRef]
+			if namedReward then
+				entry.currentTierXP = namedReward
+
+				if not loggedNamedChallengeReward[meritRef] then
+					print("[IWZ][ChallengeFixes] displaying named challenge XP merit=" ..
+						meritRef .. " xp=" .. tostring(namedReward))
+					loggedNamedChallengeReward[meritRef] = true
+				end
+			elseif entry.isMasterChallenge then
 				entry.currentTierXP = MASTER_REWARD_XP
 
 				if not loggedMasterReward then
@@ -96,7 +122,7 @@ if CallingCardUtils and CallingCardUtils.GetChallengeEntry and
 
 	print("[IWZ][ChallengeFixes] challenge reward projection installed careerXP=" ..
 		tostring(CAREER_REWARD_XP) .. " masterXP=" .. tostring(MASTER_REWARD_XP) ..
-		" tunedChallengeRequirements=8x5")
+		" namedChallengeRewards=5 tunedChallengeRequirements=17x5")
 else
 	print("[IWZ][ChallengeFixes] CallingCardUtils unavailable; challenge reward projection not installed")
 end
@@ -123,6 +149,7 @@ local loggedMasterHoverInstall = false
 local loggedMasterSelection = false
 local loggedMasterDescription = false
 local loggedDescriptionPunctuation = false
+local loggedSourceDescriptionPunctuation = false
 
 local function addDescriptionPeriod(description)
 	if type(description) ~= "string" or description == "" then
@@ -152,6 +179,34 @@ local function addDescriptionPeriod(description)
 	end
 
 	return text .. whitespace .. suffix
+end
+
+if CallingCardUtils and CallingCardUtils.GetCardChallengeDesc and
+	not CallingCardUtils.iwzDescriptionPunctuationInstalled then
+	local stockGetCardChallengeDesc = CallingCardUtils.GetCardChallengeDesc
+	CallingCardUtils.iwzDescriptionPunctuationInstalled = true
+
+	CallingCardUtils.GetCardChallengeDesc = function(meritRef, requirement, tableFile)
+		local description = stockGetCardChallengeDesc(meritRef, requirement, tableFile)
+		if not Engine.IsAliensMode() then
+			return description
+		end
+
+		local formattedDescription = addDescriptionPeriod(description)
+		if formattedDescription ~= description and not loggedSourceDescriptionPunctuation then
+			print("[IWZ][ChallengeFixes] normalized source challenge description punctuation" ..
+				" surfaces=AAR,InProgress merit=" .. tostring(meritRef))
+			loggedSourceDescriptionPunctuation = true
+		end
+
+		return formattedDescription
+	end
+
+	print("[IWZ][ChallengeFixes] installed source challenge description punctuation" ..
+		" surfaces=AAR,InProgress mode=Zombies")
+else
+	print("[IWZ][ChallengeFixes] source description punctuation install skipped" ..
+		" reason=CallingCardUtils.GetCardChallengeDesc unavailable-or-installed")
 end
 
 if originalMasterChallenge then
@@ -373,11 +428,61 @@ end
 local loggedEmptyDescriptionGuard = false
 local loggedDescriptionGuardInstall = false
 local loggedEmptyDescriptionAnimation = false
+local loggedPaginationInstall = false
 
 if originalChallengesMenu then
 	MenuBuilder.m_types["ChallengesMenu"] = function(menu, controller)
 		local self = originalChallengesMenu(menu, controller)
 		local detailPanel = self.ChallengeInfoBig
+		local controllerIndex = controller and controller.controllerIndex or self:getRootController()
+
+		if CONDITIONS.IsThirdGameMode(self) and self.ArrowUp and self.ArrowDown and
+			self.ListCount and self.SetDataSource then
+			local setDataSource = self.SetDataSource
+			local lastPaginationCount = nil
+			local lastPaginationVisible = nil
+
+			local function updatePagination(dataSource, activeControllerIndex, reason)
+				local entries = dataSource and dataSource.entries
+				if entries == nil then
+					return
+				end
+
+				local count = tonumber(entries:GetCountValue(activeControllerIndex)) or 0
+				local visible = count > 12
+				local alpha = visible and 1 or 0
+				self.ArrowUp:SetAlpha(alpha, 0)
+				self.ArrowDown:SetAlpha(alpha, 0)
+				self.ListCount:SetAlpha(alpha, 0)
+
+				if count ~= lastPaginationCount or visible ~= lastPaginationVisible then
+					local categoryRef = "unknown"
+					if dataSource.ref then
+						categoryRef = tostring(dataSource.ref:GetValue(activeControllerIndex))
+					end
+
+					print("[IWZ][ChallengeFixes] challenge pagination category=" ..
+						categoryRef .. " count=" .. tostring(count) ..
+						" visible=" .. tostring(visible) .. " reason=" .. reason)
+					lastPaginationCount = count
+					lastPaginationVisible = visible
+				end
+			end
+
+			self.SetDataSource = function(element, dataSource, requestedControllerIndex)
+				local result = setDataSource(element, dataSource, requestedControllerIndex)
+				updatePagination(dataSource, requestedControllerIndex or controllerIndex,
+					"data-source")
+				return result
+			end
+
+			updatePagination(self:GetDataSource(), controllerIndex, "construction")
+
+			if not loggedPaginationInstall then
+				print("[IWZ][ChallengeFixes] installed reversible challenge pagination visibility")
+				loggedPaginationInstall = true
+			end
+		end
 
 		if CONDITIONS.IsThirdGameMode(self) and detailPanel then
 			local descriptionWidget = detailPanel.ButtonDescriptionText

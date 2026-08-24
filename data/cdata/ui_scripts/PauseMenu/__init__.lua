@@ -12,8 +12,14 @@ if MenuBuilder.m_types["CPPauseMenu"] == nil then
 	require("inGame.cp.CPPauseMenu")
 end
 
+if MenuBuilder.m_types["SmallContractCP"] == nil then
+	require("inGame.cp.SmallContractCP")
+end
+
 local originalCPPauseMenuButtons = MenuBuilder.m_types["CPPauseMenuButtons"]
 local originalCPPauseMenu = MenuBuilder.m_types["CPPauseMenu"]
+local originalSmallContractCP = MenuBuilder.m_types["SmallContractCP"]
+local bountyCompleteLayoutLogged = false
 
 local weaponSplashTable = "cp/zombies/zombie_splashtable.csv"
 local weaponRankTable = "mp/weaponRankTable.csv"
@@ -21,6 +27,76 @@ local weaponUnlockTable = "mp/unlocks/CPWeaponUnlocks.csv"
 
 local function logWeaponWidget(message)
 	print("[IWZ][WeaponLevelWidget] " .. message)
+end
+
+MenuBuilder.m_types["SmallContractCP"] = function(menu, controller)
+	local self = originalSmallContractCP(menu, controller)
+
+	if self.CompleteText then
+		-- The stock completion sequence finishes at x=67..338 inside a 455px
+		-- contract, whose center is x=227.5. Shift the entire 199ms slide 25px
+		-- right so its motion is unchanged and its final x=92..363 bounds are
+		-- centered on the card.
+		self.CompleteText:RegisterAnimationSequence("ContractComplete", {
+			{
+				function()
+					return self.CompleteText:SetRGBFromInt(0, 0)
+				end
+			},
+			{
+				function()
+					return self.CompleteText:SetAlpha(0, 300)
+				end,
+				function()
+					return self.CompleteText:SetAlpha(1, 200, LUI.EASING.outSine)
+				end,
+				function()
+					return self.CompleteText:SetAlpha(1, 450)
+				end
+			},
+			{
+				function()
+					return self.CompleteText:SetAnchorsAndPosition(
+						0, 1, 0, 1,
+						_1080p * 54, _1080p * 310,
+						_1080p * 106, _1080p * 130,
+						0
+					)
+				end,
+				function()
+					return self.CompleteText:SetAnchorsAndPosition(
+						0, 1, 0, 1,
+						_1080p * 54, _1080p * 310,
+						_1080p * 106, _1080p * 130,
+						300
+					)
+				end,
+				function()
+					return self.CompleteText:SetAnchorsAndPosition(
+						0, 1, 0, 1,
+						_1080p * 92, _1080p * 363,
+						_1080p * 106, _1080p * 130,
+						199, LUI.EASING.outSine
+					)
+				end,
+				function()
+					return self.CompleteText:SetAnchorsAndPosition(
+						0, 1, 0, 1,
+						_1080p * 92, _1080p * 363,
+						_1080p * 106, _1080p * 130,
+						449
+					)
+				end
+			}
+		})
+
+		if not bountyCompleteLayoutLogged then
+			bountyCompleteLayoutLogged = true
+			print("[IWZ][PauseMenu] centered bounty completion text stockFinalX=67..338 correctedFinalX=92..363 cardCenter=227.5")
+		end
+	end
+
+	return self
 end
 
 local function getCurrentWeaponRef(controllerIndex)
@@ -471,6 +547,19 @@ local function applyPauseMenuLayout(self)
 
 	if self.WeaponLevelWidget then
 		self.WeaponLevelWidget:SetAnchorsAndPosition(0, 1, 0, 1, _1080p * 1396, _1080p * 1546, _1080p * 8, _1080p * 158)
+	end
+
+	if self.SmallContractsCP and not CONDITIONS.IsSplitscreen() then
+		-- Stock places the two 130px bounty rows at y=699 with a 12px gap,
+		-- putting their 977px bottom edge across the pause background's diagonal
+		-- green line. Preserve the container and grid geometry, shifted up 40px.
+		self.SmallContractsCP:SetAnchorsAndPosition(0, 1, 0, 1,
+			_1080p * 163, _1080p * 624, _1080p * 659, _1080p * 991)
+
+		if not self.iwzBountyLayoutLogged then
+			self.iwzBountyLayoutLogged = true
+			print("[IWZ][PauseMenu] raised bounty container by 40px bounds=163..624,659..991 contentBottom=937")
+		end
 	end
 
 	if self.DoubleXPNotifications then

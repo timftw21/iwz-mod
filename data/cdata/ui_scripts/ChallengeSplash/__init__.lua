@@ -287,11 +287,12 @@ local function installWidgetPatch(spec)
 			},
 			{
 				function()
-					-- Calling-card materials are approximately 2.5:1. Let the stock
-					-- 86px icon container overhang horizontally like weapon icons do.
+					-- Calling-card materials are approximately 2.5:1. The original
+					-- override used a 194x76 image; keep its center at (43,43) while
+					-- reducing both axes to 75% (145.5x57) for Tier 5 popups.
 					return iconImage:SetAnchorsAndPosition(0, 1, 0, 1,
-						_1080p * -54, _1080p * 140,
-						_1080p * 5, _1080p * 81, 0)
+						_1080p * -29.75, _1080p * 115.75,
+						_1080p * 14.5, _1080p * 71.5, 0)
 				end
 			}
 		})
@@ -353,4 +354,4 @@ for _, spec in ipairs(widgetSpecs) do
 end
 
 log("installed calling-card and hold patches widgets=" .. tostring(patchedWidgetCount) ..
-	" map=" .. tostring(Engine.GetDvarString("ui_mapname")))
+	" callingCardScale=75% map=" .. tostring(Engine.GetDvarString("ui_mapname")))

@@ -9,6 +9,7 @@
 #include "console/console.hpp"
 #include "game_console.hpp"
 #include "dvars.hpp"
+#include "scheduler.hpp"
 
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
@@ -407,6 +408,76 @@ namespace command
 			}
 		}
 
+		void cmd_test_alien_kill(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][Spaceland] testAlienKill rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			const auto* mapname = game::Dvar_FindVar("ui_mapname");
+			if (!mapname || !mapname->current.string || _stricmp(mapname->current.string, "cp_zmb") != 0)
+			{
+				console::warn("[IWZ][Spaceland] testAlienKill rejected client=%d reason=not on cp_zmb\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available on Zombies in Spaceland");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_test_alien_kill", {player});
+				console::info("[IWZ][Spaceland] testAlienKill dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][Spaceland] testAlienKill dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to simulate the Alien kill");
+			}
+		}
+
+		void cmd_spawn_alien_fuses(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][Spaceland] spawnAlienFuses rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			const auto* mapname = game::Dvar_FindVar("ui_mapname");
+			if (!mapname || !mapname->current.string || _stricmp(mapname->current.string, "cp_zmb") != 0)
+			{
+				console::warn("[IWZ][Spaceland] spawnAlienFuses rejected client=%d reason=not on cp_zmb\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available on Zombies in Spaceland");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_spawn_alien_fuses", {player});
+				console::info("[IWZ][Spaceland] spawnAlienFuses dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][Spaceland] spawnAlienFuses dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to spawn the Alien fuses");
+			}
+		}
+
 		void cmd_give_petn(const int client_num)
 		{
 			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
@@ -582,8 +653,12 @@ namespace command
 		{
 			game::Dvar_RegisterBool("iwz_gsc_diagnostics", true, game::DVAR_FLAG_SAVED,
 				"Enable diagnostics emitted by custom GSC patches");
-			game::Dvar_RegisterInt("iwz_powerup_drop_base_interval", 1900, 0, 10000, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterInt("iwz_powerup_drop_base_interval", 2250, 0, 10000, game::DVAR_FLAG_SAVED,
 				"Base team-score interval between Zombies powerup drops (0 preserves stock behavior)");
+			game::Dvar_RegisterInt("iwz_powerup_drop_interval_revision", 0, 0, 1, game::DVAR_FLAG_SAVED,
+				"Internal migration revision for the Zombies powerup drop interval");
+			game::Dvar_RegisterBool("iwz_spaceland_double_pap_unlocked", false, game::DVAR_FLAG_SAVED,
+				"Whether inserting Spaceland's Alien fuses has permanently unlocked double Pack-a-Punch");
 			game::Dvar_RegisterInt("iwz_powerup_weight_infinite_grenades", 2, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Infinite Grenades powerup (stock is 5)");
 			game::Dvar_RegisterInt("iwz_powerup_weight_carpenter", 3, 1, 100, game::DVAR_FLAG_SAVED,
@@ -614,6 +689,15 @@ namespace command
 			client_command_sp_hook.create(0x140483130, &client_command_sp);
 
 			parse_commandline_hook.create(0x140C039F0, parse_commandline); // SL_Init
+
+			scheduler::once([]()
+			{
+				game::Dvar_RegisterString("iwz_match_calling_card_rewards", "", game::DVAR_FLAG_NONE,
+					"Match-scoped Zombies calling-card refs and XP carried into the after-action report");
+				game::Dvar_RegisterString("iwz_match_weapon_level_rewards", "", game::DVAR_FLAG_NONE,
+					"Match-scoped Zombies weapon levels carried into the after-action report");
+				console::info("[IWZ][MatchSummaryRewards] registered match calling-card and weapon-level bridge dvars on main scheduler\n");
+			}, scheduler::main);
 
 			add_commands();
 		}
@@ -814,6 +898,26 @@ namespace command
 				}
 
 				cmd_test_barrier_tier(client_num, "testBarrierTier5", "iwz_test_barrier_tier5");
+			});
+
+			add_sv("testAlienKill", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_test_alien_kill(client_num);
+			});
+
+			add_sv("spawnAlienFuses", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_spawn_alien_fuses(client_num);
 			});
 
 			add_sv("scene100", [](const int client_num, const params_sv&)

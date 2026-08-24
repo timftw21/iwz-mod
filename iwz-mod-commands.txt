@@ -1,0 +1,287 @@
+IWZ-MOD CONSOLE COMMANDS
+========================
+
+This file covers commands registered by the iwz-mod executable. It does not
+attempt to list the game's stock commands or dvars. Command names are
+case-insensitive. Arguments in <angle brackets> are required; arguments in
+[square brackets] are optional.
+
+For the exact command set registered in a running Debug build, use commandDump.
+That writes iw7-mod/dump/commandlist.txt and includes stock game commands too.
+
+
+IWZ-MOD ZOMBIES TESTING / GAMEPLAY
+---------------------------------
+
+The commands in this section are server commands and require cheats to be
+enabled. Run them from the active player's console while in a Zombies match.
+
+god
+    Toggle full god mode.
+
+demigod
+    Toggle demigod mode.
+
+notarget
+    Toggle engine-level enemy targeting for the player.
+
+noclip
+    Toggle collision-free movement.
+
+ufo
+    Toggle UFO/free-flight movement.
+
+give <weapon|ammo|allammo|health [amount]|all>
+    Give and switch to a weapon, refill current/all weapon ammo, restore or add
+    health, or give every loaded weapon.
+
+dropweapon
+    Drop the current weapon.
+
+take <weapon|all>
+    Remove one weapon or all weapons.
+
+spawnClown
+    Spawn the collision-test clown used by iwz-mod's zombie collision checks.
+
+paproom
+    Teleport the player to the current map's configured Pack-a-Punch room.
+
+givePetn
+    Give the player the Attack of the Radioactive Thing chemical-step item.
+    Available only on cp_town.
+
+winGNS
+    Complete the active Ghosts N Skulls arcade session.
+
+testBarrierTier1
+    Stage Open Sesame (mt_purchase_doors) one barrier short of Tier 1 so the
+    next barrier purchase tests the Tier 1 reward and popup.
+
+testBarrierTier5
+    Stage Open Sesame one barrier short of Tier 5 so the next barrier purchase
+    tests the Tier 5 reward and popup.
+
+testAlienKill
+    Simulate the rank-XP portion of killing a Spaceland Alien (zombie_grey),
+    using the same runtime agent-definition XP value as a real kill. Available
+    only on cp_zmb; currently expected to award 5000 XP.
+
+spawnAlienFuses
+    Spawn Spaceland's real Alien-fuse pickup pair at its stock drop point. Pick
+    it up and insert it into Pack-a-Punch to test the permanent double-PaP
+    unlock. Available only on cp_zmb. To repeat the first-unlock test, set
+    iwz_spaceland_double_pap_unlocked to 0 before starting the next match.
+
+scene100
+    Force the standard zombie scene controller to scene 100.
+
+endScene
+    End the forced standard-zombie scene and restore stock scene selection.
+
+
+CUSTOM MUSIC AND SUBTITLES
+--------------------------
+
+custommusiclist
+    Rescan iw7-mod/custom_music and print every track with its zero-based index.
+
+custommusicplay <index>
+    Rescan the custom-music directory and play the indexed track.
+
+custommusicstop
+    Stop the active custom-music track.
+
+iwz_reload_subtitles
+    Reload subtitle JSON definitions and repatch loaded sound banks.
+
+iwz_dump_sound_aliases [filter]
+    Write loaded sound aliases to iw7-mod/subtitles/sound_aliases.csv. The
+    optional filter matches sound-bank, alias, or audio-asset names.
+
+iwz_export_sound_alias <exact alias>
+    Export every loaded audio variant for an exact alias as FLAC files under
+    iw7-mod/subtitles/audio.
+
+
+MAPS, CONNECTIONS, BOTS, AND HOST ADMINISTRATION
+------------------------------------------------
+
+map <map name>
+    Start a map normally (or forward to spmap in Campaign).
+
+devmap <map name>
+    Start a map with cheats enabled. Client/listen-server builds only.
+
+map_restart
+    Perform a full restart of the loaded map.
+
+fast_restart
+    Restart the loaded map without a full map reload.
+
+reconnect
+    Reconnect to the most recently defined server.
+
+connect <address>
+    Connect to an address while not already in a match.
+
+spawnBot [count]
+    Add one bot by default, or the requested number up to available slots.
+
+kickClient <client number> [reason]
+    Kick a client by numeric slot with an optional reason.
+
+kick <player name|all> [reason]
+    Kick one named client or every client with an optional reason.
+
+status
+    Print the running server's status and connected clients.
+
+tell <client number> <message>
+    Send a named console message to one client.
+
+tellraw <client number> <message>
+    Send an unprefixed console message to one client.
+
+say <message>
+    Broadcast a named console message.
+
+sayraw <message>
+    Broadcast an unprefixed console message.
+
+rcon login <password>
+    Cache the password used by subsequent client rcon commands.
+
+rcon logout
+    Clear the cached rcon password.
+
+rcon <command and arguments>
+    Send a command to the connected remote server. Client builds only.
+
+
+MODE, APPLICATION, AND CONSOLE
+------------------------------
+
+noMode
+    Select no game mode.
+
+spMode
+    Select Campaign mode.
+
+mpMode
+    Select Multiplayer mode.
+
+cpMode
+    Select Zombies mode.
+
+bindlist
+    Print the current key bindings.
+
+guid
+    Print the local Steam GUID.
+
+clear
+    Clear the iwz-mod console output and command history.
+
+quit
+    Request a clean application shutdown.
+
+crash
+    Intentionally crash the process for crash-handler testing. WARNING: any
+    unsaved state is lost.
+
+
+UI / LUI DEVELOPMENT
+--------------------
+
+luiOpenMenu <menu name>
+    Open a normal LUI menu for controller 0.
+
+luiOpenPopup <menu name>
+    Open a popup LUI menu for controller 0.
+
+luiOpenModalPopup <menu name>
+    Open a modal popup LUI menu for controller 0.
+
+luiLeaveMenu <menu name>
+    Close the named LUI menu.
+
+luiCloseAll
+    Close all LUI menus.
+
+luiReload
+    Shut down and reinitialize LUI.
+
+runMenuScript <script and arguments>
+    Pass a menu-script command line to UI_RunMenuScript.
+
+
+ASSETS AND FASTFILES
+--------------------
+
+loadzone <zone>
+    Asynchronously load an existing unsigned/custom fastfile zone as permanent.
+
+listassetpool <pool number> [filter]
+    Print loaded asset names in one asset pool. With no pool number, print the
+    valid pool numbers and names.
+
+
+PLAYER PROGRESSION (CLIENT BUILDS)
+----------------------------------
+
+WARNING: these commands write persistent player progression and upload it.
+
+unlockstats
+unlockall
+    Aliases that unlock normal Multiplayer and Zombies progression, items, and
+    challenges.
+
+unlockstatsEE
+unlockallEE
+    Aliases that unlock Zombies Easter-egg/soul-key progression.
+
+
+DEDICATED-SERVER ONLY
+---------------------
+
+heartbeat
+    Immediately send the server heartbeat.
+
+map_rotate
+    Advance the configured sv_mapRotation sequence.
+
+killserver
+    Shut down the dedicated server.
+
+
+DEBUG-BUILD ONLY
+----------------
+
+These are compiled out of the deployed Release executable.
+
+gscDump
+    Dump loaded GSC script assets under iw7-mod/dump/gsc.
+
+luaDump
+    Dump loaded Lua assets under iw7-mod/dump/lua.
+
+stringTableDump
+    Dump loaded string-table assets.
+
+commandDump
+    Dump every currently registered mod and stock command to
+    iw7-mod/dump/commandlist.txt.
+
+entityDump
+    Dump loaded map-entity assets under iw7-mod/dump/mapents.
+
+generateSoundLookupData
+    Generate sound-alias length data for the loaded map. Non-dedicated Debug
+    builds only.
+
+setWeaponFieldFloat <weapon> <byte offset> <value>
+setWeaponFieldInt <weapon> <byte offset> <value>
+setWeaponFieldBool <weapon> <byte offset> <0|1>
+    Modify a loaded WeaponDef field at the supplied byte offset. Unsafe
+    development commands; invalid offsets or types can corrupt memory.

@@ -4,12 +4,17 @@ main()
     // flag. Door/barrier rewards pass 1 here, which drives zom_xp_reward and
     // zom_xp_notify and produces the native on-screen XP popup.
     replacefunc(scripts\cp\cp_merits::giverankxpafterwait, ::give_rank_xp_after_wait_stub);
-    challenge_log("installed tier award hook popup=stock_zom_xp");
+    // cp_weaponrank is also the only stock path that has the old and new
+    // weapon ranks together, so record AAR weapon levels without polling.
+    replacefunc(scripts\cp\cp_weaponrank::give_player_weapon_xp,
+        ::give_player_weapon_xp_with_match_summary);
+    challenge_log("installed tier award and weapon-level AAR hooks popup=stock_zom_xp");
 }
 
 post_load()
 {
     level thread tune_challenge_rewards();
+    level thread reset_match_calling_card_rewards_on_connect();
     level thread listen_for_barrier_tier_one_test_requests();
     level thread listen_for_barrier_tier_five_test_requests();
 }
@@ -19,6 +24,170 @@ challenge_log(message)
     custom_scripts\cp\gsc_diagnostics::emit("Challenges", message);
 }
 
+reset_match_calling_card_rewards_on_connect()
+{
+    level endon("game_ended");
+
+    // post_load can run on either side of the first connected notification.
+    // Reset players already present, then cover later joins as stock CP does.
+    if (isdefined(level.players))
+    {
+        foreach (player in level.players)
+            player reset_match_calling_card_rewards();
+    }
+
+    for (;;)
+    {
+        level waittill("connected", player);
+        player reset_match_calling_card_rewards();
+    }
+}
+
+reset_match_calling_card_rewards()
+{
+    if (!isdefined(self) || !isplayer(self))
+        return;
+
+    self.iwz_match_calling_card_refs = [];
+    self.iwz_match_calling_card_xp = [];
+    self.iwz_match_weapon_level_refs = [];
+    self.iwz_match_weapon_level_values = [];
+    self setclientdvar("iwz_match_calling_card_rewards", "");
+    self setclientdvar("iwz_match_weapon_level_rewards", "");
+    challenge_log("match summary calling-card and weapon-level queues reset player=" +
+        self getentitynumber());
+}
+
+queue_match_calling_card_reward(merit_ref, xp_amount)
+{
+    if (!isdefined(self.iwz_match_calling_card_refs) ||
+        !isdefined(self.iwz_match_calling_card_xp))
+    {
+        self.iwz_match_calling_card_refs = [];
+        self.iwz_match_calling_card_xp = [];
+    }
+
+    for (index = 0; index < self.iwz_match_calling_card_refs.size; index++)
+    {
+        if (self.iwz_match_calling_card_refs[index] == merit_ref)
+        {
+            challenge_log("match summary calling-card duplicate ignored player=" +
+                self getentitynumber() + " merit=" + merit_ref +
+                " xp=" + self.iwz_match_calling_card_xp[index]);
+            return;
+        }
+    }
+
+    queue_index = self.iwz_match_calling_card_refs.size;
+    self.iwz_match_calling_card_refs[queue_index] = merit_ref;
+    self.iwz_match_calling_card_xp[queue_index] = xp_amount;
+    serialized_rewards = "";
+    for (index = 0; index < self.iwz_match_calling_card_refs.size; index++)
+    {
+        if (serialized_rewards != "")
+            serialized_rewards += ",";
+
+        serialized_rewards += self.iwz_match_calling_card_refs[index] + ":" +
+            self.iwz_match_calling_card_xp[index];
+    }
+
+    self setclientdvar("iwz_match_calling_card_rewards", serialized_rewards);
+    challenge_log("match summary calling-card queued player=" + self getentitynumber() +
+        " merit=" + merit_ref + " queueSize=" + self.iwz_match_calling_card_refs.size +
+        " xp=" + xp_amount + " rewards=" + serialized_rewards);
+}
+
+queue_match_weapon_level_reward(weapon_ref, weapon_level)
+{
+    if (!isdefined(self.iwz_match_weapon_level_refs))
+    {
+        self.iwz_match_weapon_level_refs = [];
+        self.iwz_match_weapon_level_values = [];
+    }
+
+    queue_index = -1;
+    for (index = 0; index < self.iwz_match_weapon_level_refs.size; index++)
+    {
+        if (self.iwz_match_weapon_level_refs[index] == weapon_ref)
+        {
+            queue_index = index;
+            break;
+        }
+    }
+
+    if (queue_index >= 0)
+    {
+        previous_level = int(self.iwz_match_weapon_level_values[queue_index]);
+        if (weapon_level <= previous_level)
+        {
+            challenge_log("match summary weapon-level duplicate ignored player=" +
+                self getentitynumber() + " weapon=" + weapon_ref +
+                " queuedLevel=" + previous_level + " requestedLevel=" + weapon_level);
+            return;
+        }
+
+        self.iwz_match_weapon_level_values[queue_index] = weapon_level;
+    }
+    else
+    {
+        queue_index = self.iwz_match_weapon_level_refs.size;
+        self.iwz_match_weapon_level_refs[queue_index] = weapon_ref;
+        self.iwz_match_weapon_level_values[queue_index] = weapon_level;
+    }
+
+    serialized_rewards = "";
+    for (index = 0; index < self.iwz_match_weapon_level_refs.size; index++)
+    {
+        if (serialized_rewards != "")
+            serialized_rewards += ",";
+
+        serialized_rewards += self.iwz_match_weapon_level_refs[index] + ":" +
+            self.iwz_match_weapon_level_values[index];
+    }
+
+    self setclientdvar("iwz_match_weapon_level_rewards", serialized_rewards);
+    challenge_log("match summary weapon-level queued player=" + self getentitynumber() +
+        " weapon=" + weapon_ref + " level=" + weapon_level +
+        " queueSize=" + self.iwz_match_weapon_level_refs.size +
+        " rewards=" + serialized_rewards);
+}
+
+give_player_weapon_xp_with_match_summary(player, root_weapon, amount)
+{
+    // Preserve cp_weaponrank::give_player_weapon_xp's shared MP+CP XP cap and
+    // native splash, adding only the match-scoped record after a real increase.
+    cp_xp = scripts\cp\cp_weaponrank::get_player_weapon_rank_cp_xp(player, root_weapon);
+    mp_xp = scripts\cp\cp_weaponrank::get_player_weapon_rank_mp_xp(player, root_weapon);
+    total_xp = cp_xp + mp_xp;
+    old_rank = scripts\cp\cp_weaponrank::get_weapon_rank_for_xp(total_xp);
+    max_rank = scripts\cp\cp_weaponrank::get_max_weapon_rank_for_root_weapon(root_weapon);
+    max_xp = scripts\cp\cp_weaponrank::get_weapon_max_rank_xp(root_weapon);
+    max_cp_xp = max_xp - mp_xp;
+    new_cp_xp = cp_xp + amount;
+    if (new_cp_xp > max_cp_xp)
+        new_cp_xp = max_cp_xp;
+
+    new_total_xp = new_cp_xp + mp_xp;
+    prestige = player getrankedplayerdata("common", "sharedProgression", "weaponLevel",
+        root_weapon, "prestige");
+    new_rank = int(min(scripts\cp\cp_weaponrank::get_weapon_rank_for_xp(new_total_xp),
+        max_rank));
+    player setplayerdata("common", "sharedProgression", "weaponLevel",
+        root_weapon, "cpXP", new_cp_xp);
+
+    if (old_rank < new_rank)
+    {
+        new_level = new_rank + 1;
+        player scripts\cp\cp_hud_message::showsplash("ranked_up_weapon_" + root_weapon,
+            new_level);
+        player queue_match_weapon_level_reward(root_weapon, new_level);
+        challenge_log("weapon level increased player=" + player getentitynumber() +
+            " weapon=" + root_weapon + " rank=" + old_rank + "->" + new_rank +
+            " level=" + new_level + " xp=" + total_xp + "->" + new_total_xp +
+            " award=" + amount + " prestige=" + prestige);
+    }
+}
+
 is_master_challenge(merit_ref)
 {
     // The calling-card table is the same source used by LUI to classify a
@@ -26,15 +195,48 @@ is_master_challenge(merit_ref)
     return tablelookup("mp/callingCards.csv", 4, merit_ref, 5) == "TRUE";
 }
 
+get_named_challenge_reward(merit_ref)
+{
+    // Refs and stock rewards come from cp/allMeritsTable.csv in both GSC
+    // dumps. Their completion sites are in the corresponding DLC quest
+    // scripts (cp_disco_song_quest, cp_town_mpq, and cp_zmb_ufo).
+    switch (merit_ref)
+    {
+    case "mt_dlc3_troll":
+    case "mt_dlc3_troll2":
+        return 2500;
+
+    case "mt_dlc2_troll":
+        return 5000;
+
+    case "mt_dlc4_troll":
+        return 10000;
+
+    case "mt_dlc4_troll2":
+        return 50000;
+    }
+
+    return undefined;
+}
+
 get_challenge_final_requirements()
 {
     requirements = [];
+    requirements["mt_purchased_weapon"] = 100;
+    requirements["mt_revives"] = 25;
+    requirements["mt_purchase_perks"] = 100;
+    requirements["mt_faf_uses"] = 100;
     requirements["mt_dlc1_all_ziplines"] = 25;
     requirements["mt_dlc1_sasquatch_kills"] = 100;
     requirements["mt_dlc1_charms_added"] = 15;
     requirements["mt_dlc1_challenge_badge"] = 25;
     requirements["mt_dlc2_roller_skaters"] = 100;
     requirements["mt_dlc2_chi_master"] = 15;
+    requirements["mt_dlc2_trap_kills"] = 200;
+    requirements["mt_dlc3_cleaver_kills"] = 200;
+    requirements["mt_dlc3_crowbar_kills"] = 200;
+    requirements["mt_dlc3_crab_mini"] = 100;
+    requirements["mt_dlc3_elvira_summon"] = 10;
     requirements["mt_dlc4_entangler_kills"] = 100;
     requirements["mt_dlc4_special_wave_kills"] = 100;
     return requirements;
@@ -54,6 +256,7 @@ tune_challenge_rewards()
     unexpected_career_count = 0;
     master_count = 0;
     unexpected_master_count = 0;
+    named_reward_count = 0;
 
     challenge_requirements = get_challenge_final_requirements();
     requirement_count = 0;
@@ -88,6 +291,21 @@ tune_challenge_rewards()
     {
         if (!isdefined(merit["reward"]))
             continue;
+
+        named_reward = get_named_challenge_reward(merit_ref);
+        if (isdefined(named_reward))
+        {
+            foreach (tier_index, reward in merit["reward"])
+            {
+                level.meritinfo[merit_ref]["reward"][tier_index] = named_reward;
+                named_reward_count++;
+                challenge_log("Named challenge reward tuned merit=" + merit_ref +
+                    " tier=" + (tier_index + 1) + " stockXP=" + int(reward) +
+                    " xp=" + named_reward);
+            }
+
+            continue;
+        }
 
         if (is_master_challenge(merit_ref))
         {
@@ -134,6 +352,7 @@ tune_challenge_rewards()
         " unexpectedCareerValues=" + unexpected_career_count +
         " masterRewards=" + master_count + " masterXP=10000" +
         " unexpectedMasterValues=" + unexpected_master_count +
+        " namedRewards=" + named_reward_count +
         " requirements=" + requirement_count +
         " tiersPerRequirement=5" +
         " missingRequirements=" + missing_requirement_count);
@@ -156,7 +375,10 @@ give_rank_xp_after_wait_stub(merit_ref, tier_index)
     }
 
     reward = int(level.meritinfo[merit_ref]["reward"][tier_index]);
-    if (is_master_challenge(merit_ref))
+    named_reward = get_named_challenge_reward(merit_ref);
+    if (isdefined(named_reward))
+        reward = named_reward;
+    else if (is_master_challenge(merit_ref))
         reward = 10000;
     else if (tablelookup("cp/allMeritsTable.csv", 0, merit_ref, 6) == "zmcareer")
         reward = 5000;
@@ -168,12 +390,19 @@ give_rank_xp_after_wait_stub(merit_ref, tier_index)
     if (highest_tier)
         calling_card = tablelookup("cp/allMeritsTable.csv", 0, merit_ref, 3);
 
-    challenge_log("awarding player=" + self getentitynumber() +
+    previous_xp = self scripts\cp\cp_persistence::get_player_xp();
+    scripts\cp\cp_persistence::give_player_xp(reward, 1);
+    current_xp = self scripts\cp\cp_persistence::get_player_xp();
+    earned_xp = int(current_xp - previous_xp);
+
+    if (highest_tier && calling_card != "")
+        self queue_match_calling_card_reward(merit_ref, earned_xp);
+
+    challenge_log("awarded player=" + self getentitynumber() +
         " merit=" + merit_ref + " tier=" + (tier_index + 1) +
         " highest=" + highest_tier + " callingCard=" + calling_card +
-        " baseXP=" + reward + " popup=stock_zom_xp");
-
-    scripts\cp\cp_persistence::give_player_xp(reward, 1);
+        " baseXP=" + reward + " earnedXP=" + earned_xp +
+        " popup=stock_zom_xp");
 }
 
 listen_for_barrier_tier_one_test_requests()

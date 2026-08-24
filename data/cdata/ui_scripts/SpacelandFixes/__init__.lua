@@ -16,13 +16,20 @@ if MenuBuilder.m_types["questFullScreenSplash"] == nil then
 	require("inGame.cp.questFullScreenSplash")
 end
 
+if MenuBuilder.m_types["arcadeHelper"] == nil then
+	require("inGame.cp.arcadeHelper")
+end
+
 local originalInventory = MenuBuilder.m_types["Inventory"]
 local originalQuestFullScreenSplash = MenuBuilder.m_types["questFullScreenSplash"]
+local originalArcadeHelper = MenuBuilder.m_types["arcadeHelper"]
 
 local loggedInventoryFix = false
 local loggedDoubleXPIconsRemoved = false
 local loggedSetiComPartsPopupBacking = false
 local loggedInventoryNagLayout = false
+local loggedArcadeHelperLayout = false
+local loggedArcadeHelperMissing = false
 
 if originalQuestFullScreenSplash ~= nil then
 	MenuBuilder.m_types["questFullScreenSplash"] = function(menu, controller)
@@ -206,6 +213,41 @@ if originalInventory ~= nil then
 	end
 else
 	print("[IWZ][SpacelandFixes] Inventory unavailable; inventory fixes not installed")
+end
+
+if type(originalArcadeHelper) == "function" then
+	MenuBuilder.m_types["arcadeHelper"] = function(menu, controller)
+		-- The recovered stock constructor already owns the animation sequences,
+		-- data-source subscription, and localization refresh. Preserve all of it
+		-- and only enlarge the one-line 884..902 box that receives a three-line
+		-- localized cycle-mode string.
+		local self = originalArcadeHelper(menu, controller)
+		local hintModes = self and self.hintModes
+
+		if hintModes then
+			-- UIText scales glyphs to its vertical control height. Keep the control
+			-- at 16 pixels and move it upward; a 48-pixel control makes every line
+			-- 48 pixels tall instead of reserving room for three 16-pixel lines.
+			hintModes:SetFontSize(_1080p * 16)
+			hintModes:SetAnchorsAndPosition(0, 1, 0, 1,
+				_1080p * 1325.2, _1080p * 1474.7, _1080p * 864, _1080p * 880)
+
+			if not loggedArcadeHelperLayout then
+				print("[IWZ][SpacelandFixes] patched stock Activision HUD cycle hint font=16 controlHeight=16 bounds=1325.2..1474.7,864..880")
+				loggedArcadeHelperLayout = true
+			end
+		elseif not loggedArcadeHelperMissing then
+			print("[IWZ][SpacelandFixes] stock arcadeHelper missing hintModes; cycle hint layout unchanged")
+			loggedArcadeHelperMissing = true
+		end
+
+		return self
+	end
+
+	print("[IWZ][SpacelandFixes] stock arcadeHelper geometry wrapper registered")
+else
+	print("[IWZ][SpacelandFixes] stock arcadeHelper unavailable type=" .. type(originalArcadeHelper) ..
+		"; cycle hint layout unchanged")
 end
 
 print("[IWZ][SpacelandFixes] Spaceland UI fixes registered")
