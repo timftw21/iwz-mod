@@ -576,6 +576,23 @@ namespace gsc
 				return scripting::script_value{};
 			});
 
+			method::add("iwzgetcollisionhalfsize", [](const game::scr_entref_t ent, const function_args&)
+			{
+				if (ent.classnum != 0)
+				{
+					throw std::runtime_error("Invalid entity");
+				}
+
+				const auto& entity = game::g_entities[ent.entnum];
+				if (!entity.active)
+				{
+					throw std::runtime_error("Entity is not active");
+				}
+
+				return scripting::vector{entity.box.halfSize[0], entity.box.halfSize[1],
+					entity.box.halfSize[2]};
+			});
+
 			method::add("sethintstring", [](const game::scr_entref_t ent, const function_args& args)
 			{
 				colorize_hint_string_argument(args);

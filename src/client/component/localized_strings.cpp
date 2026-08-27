@@ -310,6 +310,15 @@ namespace localized_strings
 			override("IWZ_GNS_ARCADE_START_ATTACK", "Hold [{+usereload,+activate}] to start SKULLHOP");
 			override("IWZ_GNS_ARCADE_START_BEAST", "Hold [{+usereload,+activate}] to start SKULLBREAKER");
 			override("IWZ_GNS_ARCADE_START_GENERIC", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS ARCADE");
+			// zombie_doors uses the default key on Spaceland and each sequel map
+			// assigns one of the three map-specific keys to level.enter_area_hint.
+			// The interaction engine supplies Hold/bind/cost around this value.
+			override("CP_ZMB_INTERACTIONS_ENTER_THIS_AREA", "enter this area");
+			override("CP_RAVE_ENTER_THIS_AREA", "enter this area");
+			override("CP_DISCO_INTERACTIONS_ENTER_THIS_AREA", "enter this area");
+			override("CP_TOWN_INTERACTIONS_ENTER_THIS_AREA", "enter this area");
+			override("COOP_PILLAGE_FOUND_BIO_SPIKE", "Found Bio Spikes");
+			override("COOP_PILLAGE_FOUND_GAS_GRENADE", "Found Gas Grenades");
 			fastfiles::on_localize_loaded([](database::LocalizeEntry* asset)
 			{
 				apply_registered_override(asset, "asset-load");
@@ -318,6 +327,8 @@ namespace localized_strings
 			console::info("[IWZ][Localization] registered red interaction warnings moneyKey=COOP_INTERACTIONS_NEED_MONEY ticketKey=CP_ZMB_INTERACTIONS_NEED_TICKETS\n");
 			console::info("[IWZ][GhostsNSkullsHUD] registered shared text overrides tracking='Tracking...' objectivePunctuation=exclamation escapedPunctuationVerified=3\n");
 			console::info("[IWZ][GhostsNSkullsArcade] registered per-game activation hints count=5\n");
+			console::info("[IWZ][Localization] registered lowercase door-action overrides count=4\n");
+			console::info("[IWZ][Localization] registered plural pillage-item overrides bioSpikes=1 gasGrenades=1\n");
 
 			seh_string_ed_get_string_hook.create(0x140CBBB10, &seh_string_ed_get_string);
 		}

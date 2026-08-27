@@ -1,8 +1,7 @@
 post_load()
 {
     level thread install_zombie_sprint_speed_tuning();
-    level thread listen_for_scene_100_requests();
-    level thread listen_for_end_scene_requests();
+    level thread listen_for_scene_requests();
     scene_log("runtime installed map=" + getdvar("ui_mapname"));
 }
 
@@ -139,84 +138,81 @@ control_standard_zombie_sprint_burst()
     }
 }
 
-listen_for_scene_100_requests()
+listen_for_scene_requests()
 {
     level endon("game_ended");
 
     for (;;)
     {
-        level waittill("iwz_scene_100", player);
-        advance_to_scene_100(player);
+        level waittill("iwz_set_scene", player, target_scene);
+        advance_to_scene(player, target_scene);
     }
 }
 
-listen_for_end_scene_requests()
-{
-    level endon("game_ended");
-
-    for (;;)
-    {
-        level waittill("iwz_end_scene", player);
-        end_current_scene(player, "endScene");
-    }
-}
-
-advance_to_scene_100(player)
+advance_to_scene(player, target_scene)
 {
     if (!isdefined(level.wave_num))
     {
-        scene_log("scene100 rejected reason=wave manager unavailable");
+        scene_log("scene rejected target=" + target_scene + " reason=wave manager unavailable");
         print_scene_error(player, "Scene manager is not ready");
         return;
     }
 
-    if (level.wave_num >= 100)
+    if (!isdefined(target_scene) || int(target_scene) < 1)
     {
-        scene_log("scene100 ignored current=" + level.wave_num + " reason=already at target");
-        print_scene_error(player, "Already at Scene 100 or later");
+        scene_log("scene rejected target=" + target_scene + " reason=invalid target");
+        print_scene_error(player, "Scene must be a positive whole number");
+        return;
+    }
+
+    target_scene = int(target_scene);
+    if (level.wave_num >= target_scene)
+    {
+        scene_log("scene ignored current=" + level.wave_num + " target=" + target_scene + " reason=target is not ahead");
+        print_scene_error(player, "Target must be above Scene " + level.wave_num);
         return;
     }
 
     old_scene = level.wave_num;
-    level.wave_num = 99;
+    predecessor_scene = target_scene - 1;
+    level.wave_num = predecessor_scene;
 
     // A large jump would otherwise guarantee an event scene because the stock
-    // selector compares wave_num against last_event_wave. Stage a normal Scene
-    // 100 so its standard zombie health, count, and movement can be tested.
+    // selector compares wave_num against last_event_wave. Stage the requested
+    // target as a normal scene so map behavior can be tested deterministically.
     if (isdefined(level.last_event_wave))
-        level.last_event_wave = 99;
+        level.last_event_wave = predecessor_scene;
 
     // Event cleanup writes its original scene back to last_event_wave after the
     // force notification. Keep the staged value stable through that cleanup.
-    level thread hold_scene_100_event_window();
+    level thread hold_scene_event_window(target_scene, predecessor_scene);
 
-    scene_log("scene100 staged current=" + old_scene + " predecessor=99");
-    end_current_scene(player, "scene100");
+    scene_log("scene staged current=" + old_scene + " target=" + target_scene + " predecessor=" + predecessor_scene);
+    complete_scene_for_skip(player, old_scene, target_scene);
 }
 
-hold_scene_100_event_window()
+hold_scene_event_window(target_scene, predecessor_scene)
 {
     level endon("game_ended");
 
-    while (isdefined(level.wave_num) && level.wave_num < 100)
+    while (isdefined(level.wave_num) && level.wave_num < target_scene)
     {
         if (isdefined(level.last_event_wave))
-            level.last_event_wave = 99;
+            level.last_event_wave = predecessor_scene;
 
         scripts\engine\utility::waitframe();
     }
 }
 
-end_current_scene(player, command_name)
+complete_scene_for_skip(player, original_scene, target_scene)
 {
     if (!isdefined(level.wave_num))
     {
-        scene_log(command_name + " rejected reason=wave state unavailable");
+        scene_log("scene rejected target=" + target_scene + " reason=wave state unavailable during completion");
         print_scene_error(player, "Scene manager is not ready");
         return;
     }
 
-    scene = level.wave_num;
     desired_deaths = -1;
     current_deaths = -1;
     if (isdefined(level.desired_enemy_deaths_this_wave))
@@ -255,14 +251,11 @@ end_current_scene(player, command_name)
     // The owning wave loop then performs its normal intermission and increments.
     level notify("force_spawn_wave_done");
 
-    scene_log(command_name + " completed scene=" + scene + " deaths=" + current_deaths + "/" + desired_deaths + " killed=" + killed_count + " protected=" + protected_count);
+    scene_log("scene completion forced original=" + original_scene + " target=" + target_scene +
+        " staged=" + level.wave_num + " deaths=" + current_deaths + "/" + desired_deaths +
+        " killed=" + killed_count + " protected=" + protected_count);
     if (isdefined(player) && isplayer(player))
-    {
-        if (command_name == "scene100")
-            player iprintlnbold("Advancing to Scene 100");
-        else
-            player iprintlnbold("Scene " + scene + " ended");
-    }
+        player iprintlnbold("Advancing to Scene " + target_scene);
 }
 
 print_scene_error(player, message)

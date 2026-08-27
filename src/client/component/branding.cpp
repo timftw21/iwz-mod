@@ -11,7 +11,7 @@ namespace branding
 {
 	namespace
 	{
-		constexpr auto display_version = "IWZ-MOD 0.3";
+		constexpr auto display_version = "IWZ-MOD 0.4";
 		utils::hook::detour ui_get_formatted_build_number_hook;
 		const char* ui_get_formatted_build_number_stub()
 		{

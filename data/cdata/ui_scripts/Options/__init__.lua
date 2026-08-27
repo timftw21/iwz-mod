@@ -267,19 +267,6 @@ local function buildMuteOnFocusLostButton(controllerIndex)
 	)
 end
 
-local function buildSubtitlesButton(controllerIndex)
-	local button = MenuBuilder.BuildRegisteredType("GenericArrowButton", {
-		controllerIndex = controllerIndex
-	})
-	button.id = "Subtitles"
-	button:SetAnchorsAndPosition(0, 0, 0, 1, 0, 0, 0, _1080p * 50)
-	button.buttonDescription = Engine.Localize("PLATFORM_OPTIONS_SUBTITLES_DESC")
-	button.Title:setText(ToUpperCase(Engine.Localize("MENU_SUBTITLES_CAPS")), 0)
-	OPTIONS.CreateSubtitleLogic(button, controllerIndex)
-
-	return button
-end
-
 local function splitNameColor(name)
 	local colorIndex = 1
 	local nameStart = 1
@@ -439,11 +426,6 @@ local function customizeOptions(options, controllerIndex)
 		table.insert(options, 1, volume)
 	end
 
-	if volumeIndex and Engine.IsAliensMode() and not findOption(options, "Subtitles") then
-		local mixPresetIndex = findOption(options, "MixPreset") or #options + 1
-		table.insert(options, mixPresetIndex, buildSubtitlesButton(controllerIndex))
-	end
-
 	if volumeIndex and not findOption(options, "MuteOnFocusLost") then
 		local mixPresetIndex = findOption(options, "MixPreset") or #options + 1
 		table.insert(options, mixPresetIndex, buildMuteOnFocusLostButton(controllerIndex))
@@ -473,10 +455,6 @@ local function customizeOptions(options, controllerIndex)
 	return options
 end
 
-if not LUI.SubtitlesLayer then
-	require("inGame.sp.SubtitlesLayer")
-end
-
 local DoubleXPNotifications = MenuBuilder.m_types["DoubleXPNotifications"]
 
 if DoubleXPNotifications and not LUI.iwzDoubleXPNotificationsPatched then
@@ -503,52 +481,6 @@ if DoubleXPNotifications and not LUI.iwzDoubleXPNotificationsPatched then
 
 	print("[IWZ][DoubleXP] notification refresh hook installed")
 end
-
-local function attachSubtitlesLayer(root, source)
-	if not root or not Engine.IsAliensMode() or Engine.InFrontend() or root.subtitlesLayer then
-		return false
-	end
-
-	root.subtitlesLayer = root:AddLayer(LUI.SubtitlesLayer.new(root._controllerIndex), {
-		exclusive = false
-	})
-	print("[IWZ][Subtitles] attached native layer source=" .. tostring(source) ..
-		" controller=" .. tostring(root._controllerIndex) .. " root=" .. tostring(root.id))
-	return true
-end
-
-local LUIRootInit = LUI.UIRoot.init
-
-if LUIRootInit then
-	LUI.UIRoot.init = function(root, ...)
-		local result = LUIRootInit(root, ...)
-		attachSubtitlesLayer(root, "init")
-		return result
-	end
-end
-
-local LUIRootSetupRoot = LUI.UIRoot.setupRoot
-
-if LUIRootSetupRoot then
-	LUI.UIRoot.setupRoot = function(root, ...)
-		local result = LUIRootSetupRoot(root, ...)
-		attachSubtitlesLayer(root, "setupRoot")
-		return result
-	end
-end
-
-local existingSubtitleRootsAttached = 0
-
-if LUI.roots then
-	for _, root in pairs(LUI.roots) do
-		if attachSubtitlesLayer(root, "existingRoot") then
-			existingSubtitleRootsAttached = existingSubtitleRootsAttached + 1
-		end
-	end
-end
-
-print("[IWZ][Subtitles] native layer hook installed existingRootsAttached=" ..
-	tostring(existingSubtitleRootsAttached))
 
 local function suppressFocusPause(event)
 	if not event or event.name ~= "pause" or not Engine.IsAliensMode() or game:isclientfocused() then

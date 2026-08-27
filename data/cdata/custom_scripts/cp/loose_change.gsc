@@ -30,7 +30,7 @@ initialize_loose_change()
         loose_change_log("registered machine id=" + interaction.iwz_loose_change_id + " type=" + interaction.script_noteworthy + " origin=" + interaction.origin);
     }
 
-    loose_change_log("initialized map=" + getdvar("ui_mapname") + " machines=" + level.iwz_loose_change_machines.size + " reward=100 range=72 sound=purchase_generic");
+    loose_change_log("initialized map=" + getdvar("ui_mapname") + " machines=" + level.iwz_loose_change_machines.size + " baseReward=100 doubleMoneySource=level.cash_scalar range=72 sound=purchase_generic");
 
     level thread monitor_loose_change_players();
 
@@ -81,8 +81,16 @@ monitor_loose_change()
                     continue;
 
                 self.iwz_loose_change_claimed[machine_id] = true;
+                cash_scalar = 1;
+                if (isdefined(level.cash_scalar))
+                    cash_scalar = level.cash_scalar;
+
+                // Stock cp_reward applies Double Money's level.cash_scalar
+                // before calling give_player_currency. Loose change owns its
+                // own award, so it must cross the same scoring boundary.
+                reward = int(100 * cash_scalar);
                 currency_before = self scripts\cp\cp_persistence::get_player_currency();
-                self scripts\cp\cp_persistence::give_player_currency(100, undefined, undefined, 1, "loose_change");
+                self scripts\cp\cp_persistence::give_player_currency(reward, undefined, undefined, 1, "loose_change");
                 currency_after = self scripts\cp\cp_persistence::get_player_currency();
 
                 if (soundexists("purchase_generic"))
@@ -90,7 +98,7 @@ monitor_loose_change()
                 else
                     loose_change_log("purchase sound missing alias=purchase_generic");
 
-                loose_change_log("awarded player=" + self getentitynumber() + " machine=" + machine.script_noteworthy + " id=" + machine_id + " distance=" + int(sqrt(distance_squared)) + " currency=" + currency_before + "->" + currency_after);
+                loose_change_log("awarded player=" + self getentitynumber() + " machine=" + machine.script_noteworthy + " id=" + machine_id + " distance=" + int(sqrt(distance_squared)) + " reward=" + reward + " cashScalar=" + cash_scalar + " currency=" + currency_before + "->" + currency_after);
                 break;
             }
         }

@@ -6,18 +6,35 @@ main()
     can_use_interaction = getfunction("scripts/cp/cp_interaction", "can_use_interaction");
     set_chemical = getfunction("scripts/cp/maps/cp_town/cp_town_chemistry", "set_chemical_carried_by_player");
     nuke_fx = getfunction("scripts/cp/loot", "nuke_fx");
+    ray_gun_terminal = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "ray_gun_terminal");
+    exit_ray_gun_terminal = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "exit_enter_bomb_code");
+    enter_detonate_bomb_sequence = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "enter_detonate_bomb_sequence");
+    enter_bomb_code_internal = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "enter_bomb_code_internal");
+    end_detonate_bomb = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "end_detonate_bomb");
+    delay_enable_interaction = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "delay_enable_interaction");
 
     if (!isdefined(can_use_interaction) || !isdefined(set_chemical) ||
-        !isdefined(nuke_fx))
+        !isdefined(nuke_fx) || !isdefined(ray_gun_terminal) ||
+        !isdefined(exit_ray_gun_terminal) ||
+        !isdefined(enter_detonate_bomb_sequence) ||
+        !isdefined(enter_bomb_code_internal) ||
+        !isdefined(end_detonate_bomb) ||
+        !isdefined(delay_enable_interaction))
     {
         attack_fix_log("installation failed: a required stock function was unavailable");
         return;
     }
 
     level.iwz_attack_set_chemical = set_chemical;
+    level.iwz_attack_enter_detonate_bomb_sequence = enter_detonate_bomb_sequence;
+    level.iwz_attack_enter_bomb_code_internal = enter_bomb_code_internal;
+    level.iwz_attack_end_detonate_bomb = end_detonate_bomb;
+    level.iwz_attack_delay_enable_interaction = delay_enable_interaction;
     replacefunc(can_use_interaction, ::can_use_interaction_stub);
     replacefunc(nuke_fx, ::nuke_fx_stub);
-    attack_fix_log("installed scoped Attack interaction-use and off-grid nuke VFX patches; stock battery state preserved for UI filtering");
+    replacefunc(ray_gun_terminal, ::ray_gun_terminal_with_targeting_protection);
+    replacefunc(exit_ray_gun_terminal, ::exit_ray_gun_terminal_with_targeting_restore);
+    attack_fix_log("installed scoped Attack interaction-use, off-grid nuke VFX, and ray-gun terminal targeting patches; stock battery state preserved for UI filtering");
 }
 
 post_load()
@@ -27,12 +44,73 @@ post_load()
 
     level thread configure_attack_interaction_geometry();
     level thread listen_for_petn_command();
-    attack_fix_log("started interaction-geometry and givePetn command listeners");
+    level thread listen_for_attack_computer_test_command();
+    attack_fix_log("started interaction-geometry, givePetn, and testAttackComputer command listeners");
 }
 
 attack_fix_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("AttackFixes", message);
+}
+
+ray_gun_terminal_with_targeting_protection(interaction, player)
+{
+    player enable_attack_terminal_targeting_protection();
+
+    // cp_town_mpq::ray_gun_terminal is only this two-call handoff in both GSC
+    // dumps. Keep the stock terminal state machine intact after owning one
+    // reference to the game's normal player-ignore API.
+    [[level.iwz_attack_enter_detonate_bomb_sequence]](interaction, player);
+    [[level.iwz_attack_enter_bomb_code_internal]](interaction, player);
+}
+
+exit_ray_gun_terminal_with_targeting_restore(interaction, player)
+{
+    // This is the one exit shared by successful entry, three wrong digits,
+    // explicit UI cancellation, and the stock damage-cancel monitor.
+    [[level.iwz_attack_end_detonate_bomb]](player);
+    interaction.anchor delete();
+    player.bomb_interaction_struct = undefined;
+    thread [[level.iwz_attack_delay_enable_interaction]](interaction);
+    interaction notify("stop_bomb_counter");
+
+    player disable_attack_terminal_targeting_protection("terminal-exit");
+}
+
+enable_attack_terminal_targeting_protection()
+{
+    if (!isdefined(self) || !isplayer(self))
+        return;
+
+    if (scripts\engine\utility::is_true(self.iwz_attack_terminal_ignore_active))
+    {
+        attack_fix_log("ray-gun terminal targeting already disabled player=" +
+            self getentitynumber());
+        return;
+    }
+
+    // allow_player_ignore_me is reference-counted and is also used by stock
+    // last-stand/coaster systems. Own exactly one reference for this terminal.
+    self.iwz_attack_terminal_ignore_active = 1;
+    self scripts\cp\utility::allow_player_ignore_me(1);
+    attack_fix_log("ray-gun terminal targeting disabled player=" +
+        self getentitynumber() + " ignoreEnabled=" +
+        self scripts\cp\utility::isignoremeenabled());
+}
+
+disable_attack_terminal_targeting_protection(reason)
+{
+    if (!isdefined(self) || !isplayer(self) ||
+        !scripts\engine\utility::is_true(self.iwz_attack_terminal_ignore_active))
+    {
+        return;
+    }
+
+    self.iwz_attack_terminal_ignore_active = undefined;
+    self scripts\cp\utility::allow_player_ignore_me(0);
+    attack_fix_log("ray-gun terminal targeting restored player=" +
+        self getentitynumber() + " reason=" + reason + " ignoreEnabled=" +
+        self scripts\cp\utility::isignoremeenabled());
 }
 
 can_use_interaction_stub(interaction)
@@ -480,5 +558,67 @@ listen_for_petn_command()
         [[level.iwz_attack_set_chemical]](player, "petn");
         attack_fix_log("givePetn awarded chemical=petn label=3,4-di-nitroxy-methyl-propane player=" +
             player getentitynumber());
+    }
+}
+
+listen_for_attack_computer_test_command()
+{
+    level endon("game_ended");
+
+    for (;;)
+    {
+        level waittill("iwz_test_attack_computer", player);
+
+        if (!isdefined(player) || !isplayer(player))
+        {
+            attack_fix_log("testAttackComputer rejected: player unavailable");
+            continue;
+        }
+
+        if (scripts\engine\utility::is_true(player.iwz_attack_terminal_ignore_active) ||
+            isdefined(player.bomb_interaction_struct))
+        {
+            attack_fix_log("testAttackComputer rejected: terminal already active player=" +
+                player getentitynumber());
+            player iprintlnbold("Attack computer is already active");
+            continue;
+        }
+
+        // Retail ray_gun_init_func clears level.ray_gun_interaction_structs but
+        // never appends to it; it decorates the live ray_gun_start structs in
+        // place. Rediscover those exact structs instead of trusting the empty
+        // tracking array.
+        interaction_structs = scripts\engine\utility::getstructarray(
+            "ray_gun_start", "script_noteworthy");
+        if (!isdefined(interaction_structs) || interaction_structs.size == 0 ||
+            !isdefined(level.liferaycode))
+        {
+            interaction_count = 0;
+            if (isdefined(interaction_structs))
+                interaction_count = interaction_structs.size;
+
+            attack_fix_log("testAttackComputer rejected: stock terminal state unavailable interactions=" +
+                interaction_count + " codeReady=" + isdefined(level.liferaycode));
+            player iprintlnbold("Attack computer is not ready");
+            continue;
+        }
+
+        interaction = scripts\engine\utility::getclosest(
+            player.origin, interaction_structs);
+        if (!isdefined(interaction) || !isdefined(interaction.bomb_counter) ||
+            !isdefined(interaction.bomb_status))
+        {
+            attack_fix_log("testAttackComputer rejected: nearest terminal geometry unavailable player=" +
+                player getentitynumber());
+            player iprintlnbold("Attack computer geometry is not ready");
+            continue;
+        }
+
+        attack_fix_log("testAttackComputer starting stock ray-gun terminal player=" +
+            player getentitynumber() + " terminal=" + interaction.origin +
+            " interactions=" + interaction_structs.size +
+            " terminalUnlocked=" + isdefined(level.terminal_unlocked));
+        ray_gun_terminal_with_targeting_protection(interaction, player);
+        player iprintlnbold("Attack computer test started");
     }
 }

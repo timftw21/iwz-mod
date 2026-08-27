@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, restored and expanded map behavior, HUD and menu improvements, custom lobby music, progression options, and quality-of-life features such as first-/third-person camera selection.
 
-IWZ-MOD 0.3 improves Zombies progression and usability with persistent Spaceland double Pack-a-Punch, safer arcade play, easier Attack quest-item interactions, rebalanced challenge tiers and rewards, calling-card and weapon-level Match Summary rewards, refined challenge and weapon text, HUD polish, and expanded diagnostic commands. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 0.4 expands map-specific Zombies fixes across Rave, Shaolin, Attack, and Beast; improves scene controls, enemy behavior, quest interactions, power-up balance, bounty and card UI behavior, and post-game presentation; and removes the unfinished Zombies subtitle system. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IW7-Mod
 

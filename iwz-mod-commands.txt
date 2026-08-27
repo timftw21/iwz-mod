@@ -51,6 +51,18 @@ givePetn
     Give the player the Attack of the Radioactive Thing chemical-step item.
     Available only on cp_town.
 
+testAttackComputer
+    Start the real five-digit ray-gun terminal interaction at the nearest stock
+    Attack of the Radioactive Thing terminal. Available only on cp_town.
+
+testSkullbusterPlatforms
+    Toggle a stable 12-platform Skullbuster sky-step test path. Available only
+    on cp_disco; run it again to remove the test platforms.
+
+spawnBeastFloppy
+    Spawn the real Phantom floppy-disk scriptable near the player with its new
+    persistent highlight VFX. Available only on cp_final.
+
 winGNS
     Complete the active Ghosts N Skulls arcade session.
 
@@ -73,15 +85,13 @@ spawnAlienFuses
     unlock. Available only on cp_zmb. To repeat the first-unlock test, set
     iwz_spaceland_double_pap_unlocked to 0 before starting the next match.
 
-scene100
-    Force the standard zombie scene controller to scene 100.
-
-endScene
-    End the forced standard-zombie scene and restore stock scene selection.
+scene <number>
+    Skip forward to the requested standard Zombies Scene. The target must be a
+    positive scene number greater than the current scene.
 
 
-CUSTOM MUSIC AND SUBTITLES
---------------------------
+CUSTOM MUSIC
+------------
 
 custommusiclist
     Rescan iw7-mod/custom_music and print every track with its zero-based index.
@@ -91,17 +101,6 @@ custommusicplay <index>
 
 custommusicstop
     Stop the active custom-music track.
-
-iwz_reload_subtitles
-    Reload subtitle JSON definitions and repatch loaded sound banks.
-
-iwz_dump_sound_aliases [filter]
-    Write loaded sound aliases to iw7-mod/subtitles/sound_aliases.csv. The
-    optional filter matches sound-bank, alias, or audio-asset names.
-
-iwz_export_sound_alias <exact alias>
-    Export every loaded audio variant for an exact alias as FLAC files under
-    iw7-mod/subtitles/audio.
 
 
 MAPS, CONNECTIONS, BOTS, AND HOST ADMINISTRATION

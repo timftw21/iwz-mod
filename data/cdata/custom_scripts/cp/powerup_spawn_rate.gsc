@@ -44,6 +44,7 @@ install_powerup_spawn_rate()
     stock_interval = level.powerup_drop_increment;
     stock_threshold = level.score_to_drop;
 
+    migrate_powerup_weight_defaults();
     tune_powerup_weights();
 
     if (configured_interval <= 0)
@@ -71,6 +72,40 @@ install_powerup_spawn_rate()
     level thread monitor_powerup_drops();
 }
 
+migrate_powerup_weight_defaults()
+{
+    revision = getdvarint("iwz_powerup_weight_revision", 0);
+    if (revision >= 1)
+        return;
+
+    migrated = 0;
+    migrated += migrate_powerup_weight_default("iwz_powerup_weight_infinite_grenades", 2, 4);
+    migrated += migrate_powerup_weight_default("iwz_powerup_weight_carpenter", 3, 4);
+    migrated += migrate_powerup_weight_default("iwz_powerup_weight_max_ammo", 12, 11);
+    migrated += migrate_powerup_weight_default("iwz_powerup_weight_double_money", 6, 5);
+    migrated += migrate_powerup_weight_default("iwz_powerup_weight_insta_kill", 12, 11);
+    setdvar("iwz_powerup_weight_revision", 1);
+
+    powerup_log("weight migration revision=1 migrated=" + migrated +
+        " preserved=" + (5 - migrated));
+}
+
+migrate_powerup_weight_default(dvar_name, old_default, new_default)
+{
+    current = getdvarint(dvar_name, new_default);
+    if (current != old_default)
+    {
+        powerup_log("weight migration preserved dvar=" + dvar_name +
+            " value=" + current);
+        return 0;
+    }
+
+    setdvar(dvar_name, new_default);
+    powerup_log("weight migration updated dvar=" + dvar_name +
+        " " + old_default + "->" + new_default);
+    return 1;
+}
+
 tune_powerup_weights()
 {
     loot_types = ["kill_generic_zombie", "kill_traversal_zombie"];
@@ -86,15 +121,15 @@ tune_powerup_weights()
         }
 
         tune_powerup_weight(loot_type, "grenade_30",
-            getdvarint("iwz_powerup_weight_infinite_grenades", 2));
+            getdvarint("iwz_powerup_weight_infinite_grenades", 4));
         tune_powerup_weight(loot_type, "board_windows",
-            getdvarint("iwz_powerup_weight_carpenter", 3));
+            getdvarint("iwz_powerup_weight_carpenter", 4));
         tune_powerup_weight(loot_type, "ammo_max",
-            getdvarint("iwz_powerup_weight_max_ammo", 12));
+            getdvarint("iwz_powerup_weight_max_ammo", 11));
         tune_powerup_weight(loot_type, "cash_2",
-            getdvarint("iwz_powerup_weight_double_money", 6));
+            getdvarint("iwz_powerup_weight_double_money", 5));
         tune_powerup_weight(loot_type, "instakill_30",
-            getdvarint("iwz_powerup_weight_insta_kill", 12));
+            getdvarint("iwz_powerup_weight_insta_kill", 11));
 
         level.loot_info[loot_type]["weight_sum"] = get_powerup_weight_sum(loot_type);
         powerup_log("weight table=" + loot_type +

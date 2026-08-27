@@ -63,6 +63,15 @@ else
 
 	MenuBuilder.m_types["ConsumableActivate"] = function(menu, controller)
 		local self = originalConsumableActivate(menu, controller)
+		local gamepadEnabled = Engine.IsGamepadEnabled() == 1
+		local activationKey = gamepadEnabled and "ZM_CONSUMABLES_BUTTON_KEYS" or
+			"ZM_CONSUMABLES_BUTTON_KEYS_PC"
+
+		-- Stock constructs this text with the controller-only +smoke/+frag key
+		-- before its later empty_menu_stack callback corrects the input device.
+		-- Initialize from the active device now; retain the stock callback so a
+		-- later device change still updates it normally.
+		self.ActivateText:setText(Engine.Localize(activationKey), 0)
 
 		-- The stock widget is bottom-anchored and extends into the perk strip. Keep
 		-- its parent placement intact and raise every visual inside it by 30 pixels.
@@ -78,7 +87,9 @@ else
 			_1080p * -50, _1080p * 451, _1080p * (60 - CARD_READY_RAISE), _1080p * (82 - CARD_READY_RAISE))
 
 		if not loggedCardReadyFix then
-			print("[IWZ][ZombiesHUD] raised ConsumableActivate visuals by 30 pixels")
+			print("[IWZ][ZombiesHUD] raised ConsumableActivate visuals by 30 pixels; " ..
+				"initialized activation binding key=" .. activationKey ..
+				" gamepad=" .. tostring(gamepadEnabled))
 			loggedCardReadyFix = true
 		end
 
@@ -96,6 +107,7 @@ if MenuBuilder.m_types["CPClapboardBase"] == nil then
 	print("[IWZ][ZombiesHUD] CPClapboardBase unavailable; triple-digit scene fix not installed")
 else
 	local clapboardBuildCount = 0
+	local beastSceneOneTransitionPlayed = false
 
 	local function buildCPClapboardBase(menu, controller)
 		local self = LUI.UIElement.new()
@@ -146,6 +158,19 @@ else
 			local sceneNumber = DataSources.inGame.CP.zombies.waveNumberSplash:GetValue(controllerIndex)
 			if sceneNumber ~= nil then
 				local numericSceneNumber = tonumber(sceneNumber) or 0
+
+				-- The stock spawning script intentionally omits mus_zombies_newwave
+				-- for internal wave zero (displayed as Scene 1). Own that one missing
+				-- cue at the authoritative presentation callback so its audible start
+				-- is aligned with the clapboard and cannot overlap a second GSC call.
+				if numericSceneNumber == 1 and CONDITIONS.IsDLC4(self) and
+					not beastSceneOneTransitionPlayed then
+					beastSceneOneTransitionPlayed = true
+					Engine.PlaySound("mus_zombies_newwave")
+					print("[IWZ][BeastFixes] Scene 1 transition started from presented " ..
+						"waveNumberSplash scene=1 alias=mus_zombies_newwave")
+				end
+
 				local absoluteSceneNumber = math.abs(numericSceneNumber)
 				local digitClass = "standard"
 				local activeElement = Waves

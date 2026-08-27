@@ -16,10 +16,16 @@ if MenuBuilder.m_types["SmallContractCP"] == nil then
 	require("inGame.cp.SmallContractCP")
 end
 
+if MenuBuilder.m_types["SmallContractsCP"] == nil then
+	require("inGame.cp.SmallContractsCP")
+end
+
 local originalCPPauseMenuButtons = MenuBuilder.m_types["CPPauseMenuButtons"]
 local originalCPPauseMenu = MenuBuilder.m_types["CPPauseMenu"]
 local originalSmallContractCP = MenuBuilder.m_types["SmallContractCP"]
+local originalSmallContractsCP = MenuBuilder.m_types["SmallContractsCP"]
 local bountyCompleteLayoutLogged = false
+local persistentBountyGridLogged = false
 
 local weaponSplashTable = "cp/zombies/zombie_splashtable.csv"
 local weaponRankTable = "mp/weaponRankTable.csv"
@@ -94,6 +100,66 @@ MenuBuilder.m_types["SmallContractCP"] = function(menu, controller)
 			bountyCompleteLayoutLogged = true
 			print("[IWZ][PauseMenu] centered bounty completion text stockFinalX=67..338 correctedFinalX=92..363 cardCenter=227.5")
 		end
+	end
+
+	return self
+end
+
+-- Stock SmallContractsCP removes a slot once CheckCompletion and HasGivenReward
+-- are both true. The contract GSC keeps both active challenge IDs in playerdata,
+-- so retain both grid slots and let SmallContractCP render its completed state.
+MenuBuilder.m_types["SmallContractsCP"] = function(menu, controller)
+	local self = originalSmallContractsCP(menu, controller)
+	local controllerIndex = controller and controller.controllerIndex
+	if not controllerIndex and not Engine.InFrontend() then
+		controllerIndex = self:getRootController()
+	end
+	local grid = self and self.Contracts
+
+	if not grid then
+		print("[IWZ][PauseMenu] persistent bounty grid skipped: Contracts grid is unavailable")
+		return self
+	end
+
+	if Contracts.AreContractsOutOfDate(controllerIndex) then
+		grid:SetNumColumns(0)
+		grid:SetNumRows(0)
+		print("[IWZ][PauseMenu] persistent bounty grid deferred: contracts are out of date controller=" .. tostring(controllerIndex))
+		return self
+	end
+
+	grid:SetRefreshChild(function(child, column, row)
+		local contractIndex = CONDITIONS.IsSplitscreen() and column or row
+
+		if contractIndex >= 0 and contractIndex <= 1 then
+			child:SetupContract(
+				controllerIndex,
+				Contracts.GetCurrentChallengeID(controllerIndex, contractIndex),
+				contractIndex
+			)
+		end
+	end)
+
+	if CONDITIONS.IsSplitscreen() then
+		grid:SetNumColumns(2)
+		grid:SetNumRows(1)
+	else
+		grid:SetNumColumns(1)
+		grid:SetNumRows(2)
+	end
+
+	grid:RefreshContent()
+
+	if not persistentBountyGridLogged then
+		persistentBountyGridLogged = true
+		print(
+			"[IWZ][PauseMenu] persistent bounty grid enabled controller=" .. tostring(controllerIndex)
+				.. " slot0Complete=" .. tostring(Contracts.CheckCompletion(controllerIndex, 0))
+				.. " slot0RewardGiven=" .. tostring(Contracts.HasGivenReward(controllerIndex, 0))
+				.. " slot1Complete=" .. tostring(Contracts.CheckCompletion(controllerIndex, 1))
+				.. " slot1RewardGiven=" .. tostring(Contracts.HasGivenReward(controllerIndex, 1))
+				.. " source=SmallContractsCP stock completion filter removed"
+		)
 	end
 
 	return self

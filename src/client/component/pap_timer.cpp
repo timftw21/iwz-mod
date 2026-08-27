@@ -26,7 +26,6 @@ namespace pap_timer
 			{"cp_rave", {-10142.0f, 929.5f, -1544.0f}},
 			{"cp_disco", {-10142.0f, 929.5f, -1544.0f}},
 			{"cp_town", {-10142.0f, 929.5f, -1544.0f}},
-			{"cp_final", {5237.5f, -5002.1f, 370.0f}},
 		};
 
 		struct source_vertex
@@ -784,6 +783,16 @@ namespace pap_timer
 	{
 		if (!candidate_zone_name)
 		{
+			return false;
+		}
+
+		// cp_final's theater is part of the stock world. Adding the optional
+		// housing surface shifts its DPVS sorted-surface ownership and produces
+		// missing theater geometry, so preserve the stock Beast world exactly.
+		if (!strcmp(candidate_zone_name, "cp_final"))
+		{
+			console::info("[IWZ][PaPTimer] BSP housing skipped map=cp_final "
+				"reason=preserve stock theater DPVS visibility\n");
 			return false;
 		}
 

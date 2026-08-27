@@ -15,6 +15,8 @@
 #include <utils/string.hpp>
 #include <utils/memory.hpp>
 
+#include <charconv>
+
 namespace command
 {
 	namespace
@@ -313,12 +315,12 @@ namespace command
 			}
 		}
 
-		void cmd_zombie_scene(const int client_num, const char* command_name, const char* notify_name)
+		void cmd_zombie_scene(const int client_num, const int target_scene)
 		{
 			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
 			{
-				console::warn("[IWZ][Scenes] command=%s rejected client=%d reason=not in Zombies\n",
-					command_name, client_num);
+				console::warn("[IWZ][Scenes] command=scene target=%d rejected client=%d reason=not in Zombies\n",
+					target_scene, client_num);
 				game::shared::client_println(client_num, "This command is only available in Zombies");
 				return;
 			}
@@ -327,14 +329,14 @@ namespace command
 			{
 				const auto player = scripting::entity({ static_cast<uint16_t>(client_num), 0 });
 				const scripting::entity level{ *game::levelEntityId };
-				scripting::notify(level, notify_name, { player });
-				console::info("[IWZ][Scenes] command=%s dispatched notify=%s client=%d playerEnt=%d levelEnt=%u\n",
-					command_name, notify_name, client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+				scripting::notify(level, "iwz_set_scene", { player, target_scene });
+				console::info("[IWZ][Scenes] command=scene target=%d dispatched notify=iwz_set_scene client=%d playerEnt=%d levelEnt=%u\n",
+					target_scene, client_num, player.get_entity_reference().entnum, *game::levelEntityId);
 			}
 			catch (const std::exception& e)
 			{
-				console::error("[IWZ][Scenes] command=%s dispatch failed client=%d error=%s\n",
-					command_name, client_num, e.what());
+				console::error("[IWZ][Scenes] command=scene target=%d dispatch failed client=%d error=%s\n",
+					target_scene, client_num, e.what());
 				game::shared::client_println(client_num, "Unable to change the current scene");
 			}
 		}
@@ -512,6 +514,111 @@ namespace command
 				game::shared::client_println(client_num, "Unable to give the requested chemical");
 			}
 		}
+
+		void cmd_test_attack_computer(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][AttackFixes] testAttackComputer rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			const auto* mapname = game::Dvar_FindVar("ui_mapname");
+			if (!mapname || !mapname->current.string || _stricmp(mapname->current.string, "cp_town") != 0)
+			{
+				console::warn("[IWZ][AttackFixes] testAttackComputer rejected client=%d reason=not on cp_town\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available on Attack of the Radioactive Thing");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_test_attack_computer", {player});
+				console::info("[IWZ][AttackFixes] testAttackComputer dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][AttackFixes] testAttackComputer dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to start the Attack computer test");
+			}
+		}
+
+		void cmd_test_skullbuster_platforms(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][ShaolinSkullbuster] testSkullbusterPlatforms rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			const auto* mapname = game::Dvar_FindVar("ui_mapname");
+			if (!mapname || !mapname->current.string || _stricmp(mapname->current.string, "cp_disco") != 0)
+			{
+				console::warn("[IWZ][ShaolinSkullbuster] testSkullbusterPlatforms rejected client=%d reason=not on cp_disco\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available on Shaolin Shuffle");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_test_skullbuster_platforms", {player});
+				console::info("[IWZ][ShaolinSkullbuster] testSkullbusterPlatforms dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][ShaolinSkullbuster] testSkullbusterPlatforms dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to toggle the Skullbuster platform test");
+			}
+		}
+
+		void cmd_spawn_beast_floppy(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][BeastFixes] spawnBeastFloppy rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			const auto* mapname = game::Dvar_FindVar("ui_mapname");
+			if (!mapname || !mapname->current.string || _stricmp(mapname->current.string, "cp_final") != 0)
+			{
+				console::warn("[IWZ][BeastFixes] spawnBeastFloppy rejected client=%d reason=not on cp_final\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available on The Beast from Beyond");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_spawn_beast_floppy", {player});
+				console::info("[IWZ][BeastFixes] spawnBeastFloppy dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][BeastFixes] spawnBeastFloppy dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to spawn the Phantom floppy disk");
+			}
+		}
 	}
 
 	params::params()
@@ -659,16 +766,18 @@ namespace command
 				"Internal migration revision for the Zombies powerup drop interval");
 			game::Dvar_RegisterBool("iwz_spaceland_double_pap_unlocked", false, game::DVAR_FLAG_SAVED,
 				"Whether inserting Spaceland's Alien fuses has permanently unlocked double Pack-a-Punch");
-			game::Dvar_RegisterInt("iwz_powerup_weight_infinite_grenades", 2, 1, 100, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterInt("iwz_powerup_weight_infinite_grenades", 4, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Infinite Grenades powerup (stock is 5)");
-			game::Dvar_RegisterInt("iwz_powerup_weight_carpenter", 3, 1, 100, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterInt("iwz_powerup_weight_carpenter", 4, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Carpenter powerup (stock is 5)");
-			game::Dvar_RegisterInt("iwz_powerup_weight_max_ammo", 12, 1, 100, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterInt("iwz_powerup_weight_max_ammo", 11, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Max Ammo powerup (stock is 10)");
-			game::Dvar_RegisterInt("iwz_powerup_weight_double_money", 6, 1, 100, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterInt("iwz_powerup_weight_double_money", 5, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Double Money powerup (stock is 5)");
-			game::Dvar_RegisterInt("iwz_powerup_weight_insta_kill", 12, 1, 100, game::DVAR_FLAG_SAVED,
+			game::Dvar_RegisterInt("iwz_powerup_weight_insta_kill", 11, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Insta-Kill powerup (stock is 10)");
+			game::Dvar_RegisterInt("iwz_powerup_weight_revision", 0, 0, 1, game::DVAR_FLAG_SAVED,
+				"Internal migration revision for Zombies powerup weights");
 			game::Dvar_RegisterFloat("iwz_low_health_blood_alpha", 0.75f, 0.0f, 0.85f, game::DVAR_FLAG_SAVED,
 				"Maximum opacity of the Zombies low-health blood overlay (stock is 0.85)");
 			game::Dvar_RegisterFloat("iwz_low_health_blood_scale", 0.25f, 0.10f, 1.0f, game::DVAR_FLAG_SAVED,
@@ -870,6 +979,36 @@ namespace command
 				cmd_give_petn(client_num);
 			});
 
+			add_sv("testAttackComputer", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_test_attack_computer(client_num);
+			});
+
+			add_sv("testSkullbusterPlatforms", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_test_skullbuster_platforms(client_num);
+			});
+
+			add_sv("spawnBeastFloppy", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_spawn_beast_floppy(client_num);
+			});
+
 			add_sv("winGNS", [](const int client_num, const params_sv&)
 			{
 				if (!game::shared::cheats_ok(client_num, true))
@@ -920,24 +1059,35 @@ namespace command
 				cmd_spawn_alien_fuses(client_num);
 			});
 
-			add_sv("scene100", [](const int client_num, const params_sv&)
+			add_sv("scene", [](const int client_num, const params_sv& params)
 			{
 				if (!game::shared::cheats_ok(client_num, true))
 				{
 					return;
 				}
 
-				cmd_zombie_scene(client_num, "scene100", "iwz_scene_100");
-			});
-
-			add_sv("endScene", [](const int client_num, const params_sv&)
-			{
-				if (!game::shared::cheats_ok(client_num, true))
+				if (params.size() != 2)
 				{
+					console::warn("[IWZ][Scenes] command=scene rejected client=%d reason=expected one target argument argc=%d\n",
+						client_num, params.size());
+					game::shared::client_println(client_num, "Usage: scene <number>");
 					return;
 				}
 
-				cmd_zombie_scene(client_num, "endScene", "iwz_end_scene");
+				const std::string_view target_text{params[1]};
+				int target_scene = 0;
+				const auto parse_result = std::from_chars(target_text.data(),
+					target_text.data() + target_text.size(), target_scene);
+				if (parse_result.ec != std::errc{} ||
+					parse_result.ptr != target_text.data() + target_text.size() || target_scene < 1)
+				{
+					console::warn("[IWZ][Scenes] command=scene rejected client=%d target='%s' reason=not a positive integer\n",
+						client_num, params[1]);
+					game::shared::client_println(client_num, "Scene must be a positive whole number");
+					return;
+				}
+
+				cmd_zombie_scene(client_num, target_scene);
 			});
 		}
 	};
