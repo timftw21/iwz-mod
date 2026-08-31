@@ -13,7 +13,6 @@ main()
     final_starting_vo = getfunction("scripts/cp/maps/cp_final/cp_final_vo", "final_starting_vo");
     willard_intro_vo = getfunction("scripts/cp/maps/cp_final/cp_final_vo", "willard_intro_vo");
     new_wave_sound = getfunction("scripts/cp/zombies/zombies_spawning", "_id_BDD4");
-    createfx_oneshot_thread = getfunction("scripts/common/fx", "oneshotfxthread");
 
     installed = 0;
     if (isdefined(dissolve_corpse))
@@ -36,7 +35,7 @@ main()
 
     if (isdefined(init_bridge_pieces))
     {
-        replacefunc(init_bridge_pieces, ::init_bridge_pieces_with_accessible_cargo_focus);
+        replacefunc(init_bridge_pieces, ::init_bridge_pieces_with_accessible_focus);
         installed++;
         beast_fix_log("installed bridge-piece interaction focus hook");
     }
@@ -65,23 +64,15 @@ main()
 
     if (isdefined(new_wave_sound))
     {
-        replacefunc(new_wave_sound, ::play_beast_new_wave_sound_once);
+        replacefunc(new_wave_sound, ::play_beast_cross_script_new_wave_sound_once);
         installed++;
-        beast_fix_log("installed per-scene new-wave cue de-duplication hook");
+        beast_fix_log("installed cp_final Scene 1 duplicate cue gate");
     }
     else
         beast_fix_log("new-wave cue hook unavailable: retail zombies_spawning::_id_BDD4 lookup failed");
 
-    if (isdefined(createfx_oneshot_thread))
-    {
-        replacefunc(createfx_oneshot_thread, ::oneshotfxthread_without_start_room_flare);
-        installed++;
-        beast_fix_log("installed authored one-shot CreateFX boundary hook");
-    }
-    else
-        beast_fix_log("CreateFX hook unavailable: scripts/common/fx::oneshotfxthread lookup failed");
-
-    beast_fix_log("installation complete hooks=" + installed + "/7");
+    beast_fix_log("pre-load installation complete hooks=" + installed +
+        "/6 pendingPostLoad=interaction-properties");
 }
 
 post_load()
@@ -89,8 +80,11 @@ post_load()
     if (getdvar("ui_mapname") != "cp_final")
         return;
 
+    install_authoritative_dispatch_boundaries();
     level thread listen_for_beast_floppy_test_command();
-    beast_fix_log("started floppy test monitor; Scene 1 audio is owned by the presented HUD splash");
+    beast_fix_log("started Beast floppy test monitor; " +
+        "Scene 1 audio owner=presented HUD splash " +
+        "subsequentSceneOwner=cp_final spawning stock helper");
 }
 
 beast_fix_log(message)
@@ -98,45 +92,63 @@ beast_fix_log(message)
     custom_scripts\cp\gsc_diagnostics::emit("BeastFixes", message);
 }
 
-oneshotfxthread_without_start_room_flare()
+install_authoritative_dispatch_boundaries()
 {
-    target_origin = (-727.766, 2906.32, 88.5);
-    is_start_room_candidate = isdefined(self.v) &&
-        isdefined(self.v["origin"]) &&
-        distancesquared(self.v["origin"], target_origin) <= 122500;
+    installed = 0;
 
-    if (is_start_room_candidate)
+    if (isdefined(level.interaction_trigger_properties_func))
     {
-        if (isdefined(self.v["fxid"]) &&
-            self.v["fxid"] == "vfx_floor_vent_steam" &&
-            distancesquared(self.v["origin"], target_origin) <= 1)
-        {
-            // cp_final_fx.gsc authors this one-shot directly above the
-            // blood-stained floor beside every solo start. Intercept it at
-            // the stock CreateFX execution boundary, before spawnfx creates
-            // the overbright billboard. The nearby low mist remains intact.
-            beast_fix_log("suppressed overbright authored one-shot asset=" +
-                self.v["fxid"] + " origin=" + self.v["origin"] +
-                " action=skip_spawnfx preserved=vfx_low_mist,blood_surface");
-            return;
-        }
-
-        nearby_fxid = "undefined";
-        if (isdefined(self.v["fxid"]))
-            nearby_fxid = self.v["fxid"];
-
-        beast_fix_log("observed nearby authored one-shot asset=" + nearby_fxid +
-            " origin=" + self.v["origin"] + " action=stock");
+        level.iwz_beast_stock_interaction_trigger_properties =
+            level.interaction_trigger_properties_func;
+        level.interaction_trigger_properties_func =
+            ::interaction_trigger_properties_with_accessible_bridge_focus;
+        installed++;
+        beast_fix_log("installed bridge focus dispatch boundary " +
+            "source=level.interaction_trigger_properties_func");
     }
+    else
+        beast_fix_log("bridge focus dispatch unavailable: stock " +
+            "level.interaction_trigger_properties_func missing");
 
-    // This is the exact retail scripts/common/fx::oneshotfxthread body from
-    // both GSC dumps. All non-target CreateFX records retain stock timing and
-    // dispatch through the level-selected create_triggerfx implementation.
-    wait(0.05);
-    if (self.v["delay"] > 0)
-        wait(self.v["delay"]);
+    beast_fix_log("post-load dispatch installation complete boundaries=" +
+        installed + "/1");
+}
 
-    [[level.func["create_triggerfx"]]]();
+interaction_trigger_properties_with_accessible_bridge_focus(
+    trigger, interaction, offset)
+{
+    [[level.iwz_beast_stock_interaction_trigger_properties]](
+        trigger, interaction, offset);
+
+    if (!isdefined(interaction) || !isdefined(interaction.script_noteworthy) ||
+        interaction.script_noteworthy != "pap_bridge")
+        return;
+
+    // cp_final's stock override uniquely leaves bridge debris at
+    // require-look-at=1. The actual monitor places the use trigger at the
+    // struct's X/Y but replaces Z with player eye height, so moving only the
+    // authored Z cannot move the usable point out from behind the large panel.
+    // Use the same non-directional trigger pattern as the map's other large
+    // quest pickups; acquisition remains limited to this struct's search range.
+    trigger usetriggerrequirelookat(0);
+    trigger setusefov(360);
+
+    if (!isdefined(interaction.iwz_accessible_focus_logged))
+    {
+        interaction.iwz_accessible_focus_logged = 1;
+        piece_name = "undefined";
+        if (isdefined(interaction.targetname))
+            piece_name = interaction.targetname;
+
+        player_ent = "undefined";
+        if (isdefined(self) && isplayer(self))
+            player_ent = self getentitynumber();
+
+        beast_fix_log("activated accessible bridge focus piece=" + piece_name +
+            " origin=" + interaction.origin + " player=" + player_ent +
+            " searchDist=" + interaction.custom_search_dist +
+            " requireLookAt=0 useFov=360");
+    }
 }
 
 dissolve_corpse_without_hidden_collision(delay, traversing)
@@ -225,33 +237,32 @@ set_landed_phantom_disk_model(model, state)
     return disk_model;
 }
 
-init_bridge_pieces_with_accessible_cargo_focus()
+init_bridge_pieces_with_accessible_focus()
 {
     pieces = scripts\engine\utility::getstructarray("pap_bridge", "script_noteworthy");
-    cargo_piece_origin = (1807, 3155, -265);
 
     foreach (piece in pieces)
     {
         model_origin = piece.origin;
         piece.name = "pap_quest";
+        // The map's level-specific monitor supports per-struct search radii.
+        // 128 is the stock value used for other large quest objects such as
+        // Spaceland's DJ speakers; the bridge panels otherwise use 72 units.
+        piece.custom_search_dist = 128;
 
         model = spawn("script_model", model_origin);
         model setmodel("debris_exterior_damaged_metal_panels_08_scl50");
         model.angles = piece.angles;
         model.targetname = "pap_bridge_model";
 
-        // cp_final.d3dbsp puts bridge_piece_1's interaction at the model pivot
-        // on the floor, behind the steeply rolled panel and beside the cargo
-        // container. cp_interaction ray-traces to that exact point. Keep the
-        // authored model untouched and move only its aim/focus point into the
-        // visible body of the panel.
-        if (distancesquared(model_origin, cargo_piece_origin) < 1)
-        {
-            piece.origin = model_origin + (0, 0, 32);
-            beast_fix_log("raised cargo bridge interaction focus modelOrigin=" +
-                model_origin + " focusOrigin=" + piece.origin +
-                " angles=" + piece.angles + " modelEnt=" + model getentitynumber());
-        }
+        piece_name = "undefined";
+        if (isdefined(piece.targetname))
+            piece_name = piece.targetname;
+
+        beast_fix_log("configured bridge interaction piece=" + piece_name +
+            " authoredOrigin=" + model_origin + " angles=" + piece.angles +
+            " modelEnt=" + model getentitynumber() +
+            " searchDist=128 requireLookAtOverride=pending-focus");
     }
 
     scripts\engine\utility::flag_init("bridge_pieces_collected");
@@ -360,29 +371,32 @@ final_starting_vo_when_player_is_ready()
     level thread [[level.iwz_beast_stock_willard_intro_vo]]();
 }
 
-play_beast_new_wave_sound_once()
+play_beast_cross_script_new_wave_sound_once()
 {
     current_wave = level.wave_num;
-    if (isdefined(level.iwz_beast_new_wave_sound_wave) &&
-        level.iwz_beast_new_wave_sound_wave == current_wave)
+    if (current_wave == 1)
     {
-        beast_fix_log("suppressed duplicate stock new-wave cue internalWave=" +
-            current_wave + " displayedScene=" + (current_wave + 1));
+        // Beast's custom spawner is the runtime owner of this helper. Wave 1
+        // waits ten seconds before calling it, after the HUD has already
+        // presented Scene 1 and played the missing initial cue. Suppress only
+        // that delayed duplicate and preserve the completion notification.
+        level notify("wave_start_sound_done");
+        beast_fix_log("suppressed delayed Scene 1 duplicate new-wave cue " +
+            "internalWave=1 displayedScene=1 owner=presented-HUD-splash " +
+            "notification=preserved");
         return;
     }
 
-    level.iwz_beast_new_wave_sound_wave = current_wave;
-
-    // Both dumps show that cp_final_spawning calls the shared new-wave helper
-    // after the generic spawner already called it. Its first duplicate is
-    // delayed ten seconds. Preserve the helper's exact sound/notify behavior
-    // for the first call and reject only the second call for the same wave.
+    // cp_final_spawning is the sole observed runtime path on later waves. This
+    // is the exact retail zombies_spawning::_id_BDD4 body from both dumps; it
+    // remains inline because the replacefunc gate must stay installed.
+    beast_fix_log("released stock new-wave cue internalWave=" + current_wave +
+        " displayedScene=" + current_wave +
+        " owner=cp_final-spawning-stock-helper");
     if (!scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight())
         scripts\cp\utility::playsoundinspace("mus_zombies_newwave", (0, 0, 0), 1);
 
     level notify("wave_start_sound_done");
-    beast_fix_log("played stock new-wave cue internalWave=" + current_wave +
-        " displayedScene=" + (current_wave + 1));
 }
 
 listen_for_beast_floppy_test_command()

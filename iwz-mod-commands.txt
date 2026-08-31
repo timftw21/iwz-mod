@@ -63,6 +63,10 @@ spawnBeastFloppy
     Spawn the real Phantom floppy-disk scriptable near the player with its new
     persistent highlight VFX. Available only on cp_final.
 
+spawnInfiniteGrenades
+    Spawn a real Infinite Grenades powerup in front of the player. Available on
+    every Zombies film.
+
 winGNS
     Complete the active Ghosts N Skulls arcade session.
 
@@ -84,6 +88,11 @@ spawnAlienFuses
     it up and insert it into Pack-a-Punch to test the permanent double-PaP
     unlock. Available only on cp_zmb. To repeat the first-unlock test, set
     iwz_spaceland_double_pap_unlocked to 0 before starting the next match.
+
+spawnSoulKey
+    Spawn the current Zombies film's Soul Key pickup in front of the player.
+    Picking it up grants that film's native Soul Key progression to every
+    player. Available on all five standard Zombies films.
 
 scene <number>
     Skip forward to the requested standard Zombies Scene. The target must be a
@@ -224,7 +233,6 @@ loadzone <zone>
 listassetpool <pool number> [filter]
     Print loaded asset names in one asset pool. With no pool number, print the
     valid pool numbers and names.
-
 
 PLAYER PROGRESSION (CLIENT BUILDS)
 ----------------------------------

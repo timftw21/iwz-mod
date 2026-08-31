@@ -323,6 +323,24 @@ namespace gsc
 
 		void load_scripts()
 		{
+			std::string map_scoped_subfolder{};
+			if (!game::Com_FrontEnd_IsInFrontEnd())
+			{
+				const auto* mapname = game::Dvar_FindVar("mapname");
+				if (mapname && mapname->current.string && *mapname->current.string)
+				{
+					map_scoped_subfolder = std::format("custom_scripts/{}/maps/{}/",
+						game::Com_GameMode_GetActiveGameModeStr(), mapname->current.string);
+					console::info("[IWZ][GSC] map-scoped script discovery mode=%s map=%s folder=%s\n",
+						game::Com_GameMode_GetActiveGameModeStr(), mapname->current.string,
+						map_scoped_subfolder.data());
+				}
+				else
+				{
+					console::warn("[IWZ][GSC] map-scoped script discovery skipped reason=mapname-unavailable\n");
+				}
+			}
+
 			for (const auto& path : filesystem::get_search_paths())
 			{
 				if (game::Com_FrontEnd_IsInFrontEnd())
@@ -334,6 +352,10 @@ namespace gsc
 
 				load_scripts(path, "custom_scripts/");
 				load_scripts(path, "custom_scripts/"s + game::Com_GameMode_GetActiveGameModeStr() + "/");
+				if (!map_scoped_subfolder.empty())
+				{
+					load_scripts(path, map_scoped_subfolder);
+				}
 
 				if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_CP || game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_MP)
 				{

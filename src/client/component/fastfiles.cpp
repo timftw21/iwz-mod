@@ -22,6 +22,7 @@ namespace fastfiles
 	static utils::concurrency::container<std::string> current_fastfile;
 	static utils::concurrency::container<std::vector<localize_load_callback>> localize_load_callbacks;
 	static utils::concurrency::container<std::vector<sound_bank_load_callback>> sound_bank_load_callbacks;
+	static utils::concurrency::container<std::vector<string_table_load_callback>> string_table_load_callbacks;
 	static utils::concurrency::container<std::vector<weapon_load_callback>> weapon_load_callbacks;
 
 	std::string get_current_fastfile()
@@ -45,6 +46,14 @@ namespace fastfiles
 	void on_sound_bank_loaded(sound_bank_load_callback callback)
 	{
 		sound_bank_load_callbacks.access([&callback](std::vector<sound_bank_load_callback>& callbacks)
+		{
+			callbacks.emplace_back(std::move(callback));
+		});
+	}
+
+	void on_string_table_loaded(string_table_load_callback callback)
+	{
+		string_table_load_callbacks.access([&callback](std::vector<string_table_load_callback>& callbacks)
 		{
 			callbacks.emplace_back(std::move(callback));
 		});
@@ -145,6 +154,17 @@ namespace fastfiles
 			if (type == game::ASSET_TYPE_SCRIPTFILE && header.scriptfile)
 			{
 				dump_gsc_script(header.scriptfile->name ? header.scriptfile->name : "__unnamed__", header);
+			}
+
+			if (type == game::ASSET_TYPE_STRINGTABLE && header.stringTable)
+			{
+				string_table_load_callbacks.access([&header](const std::vector<string_table_load_callback>& callbacks)
+				{
+					for (const auto& callback : callbacks)
+					{
+						callback(header.stringTable);
+					}
+				});
 			}
 
 			if (type == game::ASSET_TYPE_WEAPON && header.weapon)

@@ -1,6 +1,7 @@
 local ARCADE_MODE_NAME = "GHOSTS N SKULLS ARCADE"
 local ARCADE_DVAR = "iwz_gns_arcade"
 local ARCADE_GAME_DVAR = "iwz_gns_arcade_game"
+local ARCADE_RESULT_DVAR = "iwz_gns_arcade_result"
 
 local arcadeGames = {
 	{
@@ -73,6 +74,7 @@ local function clearArcadeMode(reason, clearBossMode)
 
 	Engine.ExecNow("set " .. ARCADE_DVAR .. " 0")
 	Engine.ExecNow("set " .. ARCADE_GAME_DVAR .. " 0")
+	Engine.ExecNow("set " .. ARCADE_RESULT_DVAR .. " 0")
 
 	if clearBossMode then
 		Engine.ExecNow("set scr_boss_battles_enabled 0")
@@ -112,6 +114,7 @@ local function selectArcadeGame(menu, controllerIndex, gameIndex)
 	Engine.ExecNow("set scr_boss_battles_enabled 1")
 	Engine.ExecNow("set " .. ARCADE_DVAR .. " 1")
 	Engine.ExecNow("set " .. ARCADE_GAME_DVAR .. " " .. gameIndex)
+	Engine.ExecNow("set " .. ARCADE_RESULT_DVAR .. " 0")
 	Engine.SetPlayerDataEx(controllerIndex, CoD.StatsGroup.Coop, "dc", false)
 
 	if not CONDITIONS.IsThirdGameMode(menu) then

@@ -56,8 +56,13 @@ namespace game
 	WEAK symbol<void(int localClientNum, int controllerIndex, const char* buffer)> Cbuf_ExecuteBuffer{ 0x140B7C3B0 };
 	WEAK symbol<void(int localClientNum, int controllerIndex, const char* buffer, void(int, int, const char*))> Cbuf_ExecuteBufferInternal{ 0x140B7C3C0 };
 
-	WEAK symbol<bool(int localClientNum, const playerState_s* ps, vec3_t* outOrigin)> CG_GetPlayerViewOrigin{ 0x1408EC810 };
+	WEAK symbol<void(int localClientNum, const playerState_s* ps, vec3_t* outOrigin)> CG_GetPlayerViewOrigin{ 0x1408EC810 };
+	WEAK symbol<cg_s* (int localClientNum)> CG_GetLocalClientGlobals{ 0x140242BF0 };
+	WEAK symbol<void(const cg_s* cgameGlob, float* x, float* y)> CG_CalcCrosshairPosition{ 0x140789CE0 };
 	WEAK symbol<bool(int localClientNum, const ScreenPlacement* scrPlace, const float* worldPos, float* outScreenPos)> CG_WorldPosToScreenPosReal{ 0x1407A5490 };
+	WEAK symbol<void(int worldId, void* results, const float* start, const float* end,
+		const Bounds* bounds, int passEntityNum, int passEntityNum2, int contentMask,
+		int locational, const void* priorityMap, int phaseSelection)> PhysicsQuery_LegacyTrace{ 0x14055C9E0 };
 
 	WEAK symbol<void(int localClientNum, const char* msg, int flags)> CG_Utils_GameMessage{ 0x1401D7FC0 };
 	WEAK symbol<void(int localClientNum, const char* msg, int flags)> CG_Utils_BoldGameMessage{ 0x1401D7F10 };

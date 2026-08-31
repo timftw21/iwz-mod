@@ -25,6 +25,7 @@ post_load()
     }
 
     level.iwz_gns_arcade_selection = selection;
+    setdvar("iwz_gns_arcade_result", 0);
 
     // Stock uses this runtime state for all direct-challenge presentation:
     // character intro music, normal Scene announcements, and endgame splashes.
@@ -55,7 +56,7 @@ post_load()
     setnojiptime(1);
     setnojipscore(1);
 
-    arcade_log("launch armed: selection=" + selection + " game='" + get_arcade_game_name(selection) + "' map=" + level.script + " staging=afterlife");
+    arcade_log("launch armed: selection=" + selection + " game='" + get_arcade_game_name(selection) + "' map=" + level.script + " staging=afterlife resultDvar=0");
     arcade_log("direct challenge state activated post-load: previous=" + previous_direct_challenge_state + " bossTimerInitialized=" + level.bosstimer + " introMusicSuppressed=1 scenePresentationSuppressed=1 adjustWaveBoundaryReplaced=1 endgameBoundaryWrapped=1");
     level thread hold_normal_waves();
     level thread scripts\cp\zombies\direct_boss_fight::disable_things_in_afterlife_arcade();
@@ -191,7 +192,7 @@ get_arcade_game_name(selection)
 
 get_arcade_objective_text()
 {
-    return "DEFEAT THE SKULLS!";
+    return "DESTROY THE SKULLS BEFORE THEY ESCAPE!";
 }
 
 arcade_introscreen_text()
@@ -475,6 +476,7 @@ arcade_game_ended()
         winning_team = "allies";
     }
 
+    publish_arcade_result(won, "native-game-completion");
     arcade_log("native game completed: selection=" + level.iwz_gns_arcade_selection + " won=" + won + " failing=" + level.processing_ghost_wave_failing + " result=" + result + " routingThroughSharedEndgameBoundary=1");
 
     // Stock Ghosts N Skulls has now restored player state and shown its score
@@ -485,6 +487,9 @@ arcade_game_ended()
 
 arcade_endgame(winning_team, result)
 {
+    if (!getdvarint("iwz_gns_arcade_result", 0))
+        publish_arcade_result(result == level.end_game_string_index["win"], "level-endgame-callback");
+
     restore_arcade_endgame_state("level-endgame-callback", result);
     arcade_log("shared endgame callback continuing team=" + winning_team + " result=" + result);
     [[level.iwz_gns_stock_endgame_func]](winning_team, result);
@@ -495,7 +500,26 @@ arcade_adjust_wave_num(result)
     // Both dumps show this is the sole unconditional Boss Battle call in the
     // stock CP endgame. Restore the borrowed flag here even when an exit path
     // invoked cp_gamelogic::endgame without going through level.endgame.
+    if (!getdvarint("iwz_gns_arcade_result", 0))
+        publish_arcade_result(result == "all_escape", "stock-adjust-wave-boundary");
+
     restore_arcade_endgame_state("stock-adjust-wave-boundary", result);
+}
+
+publish_arcade_result(won, source)
+{
+    result_value = 2;
+    result_text = "THE SKULLS ESCAPED...";
+
+    if (won)
+    {
+        result_value = 1;
+        result_text = "YOU WIN!";
+    }
+
+    previous_value = getdvarint("iwz_gns_arcade_result", 0);
+    setdvar("iwz_gns_arcade_result", result_value);
+    arcade_log("post-game result published: source=" + source + " won=" + won + " previous=" + previous_value + " value=" + result_value + " text='" + result_text + "'");
 }
 
 restore_arcade_endgame_state(source, result)

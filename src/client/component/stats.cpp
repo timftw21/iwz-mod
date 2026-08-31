@@ -7,10 +7,14 @@
 #include "command.hpp"
 #include "console/console.hpp"
 #include "dvars.hpp"
+#include "fastfiles.hpp"
 #include "scheduler.hpp"
 
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
+
+#include <array>
+#include <list>
 
 namespace stats
 {
@@ -23,6 +27,142 @@ namespace stats
 		game::dvar_t* cg_loot_count = nullptr;
 		game::dvar_t* director_cut_dvar = nullptr;
 		game::dvar_t* cg_unlimited_cards = nullptr;
+
+		constexpr auto zombies_rank_table_name = "cp/zombies/rankTable.csv";
+		constexpr auto zombies_rank_count = 999;
+		constexpr auto rank_id_column = 0;
+		constexpr auto rank_min_xp_column = 2;
+		constexpr auto rank_next_xp_column = 3;
+		constexpr auto rank_max_xp_column = 7;
+
+		std::mutex zombies_rank_table_mutex;
+		std::list<std::string> zombies_rank_table_values;
+		std::unordered_set<const database::StringTable*> scaled_zombies_rank_tables;
+
+		bool parse_nonnegative_integer(const char* value, int& result)
+		{
+			if (value == nullptr || *value == '\0')
+			{
+				return false;
+			}
+
+			char* end = nullptr;
+			const auto parsed = std::strtol(value, &end, 10);
+			if (end == value || *end != '\0' || parsed < 0 || parsed > INT_MAX)
+			{
+				return false;
+			}
+
+			result = static_cast<int>(parsed);
+			return true;
+		}
+
+		int string_table_hash(const std::string_view value)
+		{
+			std::uint32_t hash = 0;
+			for (const auto character : value)
+			{
+				hash = hash * 31 + static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(character)));
+			}
+			return static_cast<int>(hash);
+		}
+
+		void assign_rank_table_integer(database::StringTable* table, const int row, const int column,
+			const std::int64_t value)
+		{
+			zombies_rank_table_values.emplace_back(std::to_string(value));
+			auto& cell = table->values[row * table->columnCount + column];
+			cell.string = zombies_rank_table_values.back().c_str();
+			cell.hash = string_table_hash(cell.string);
+		}
+
+		void reduce_zombies_rank_xp(database::StringTable* table)
+		{
+			if (table == nullptr || table->name == nullptr ||
+				(_stricmp(table->name, zombies_rank_table_name) != 0 &&
+					_stricmp(table->name, "cp\\zombies\\rankTable.csv") != 0))
+			{
+				return;
+			}
+
+			std::scoped_lock lock(zombies_rank_table_mutex);
+			if (scaled_zombies_rank_tables.contains(table))
+			{
+				console::debug("[IWZ][Progression] skipped already-scaled Zombies rank table asset=%p\n", table);
+				return;
+			}
+
+			if (table->values == nullptr || table->columnCount <= rank_max_xp_column)
+			{
+				console::error("[IWZ][Progression] could not scale Zombies rank table name='%s' rows=%d columns=%d values=%p\n",
+					table->name, table->rowCount, table->columnCount, table->values);
+				return;
+			}
+
+			std::array<int, zombies_rank_count> rows_by_rank;
+			std::array<int, zombies_rank_count> original_xp_to_next;
+			std::array<int, zombies_rank_count> reduced_xp_to_next;
+			rows_by_rank.fill(-1);
+
+			int found_ranks = 0;
+			for (auto row = 0; row < table->rowCount; ++row)
+			{
+				int rank = 0;
+				const auto* rank_value = table->values[row * table->columnCount + rank_id_column].string;
+				if (!parse_nonnegative_integer(rank_value, rank) || rank >= zombies_rank_count)
+				{
+					continue;
+				}
+
+				if (rows_by_rank[rank] != -1)
+				{
+					console::error("[IWZ][Progression] could not scale Zombies rank table duplicateRank=%d firstRow=%d duplicateRow=%d\n",
+						rank, rows_by_rank[rank], row);
+					return;
+				}
+
+				int xp_to_next = 0;
+				const auto* xp_value = table->values[row * table->columnCount + rank_next_xp_column].string;
+				if (!parse_nonnegative_integer(xp_value, xp_to_next) || xp_to_next == 0)
+				{
+					console::error("[IWZ][Progression] could not scale Zombies rank table rank=%d row=%d xpToNext='%s'\n",
+						rank, row, xp_value ? xp_value : "<null>");
+					return;
+				}
+
+				rows_by_rank[rank] = row;
+				original_xp_to_next[rank] = xp_to_next;
+				reduced_xp_to_next[rank] = static_cast<int>((static_cast<std::int64_t>(xp_to_next) * 9 + 5) / 10);
+				++found_ranks;
+			}
+
+			if (found_ranks != zombies_rank_count ||
+				std::ranges::any_of(rows_by_rank, [](const int row) { return row < 0; }))
+			{
+				console::error("[IWZ][Progression] could not scale Zombies rank table expectedRanks=%d foundRanks=%d rows=%d\n",
+					zombies_rank_count, found_ranks, table->rowCount);
+				return;
+			}
+
+			std::int64_t original_total = 0;
+			std::int64_t reduced_total = 0;
+			for (auto rank = 0; rank < zombies_rank_count; ++rank)
+			{
+				const auto row = rows_by_rank[rank];
+				const auto minimum_xp = reduced_total;
+				original_total += original_xp_to_next[rank];
+				reduced_total += reduced_xp_to_next[rank];
+
+				assign_rank_table_integer(table, row, rank_min_xp_column, minimum_xp);
+				assign_rank_table_integer(table, row, rank_next_xp_column, reduced_xp_to_next[rank]);
+				assign_rank_table_integer(table, row, rank_max_xp_column, reduced_total);
+			}
+
+			scaled_zombies_rank_tables.emplace(table);
+			console::info("[IWZ][Progression] reduced Zombies level XP by 10 percent ranks=1-%d rounding=nearest originalTotal=%lld reducedTotal=%lld level1=%d->%d level999=%d->%d\n",
+				zombies_rank_count, original_total, reduced_total, original_xp_to_next.front(), reduced_xp_to_next.front(),
+				original_xp_to_next.back(), reduced_xp_to_next.back());
+		}
 
 		bool is_item_unlocked_stub(__int64 a1, int a2, const char* unlock_table, unsigned __int8* value)
 		{
@@ -333,6 +473,10 @@ namespace stats
 	public:
 		void post_unpack() override
 		{
+			fastfiles::on_string_table_loaded(reduce_zombies_rank_xp);
+			console::info("[IWZ][Progression] registered Zombies rank-table XP reduction table='%s' ranks=1-%d percent=10 rounding=nearest\n",
+				zombies_rank_table_name, zombies_rank_count);
+
 			if (!game::environment::is_dedi())
 			{
 				command::add("unlockstats", unlock_stats);

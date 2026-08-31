@@ -4,6 +4,105 @@ end
 
 print("[IWZ][ZombiesHUD] shared HUD fixes loading")
 
+local inGameTimerState = {
+	startedAt = nil,
+	pausedAt = nil,
+	pausedMilliseconds = 0
+}
+
+local function getElapsedMatchMilliseconds()
+	if not game or not game.getmonotonicmilliseconds then
+		return nil
+	end
+
+	local now = game:getmonotonicmilliseconds()
+	if inGameTimerState.startedAt == nil then
+		if Game.GetOmnvar("ui_session_state") ~= "playing" then
+			return nil
+		end
+
+		inGameTimerState.startedAt = now
+		print("[IWZ][InGameTimer] elapsed clock started sessionState=playing")
+	end
+
+	if Engine.IsLocalServerPaused() then
+		if inGameTimerState.pausedAt == nil then
+			inGameTimerState.pausedAt = now
+		end
+	elseif inGameTimerState.pausedAt ~= nil then
+		inGameTimerState.pausedMilliseconds = inGameTimerState.pausedMilliseconds +
+			(now - inGameTimerState.pausedAt)
+		inGameTimerState.pausedAt = nil
+	end
+
+	local effectiveNow = inGameTimerState.pausedAt or now
+	return math.max(0, effectiveNow - inGameTimerState.startedAt -
+		inGameTimerState.pausedMilliseconds)
+end
+
+local function formatBossTimerMilliseconds(milliseconds)
+	local hours = math.floor(milliseconds / 3600000 % 24)
+	local minutes = math.floor(milliseconds / 60000 % 60)
+	local seconds = math.floor(milliseconds / 1000 % 60)
+
+	if hours > 0 then
+		return Engine.Localize("DIRECT_BOSS_FIGHT_HOURS",
+			string.format("%.2d", hours), string.format("%.2d", minutes),
+			string.format("%.2d", seconds))
+	end
+
+	return Engine.Localize("DIRECT_BOSS_FIGHT_MINUTES",
+		string.format("%.2d", minutes), string.format("%.2d", seconds))
+end
+
+local function getBossTimerContainer(hud)
+	local wrapper = hud and hud.bossTimer
+	return wrapper and wrapper._widget
+end
+
+local function refreshInGameTimer(hud, hudClassName)
+	local elapsedMilliseconds = getElapsedMatchMilliseconds()
+	local container = getBossTimerContainer(hud)
+	local bossTimer = container and container.BossTimer
+	local timerText = bossTimer and bossTimer.Timer
+
+	if elapsedMilliseconds == nil or timerText == nil then
+		return
+	end
+
+	local bossSplash = Game.GetOmnvar("zm_boss_splash") or 0
+	if bossSplash == 2 or bossSplash == 3 then
+		-- Boss Battle and its pre-fight countdown own this stock widget and the
+		-- zm_boss_timer-backed text while their authored sequences are active.
+		hud.iwzInGameTimerVisible = false
+		return
+	end
+
+	local enabled = Engine.GetDvarBool("iwz_in_game_timer")
+	if not enabled or bossSplash > 0 then
+		if hud.iwzInGameTimerVisible then
+			ACTIONS.AnimateSequence(container, "hide")
+			hud.iwzInGameTimerVisible = false
+			print("[IWZ][InGameTimer] hidden class=" .. hudClassName ..
+				" enabled=" .. tostring(enabled) .. " bossSplash=" .. tostring(bossSplash))
+		end
+		return
+	end
+
+	if not hud.iwzInGameTimerVisible then
+		ACTIONS.AnimateSequence(container, "bossBattle")
+		hud.iwzInGameTimerVisible = true
+		print("[IWZ][InGameTimer] shown class=" .. hudClassName ..
+			" source=BossTimerContainer pauseAware=1")
+	end
+
+	local elapsedSecond = math.floor(elapsedMilliseconds / 1000)
+	if hud.iwzInGameTimerLastSecond ~= elapsedSecond then
+		hud.iwzInGameTimerLastSecond = elapsedSecond
+		timerText:setText(formatBossTimerMilliseconds(elapsedMilliseconds), 0)
+	end
+end
+
 local zombiesHudClasses = {
 	{name = "ZMHUD", class = LUI.ZMHUD},
 	{name = "ZMHUDDLC1", class = LUI.ZMHUDDLC1},
@@ -28,12 +127,71 @@ for _, hudEntry in ipairs(zombiesHudClasses) do
 				return {}, true
 			end
 
-			return stockGetToggleWidgets(self)
+			local widgets, showListedWidgets, animations = stockGetToggleWidgets(self)
+			local scoreboardLayer = LUI.ScoreboardLayer:GetInstance()
+			local inventoryShowing = scoreboardLayer:IsShowingScoreboard()
+
+			if inventoryShowing and self.papTimer ~= nil then
+				-- Zombies inventories are owned by ScoreboardLayer, not FlowManager. The
+				-- stock scoreboard branch hides every HUD widget except its damage widgets.
+				-- Keep the in-world PaP display's wrapper in that branch's visible list.
+				widgets[#widgets + 1] = self.papTimer
+
+				if not self.iwzPapTimerInventoryExempted then
+					self.iwzPapTimerInventoryExempted = true
+					print("[IWZ][PaPTimer] preserving in-world display during inventory" ..
+						" class=" .. hudClassName ..
+						" timer=" .. tostring(Game.GetOmnvar("zombie_papTimer")))
+				end
+			elseif self.iwzPapTimerInventoryExempted then
+				print("[IWZ][PaPTimer] inventory exemption cleared class=" .. hudClassName ..
+					" timer=" .. tostring(Game.GetOmnvar("zombie_papTimer")))
+				self.iwzPapTimerInventoryExempted = false
+			end
+
+			return widgets, showListedWidgets, animations
 		end
 
 		if stockInit then
 			hudClass.init = function(self, controllerIndex)
 				stockInit(self, controllerIndex)
+
+				local clockAvailable = game and game.getmonotonicmilliseconds ~= nil
+				local bossTimerContainer = getBossTimerContainer(self)
+				local timerText = bossTimerContainer and bossTimerContainer.BossTimer and
+					bossTimerContainer.BossTimer.Timer
+
+				if clockAvailable and timerText then
+					self.iwzInGameTimerVisible = false
+					self.iwzInGameTimerLastSecond = -1
+					self:addEventHandler("iwz_in_game_timer_tick", function(element)
+						refreshInGameTimer(element, hudClassName)
+					end)
+					self:addEventHandler("iwz_in_game_timer_changed", function(element)
+						refreshInGameTimer(element, hudClassName)
+					end)
+
+					local timer = LUI.UITimer.new(nil, {
+						interval = 250,
+						event = "iwz_in_game_timer_tick",
+						disposable = false,
+						broadcastToRoot = false,
+						stopped = false,
+						controllerIndex = controllerIndex
+					})
+					self:addElement(timer)
+					self.iwzInGameTimerTicker = timer
+					print("[IWZ][InGameTimer] installed class=" .. hudClassName ..
+						" source=bossTimer._widget.BossTimer.Timer")
+					refreshInGameTimer(self, hudClassName)
+				else
+					print("[IWZ][InGameTimer] install skipped class=" .. hudClassName ..
+						" clockAvailable=" .. tostring(clockAvailable) ..
+						" wrapperAvailable=" .. tostring(self.bossTimer ~= nil) ..
+						" widgetAvailable=" .. tostring(bossTimerContainer ~= nil) ..
+						" timerTextAvailable=" .. tostring(timerText ~= nil))
+				end
+
 				self:addEventHandler("iwz_hud_mode_changed", function(element)
 					LUI.HUD.UpdateWidgetsVisibility(element)
 					print("[IWZ][HUD] refreshed Zombies HUD widgets class=" .. hudClassName ..
@@ -159,10 +317,10 @@ else
 			if sceneNumber ~= nil then
 				local numericSceneNumber = tonumber(sceneNumber) or 0
 
-				-- The stock spawning script intentionally omits mus_zombies_newwave
-				-- for internal wave zero (displayed as Scene 1). Own that one missing
-				-- cue at the authoritative presentation callback so its audible start
-				-- is aligned with the clapboard and cannot overlap a second GSC call.
+				-- Beast's custom spawner delays the internal-wave-one cue by ten
+				-- seconds. Own Scene 1 at the authoritative presentation callback so
+				-- it is aligned with the clapboard, then suppress that delayed replay;
+				-- the same stock helper owns Scene 2 onward without a delay.
 				if numericSceneNumber == 1 and CONDITIONS.IsDLC4(self) and
 					not beastSceneOneTransitionPlayed then
 					beastSceneOneTransitionPlayed = true

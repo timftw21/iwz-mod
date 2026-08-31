@@ -16,6 +16,29 @@ main()
     replacefunc(scripts\cp\zombies\zombie_arcade_games::_id_211A,
         ::activision_cabinet_reward_timer_stub);
     spaceland_log("installed arcade targeting hooks paths=weapon-save,award-type sourceHandoff=1 cabinetTickets=disabled");
+
+    if (getdvar("ui_mapname") == "cp_zmb")
+    {
+        seticom_damage_monitor = getfunction(
+            "scripts/cp/maps/cp_zmb/cp_zmb_dj", "damage_monitor");
+        seticom_unlock_monitor = getfunction(
+            "scripts/cp/maps/cp_zmb/cp_zmb_dj",
+            "removelockedonflagonspeakerdeath");
+        seticom_failure = getfunction(
+            "scripts/cp/maps/cp_zmb/cp_zmb_dj", "defense_sequence_fail");
+        if (isdefined(seticom_damage_monitor) &&
+            isdefined(seticom_unlock_monitor) && isdefined(seticom_failure))
+        {
+            level.iwz_seticom_unlock_monitor = seticom_unlock_monitor;
+            level.iwz_seticom_failure = seticom_failure;
+            replacefunc(seticom_damage_monitor, ::seticom_damage_monitor_stub);
+            spaceland_log("installed Seti-Com durability hook stockHits=10 hits=15 hudDenominator=15");
+        }
+        else
+        {
+            spaceland_log("Seti-Com durability hook unavailable: required cp_zmb_dj function lookup failed");
+        }
+    }
 }
 
 post_load()
@@ -32,6 +55,79 @@ post_load()
 spaceland_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("Spaceland", message);
+}
+
+seticom_damage_monitor_stub(seticom, damage_clip)
+{
+    level endon("speaker_defense_completed");
+    level endon("destroy_speaker");
+    seticom endon("death");
+
+    // cp_zmb_dj::set_up_and_start_speaker starts the damage thread before it
+    // assigns the stock 10-hit counter. Yield once so the parent setup finishes,
+    // then replace that authoritative counter rather than entity engine health.
+    scripts\engine\utility::waitframe();
+    seticom.hit_point_left = 15;
+    damage_clip setcandamage(1);
+    damage_clip.health = 9999999;
+    seticom.nextdamagetime = 0;
+    spaceland_log("Seti-Com defense started ent=" +
+        seticom getentitynumber() + " hits=15 stockHits=10");
+
+    for (;;)
+    {
+        damage_clip waittill("damage", damage, attacker);
+        if (isdefined(attacker) && isdefined(attacker.team) &&
+            attacker.team == "allies")
+        {
+            continue;
+        }
+
+        if (!attacker scripts\cp\utility::is_zombie_agent())
+            continue;
+
+        if (!isdefined(attacker.agent_type) ||
+            attacker.agent_type != "zombie_brute")
+        {
+            if (!isdefined(attacker.attackent))
+            {
+                attacker.attackent = damage_clip;
+                attacker thread [[level.iwz_seticom_unlock_monitor]](
+                    attacker, seticom);
+            }
+        }
+
+        playfx(level._effect["vfx_zb_thu_sparks"],
+            seticom.origin + (0, 0, 32));
+        attacker notify("speaker_attacked");
+        foreach (player in level.players)
+        {
+            player thread scripts\cp\cp_vo::try_to_play_vo(
+                "quest_ufo_defend_speakers", "zmb_comment_vo");
+        }
+
+        current_time = gettime();
+        if (current_time >= seticom.nextdamagetime)
+        {
+            seticom.nextdamagetime = current_time + 1000;
+            seticom.hit_point_left--;
+        }
+
+        if (seticom.hit_point_left <= 0)
+            break;
+
+        update_seticom_health_hud(seticom);
+    }
+
+    spaceland_log("Seti-Com defense failed ent=" +
+        seticom getentitynumber() + " hitsRemaining=0");
+    [[level.iwz_seticom_failure]](seticom);
+}
+
+update_seticom_health_hud(seticom)
+{
+    health_fraction = seticom.hit_point_left / 15;
+    setomnvar("zm_speaker_defense_health", health_fraction);
 }
 
 tune_alien_kill_xp()
@@ -143,6 +239,24 @@ install_double_pap_persistence()
         !isdefined(level.num_fuse_in_possession))
     {
         scripts\engine\utility::waitframe();
+    }
+
+    if (getdvarint("iwz_survival_mode", 0))
+    {
+        pap_machine = getent("pap_machine", "targetname");
+        while (!isdefined(pap_machine))
+        {
+            scripts\engine\utility::waitframe();
+            pap_machine = getent("pap_machine", "targetname");
+        }
+
+        scripts\engine\utility::flag_set("fuses_inserted");
+        previous_pap_max = level.pap_max;
+        level.pap_max = 3;
+        level thread show_inserted_alien_fuses();
+        spaceland_log("double PaP forced survival=1 persistentWrite=0 papMax=" +
+            int(previous_pap_max) + "->3 visual=alien-fuses-inserted");
+        return;
     }
 
     if (getdvarint("iwz_spaceland_double_pap_unlocked", 0))

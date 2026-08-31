@@ -132,6 +132,12 @@ local function buildDvarToggleButton(controllerIndex, id, title, description, dv
 				})
 				print("[IWZ][HUD] option changed enabled=" .. tostring(enabled) ..
 					" mode=" .. (enabled and "standard" or "no_hud"))
+			elseif dvar == "iwz_in_game_timer" then
+				button:dispatchEventToRoot({
+					name = "iwz_in_game_timer_changed",
+					enabled = enabled
+				})
+				print("[IWZ][InGameTimer] option changed enabled=" .. tostring(enabled))
 			elseif dvar == "cg_thirdPerson" then
 				print("[IWZ][Camera] option changed thirdPerson=" .. tostring(enabled) ..
 					" perspective=" .. (enabled and "third-person" or "first-person"))
@@ -414,6 +420,13 @@ local function buildZombiesOptions(_, controllerIndex)
 			"Choose between the standard in-game Zombies HUD and no HUD.",
 			"iwz_zombies_hud",
 			hudModeLabels
+		),
+		buildDvarToggleButton(
+			controllerIndex,
+			"InGameTimer",
+			"IN-GAME TIMER",
+			"Show an elapsed match timer using the Zombies Boss Battle HUD display.",
+			"iwz_in_game_timer"
 		)
 	}
 end

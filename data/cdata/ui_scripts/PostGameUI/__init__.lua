@@ -10,6 +10,8 @@ if MenuBuilder.m_types["BroShotZomScreen"] == nil then
 end
 
 local originalBroShotZomScreen = MenuBuilder.m_types["BroShotZomScreen"]
+local GNS_ARCADE_DVAR = "iwz_gns_arcade"
+local GNS_ARCADE_RESULT_DVAR = "iwz_gns_arcade_result"
 
 if not originalBroShotZomScreen then
 	print("[IWZ][PostGameUI] scene label fix skipped: BroShotZomScreen type is unavailable")
@@ -59,12 +61,84 @@ local function stripLocalizationMarkers(text)
 	return string.gsub(tostring(text), "[\30\31]", "")
 end
 
+local function applyGhostsNSkullsArcadeResult(self, controllerIndex)
+	if not Engine.GetDvarBool(GNS_ARCADE_DVAR) then
+		return false
+	end
+
+	local result = Engine.GetDvarInt(GNS_ARCADE_RESULT_DVAR)
+	if result ~= 1 and result ~= 2 then
+		print(
+			"[IWZ][PostGameUI] Ghosts N Skulls Arcade result unavailable controller="
+				.. tostring(controllerIndex) .. " value=" .. tostring(result)
+		)
+		return false
+	end
+
+	local requiredElements = {
+		"Title",
+		"TimeSurvived",
+		"MatchEnded",
+		"YouWon",
+		"YouFailed"
+	}
+	for _, elementName in ipairs(requiredElements) do
+		if self[elementName] == nil then
+			print(
+				"[IWZ][PostGameUI] Ghosts N Skulls Arcade result skipped controller="
+					.. tostring(controllerIndex) .. " missingElement=" .. elementName
+			)
+			return false
+		end
+	end
+
+	self.Title:SetAlpha(0, 0)
+	self.TimeSurvived:SetAlpha(0, 0)
+	self.MatchEnded:SetAlpha(0, 0)
+	self.YouWon:SetAlpha(0, 0)
+	self.YouFailed:SetAlpha(0, 0)
+
+	-- These are normally hidden when no Boss Battle result splash is active.
+	-- Keep them hidden explicitly because Arcade mode has no boss description
+	-- or boss timer to present beneath its outcome.
+	if self.BossTimer then
+		self.BossTimer:SetAlpha(0, 0)
+	end
+	if self.bossDescText then
+		self.bossDescText:SetAlpha(0, 0)
+	end
+
+	local resultText
+	if result == 1 then
+		resultText = "YOU WIN!"
+		self.YouWon:setText(resultText, 0)
+		self.YouWon:SetAlpha(1, 0)
+	else
+		resultText = "THE SKULLS ESCAPED..."
+		self.YouFailed:setText(resultText, 0)
+		self.YouFailed:SetAlpha(1, 0)
+	end
+
+	print(
+		"[IWZ][PostGameUI] Ghosts N Skulls Arcade result applied controller="
+			.. tostring(controllerIndex) .. " value=" .. tostring(result)
+			.. " text=\"" .. resultText .. "\""
+			.. " hidden=MatchEnded,Title,TimeSurvived,BossTimer,BossDescription"
+	)
+	return true
+end
+
 MenuBuilder.m_types["BroShotZomScreen"] = function(menu, controller)
 	local self = originalBroShotZomScreen(menu, controller)
 	local controllerIndex = controller and controller.controllerIndex
 	if not controllerIndex and not Engine.InFrontend() then
 		controllerIndex = self:getRootController()
 	end
+
+	if applyGhostsNSkullsArcadeResult(self, controllerIndex) then
+		return self
+	end
+
 	local waveNumber = DataSources.inGame.CP.zombies.waveNumber
 	local lastLoggedScene = nil
 

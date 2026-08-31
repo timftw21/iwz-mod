@@ -24,15 +24,10 @@ if MenuBuilder.m_types["CPCombatRecordCardsListMenu"] == nil then
 	require("frontEnd.cp.CPCombatRecordCardsListMenu")
 end
 
-if MenuBuilder.m_types["FilterPopup"] == nil then
-	require("frontEnd.CommonPopups")
-end
-
 local originalMapListMenu = MenuBuilder.m_types["CPCombatRecordMapListMenu"]
 local originalMapValueButton = MenuBuilder.m_types["CPCombatRecordMapValueButton"]
 local originalWeaponListMenu = MenuBuilder.m_types["CPCombatRecordWeaponListMenu"]
 local originalCardsListMenu = MenuBuilder.m_types["CPCombatRecordCardsListMenu"]
-local originalFilterPopup = MenuBuilder.m_types["FilterPopup"]
 
 local loggedHelperBarFix = false
 local loggedMissingHelperBar = false
@@ -41,11 +36,9 @@ local loggedFilmRowFix = false
 local loggedMissingFilmRow = false
 local loggedMissingBossTime = false
 local loggedFilmStencilFix = false
-local loggedFilterArrowFix = false
-local loggedMissingFilterArrows = false
+local loggedWeaponStencilFix = false
+local loggedCardsStencilFix = false
 local loggedWeaponDescriptionSpacing = false
-
-local WHITE = 16777215
 
 local function normalizeWeaponDescription(description, source, weaponRef)
 	if type(description) ~= "string" or description == "" then
@@ -129,32 +122,6 @@ if LOADOUT and LOADOUT.MakeBaseWeaponsListDataSource and
 else
 	print("[IWZ][CombatRecordFixes] base weapon list spacing install skipped" ..
 		" reason=LOADOUT.MakeBaseWeaponsListDataSource-unavailable-or-installed")
-end
-
-local function findDescendantByID(element, id)
-	local child = element and element:getFirstChild()
-	while child do
-		if child.id == id then
-			return child
-		end
-
-		local descendant = findDescendantByID(child, id)
-		if descendant then
-			return descendant
-		end
-
-		child = child:getNextSibling()
-	end
-
-	return nil
-end
-
-local function forceArrowImageWhite(image)
-	local setRGBFromInt = image.SetRGBFromInt
-	image.SetRGBFromInt = function(element, _, duration)
-		return setRGBFromInt(element, WHITE, duration)
-	end
-	image:SetRGBFromInt(WHITE, 0)
 end
 
 local COMBAT_RECORD_MODEL_PATH = ZombiesUtils.CombatRecordMenuModelPath
@@ -283,39 +250,6 @@ local function buildAllCardsDataSource(controllerIndex)
 	return source
 end
 
-if originalFilterPopup then
-	MenuBuilder.m_types["FilterPopup"] = function(menu, controller)
-		local self = originalFilterPopup(menu, controller)
-
-		if Engine.IsAliensMode() then
-			local typeButton = findDescendantByID(self, "TypeButton")
-			local leftImage = typeButton and typeButton.ArrowLeft and
-				typeButton.ArrowLeft.Image
-			local rightImage = typeButton and typeButton.ArrowRight and
-				typeButton.ArrowRight.Image
-
-			if leftImage and rightImage then
-				-- MenuLeftArrow/MenuRightArrow animate back to black on every input.
-				-- Pin these popup-local instances to the white list-arrow color.
-				forceArrowImageWhite(leftImage)
-				forceArrowImageWhite(rightImage)
-
-				if not loggedFilterArrowFix then
-					print("[IWZ][CombatRecordFixes] pinned filter option arrows to white")
-					loggedFilterArrowFix = true
-				end
-			elseif not loggedMissingFilterArrows then
-				print("[IWZ][CombatRecordFixes] filter option arrow images unavailable during popup construction")
-				loggedMissingFilterArrows = true
-			end
-		end
-
-		return self
-	end
-else
-	print("[IWZ][CombatRecordFixes] Filter popup unavailable; arrow color patch not installed")
-end
-
 if originalMapValueButton then
 	MenuBuilder.m_types["CPCombatRecordMapValueButton"] = function(menu, controller)
 		local self = originalMapValueButton(menu, controller)
@@ -430,6 +364,15 @@ if originalWeaponListMenu then
 		local controllerIndex = controller and controller.controllerIndex or self:getRootController()
 
 		if self.WeaponGrid then
+			-- GenericDualLabelButton expands CPBlood from a 16px seed to 175x175,
+			-- centered on a 30px row. The stock grid stencil clips that authored
+			-- hover animation at its left, top and bottom bounds.
+			self.WeaponGrid:setUseStencil(false)
+			if not loggedWeaponStencilFix then
+				print("[IWZ][CombatRecordFixes] disabled Weapons grid stencil so 175px blood hover art is not clipped")
+				loggedWeaponStencilFix = true
+			end
+
 			installDescendingGridSort(self.WeaponGrid, controllerIndex, "kills", "Weapons")
 			self.WeaponGrid:SetGridDataSource(buildAllWeaponsDataSource(controllerIndex),
 				controllerIndex)
@@ -449,6 +392,12 @@ if originalCardsListMenu then
 		local controllerIndex = controller and controller.controllerIndex or self:getRootController()
 
 		if self.cardGrid then
+			self.cardGrid:setUseStencil(false)
+			if not loggedCardsStencilFix then
+				print("[IWZ][CombatRecordFixes] disabled Fate & Fortune grid stencil so 175px blood hover art is not clipped")
+				loggedCardsStencilFix = true
+			end
+
 			installDescendingGridSort(self.cardGrid, controllerIndex, "timesUsed", "Fate & Fortune cards")
 			self.cardGrid:SetGridDataSource(buildAllCardsDataSource(controllerIndex),
 				controllerIndex)

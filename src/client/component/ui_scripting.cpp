@@ -288,6 +288,12 @@ namespace ui_scripting
 				return focus_audio::is_client_focused();
 			};
 
+			game_type["getmonotonicmilliseconds"] = [](const game&)
+			{
+				return static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now().time_since_epoch()).count());
+			};
+
 			auto custom_music_table = table();
 			lua["custommusic"] = custom_music_table;
 

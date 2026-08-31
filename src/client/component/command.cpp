@@ -480,6 +480,149 @@ namespace command
 			}
 		}
 
+		struct soul_key_map_definition
+		{
+			const char* map;
+			const char* film;
+			int key_index;
+			std::array<const char*, 3> model_candidates;
+		};
+
+		constexpr std::array soul_key_maps
+		{
+			soul_key_map_definition{"cp_zmb", "Zombies in Spaceland", 1,
+				{"zmb_soul_key_base", "zmb_soul_key_single", "tag_origin_soul_key"}},
+			soul_key_map_definition{"cp_rave", "Rave in the Redwoods", 2,
+				{"zmb_soul_key_single", "zmb_soul_key_base", "tag_origin_soul_key"}},
+			soul_key_map_definition{"cp_disco", "Shaolin Shuffle", 3,
+				{"tag_origin_soul_key", "zmb_soul_key_single", "zmb_soul_key_base"}},
+			soul_key_map_definition{"cp_town", "Attack of the Radioactive Thing", 4,
+				{"zmb_soul_key_single", "zmb_soul_key_base", "tag_origin_soul_key"}},
+			soul_key_map_definition{"cp_final", "The Beast from Beyond", 5,
+				{"zmb_soul_key_single", "zmb_soul_key_base", "tag_origin_soul_key"}},
+		};
+
+		const soul_key_map_definition* find_soul_key_map(const char* map)
+		{
+			if (!map)
+			{
+				return nullptr;
+			}
+
+			for (const auto& definition : soul_key_maps)
+			{
+				if (_stricmp(map, definition.map) == 0)
+				{
+					return &definition;
+				}
+			}
+
+			return nullptr;
+		}
+
+		void cmd_spawn_soul_key(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][SoulKey] spawnSoulKey rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			const auto* mapname = game::Dvar_FindVar("ui_mapname");
+			const auto* const definition = find_soul_key_map(
+				mapname && mapname->current.string ? mapname->current.string : nullptr);
+			if (!definition)
+			{
+				console::warn("[IWZ][SoulKey] spawnSoulKey rejected client=%d map=%s reason=unsupported film\n",
+					client_num, mapname && mapname->current.string ? mapname->current.string : "<unavailable>");
+				game::shared::client_println(client_num, "This Zombies map does not have a film Soul Key");
+				return;
+			}
+
+			const auto base_exists = game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, "zmb_soul_key_base");
+			const auto single_exists = game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, "zmb_soul_key_single");
+			const auto tag_exists = game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, "tag_origin_soul_key");
+			const char* model = nullptr;
+			const game::XModel* soul_key_model = nullptr;
+			for (const auto* const candidate : definition->model_candidates)
+			{
+				if (game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, candidate))
+				{
+					model = candidate;
+					soul_key_model = game::DB_FindXAssetHeader(
+						game::ASSET_TYPE_XMODEL, candidate, false).model;
+					break;
+				}
+			}
+
+			if (!model || !soul_key_model)
+			{
+				console::error("[IWZ][SoulKey] spawnSoulKey rejected client=%d map=%s key=%d reason=no loaded Soul Key model models={base:%d,single:%d,tag:%d}\n",
+					client_num, definition->map, definition->key_index, base_exists, single_exists, tag_exists);
+				game::shared::client_println(client_num, "The film's Soul Key model is not loaded");
+				return;
+			}
+
+			const auto bounds_mid_z = soul_key_model->bounds.midPoint[2];
+			const auto bounds_half_z = soul_key_model->bounds.halfSize[2];
+			if (!std::isfinite(bounds_mid_z) || !std::isfinite(bounds_half_z) || bounds_half_z < 0.0f)
+			{
+				console::error("[IWZ][SoulKey] spawnSoulKey rejected client=%d map=%s key=%d model=%s reason=invalid model bounds midZ=%g halfZ=%g\n",
+					client_num, definition->map, definition->key_index, model, bounds_mid_z, bounds_half_z);
+				game::shared::client_println(client_num, "The film's Soul Key model has invalid bounds");
+				return;
+			}
+
+			const auto bounds_min_z = bounds_mid_z - bounds_half_z;
+			const auto vertical_lift = std::max(0.0f, -bounds_min_z) + 6.0f;
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_spawn_soul_key",
+					{player, definition->key_index, model, vertical_lift});
+				console::info("[IWZ][SoulKey] spawnSoulKey dispatched client=%d playerEnt=%d levelEnt=%u map=%s film='%s' key=%d model=%s modelBounds={midZ:%g,halfZ:%g,minZ:%g} verticalLift=%g models={base:%d,single:%d,tag:%d}\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId, definition->map,
+					definition->film, definition->key_index, model, bounds_mid_z, bounds_half_z, bounds_min_z,
+					vertical_lift, base_exists, single_exists, tag_exists);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][SoulKey] spawnSoulKey dispatch failed client=%d map=%s key=%d error=%s\n",
+					client_num, definition->map, definition->key_index, e.what());
+				game::shared::client_println(client_num, "Unable to spawn the film's Soul Key");
+			}
+		}
+
+		void cmd_spawn_infinite_grenades(const int client_num)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				console::warn("[IWZ][Powerups] spawnInfiniteGrenades rejected client=%d reason=not in Zombies\n",
+					client_num);
+				game::shared::client_println(client_num, "This command is only available in Zombies");
+				return;
+			}
+
+			try
+			{
+				const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_spawn_infinite_grenade_powerup", {player});
+				console::info("[IWZ][Powerups] spawnInfiniteGrenades dispatched client=%d playerEnt=%d levelEnt=%u\n",
+					client_num, player.get_entity_reference().entnum, *game::levelEntityId);
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][Powerups] spawnInfiniteGrenades dispatch failed client=%d error=%s\n",
+					client_num, e.what());
+				game::shared::client_println(client_num, "Unable to spawn Infinite Grenades powerup");
+			}
+		}
+
 		void cmd_give_petn(const int client_num)
 		{
 			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
@@ -619,6 +762,7 @@ namespace command
 				game::shared::client_println(client_num, "Unable to spawn the Phantom floppy disk");
 			}
 		}
+
 	}
 
 	params::params()
@@ -766,6 +910,10 @@ namespace command
 				"Internal migration revision for the Zombies powerup drop interval");
 			game::Dvar_RegisterBool("iwz_spaceland_double_pap_unlocked", false, game::DVAR_FLAG_SAVED,
 				"Whether inserting Spaceland's Alien fuses has permanently unlocked double Pack-a-Punch");
+			game::Dvar_RegisterBool("iwz_survival_mode", false, game::DVAR_FLAG_NONE,
+				"Whether the current Zombies private match is an IWZ Survival map");
+			game::Dvar_RegisterBool("iwz_survival_browse", false, game::DVAR_FLAG_NONE,
+				"Whether the Zombies film browser was opened from the Survival option");
 			game::Dvar_RegisterInt("iwz_powerup_weight_infinite_grenades", 4, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Infinite Grenades powerup (stock is 5)");
 			game::Dvar_RegisterInt("iwz_powerup_weight_carpenter", 4, 1, 100, game::DVAR_FLAG_SAVED,
@@ -959,6 +1107,16 @@ namespace command
 				cmd_spawn_clown(client_num);
 			});
 
+			add_sv("spawnInfiniteGrenades", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_spawn_infinite_grenades(client_num);
+			});
+
 			add_sv("paproom", [](const int client_num, const params_sv&)
 			{
 				if (!game::shared::cheats_ok(client_num, true))
@@ -1057,6 +1215,16 @@ namespace command
 				}
 
 				cmd_spawn_alien_fuses(client_num);
+			});
+
+			add_sv("spawnSoulKey", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+
+				cmd_spawn_soul_key(client_num);
 			});
 
 			add_sv("scene", [](const int client_num, const params_sv& params)
