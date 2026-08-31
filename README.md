@@ -56,7 +56,7 @@ Zombies in Spaceland
  - Zombies now ignore the player while playing arcade games
 
 Rave in the Redwoods
- - Boat speed to PaP island is now less than 15 seconds long (you're welcome)
+ - Boat speed to PaP island is now much faster (you're welcome)
  - Removed perk penalty from failing EE steps
  - Other miscellaneous tweaks and fixes
 
