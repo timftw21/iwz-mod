@@ -8,9 +8,67 @@
 
 # IWZ-MOD
 
-IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, restored and expanded map behavior, HUD and menu improvements, custom lobby music, progression options, and quality-of-life features such as first-/third-person camera selection.
+IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
 IWZ-MOD 0.5 adds Arcade Attack survival mode, expands Zombies progression and HUD options, improves third-person aiming and map interactions, and fixes inventory, records, localization, power-up, and Pack-a-Punch presentation issues. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+
+# IWZ-MOD To-Do
+ - Fate and Fortune machine still needs to be implemented into survival maps
+ - Certain fixes are only partially implemented (alien fuse interaction on Attack, gun laser behavior, etc.)
+ - Allow custom music to be queued by the DJ in Zombies in Spaceland
+ - Certain tweaks to how custom music behaves in the pre-game lobby
+ - Certain vanilla hintstrings should be tweaked
+ - Option to bypass map intro cinematics
+ - The next survival map, "Island Panic!" (gotta think of an alliteration💀)
+
+# IWZ-MOD Changes
+
+General
+ - Removed most IW7-MOD branding
+ - Tweaks that improve performance on modern hardware
+ - Added client options, such as player name, name color, skipping intro cinematics, pause on focus lost, mute on focus lost, and XP rate
+ - Added zombies-specific options, such as camera perspective options, HUD options, and an in-game timer for all modes
+ - A variety of fixes and tweaks to the Zombies' menus
+ - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; first survival map is "Arcade Attack!"
+ - Ghosts 'N Skulls Arcade: select Ghosts 'N Skulls games without completing their tedious in-game steps
+ - CAST button allows the player to choose their character
+ - Power-ups now spawn more frequently (will probably require some more adjustments)
+ - Levels 1-999 now take 10% less XP
+ - Sprinting zombies are now slightly slower
+ - Interactions with traversing zombies do not push the player like a fucking bouncy ball anymore
+ - General improvements to zombie collision and interactions (it's not perfect, but it's better!)
+ - Climbing ladders and other objects is now significantly faster
+ - In-game pause menu now displays a weapon XP widget
+ - The match summary now displays cards for weapon levels and unlocked calling cards
+ - Calling cards now display within in-game challenge notifications to indicate that you've completed the highest tier for a challenge
+ - Certain calling card challenge requirements have been eased (some of them were clearly meant to pad the game's lifecycle)
+ - XP rewards for completed challenges are now more generous
+ - Custom lobby music is now supported; drag supported files into iw7-mod\custom_music to bring them in-game
+
+Zombies in Spaceland
+ - Small tweaks and fixes to the HUD
+ - The SETICOM now takes 15 hits instead of 10 hits
+ - Alien fuses now persist after first installation
+
+Rave in the Redwoods
+ - Boat speed to PaP island is now less than 15 seconds long (you're welcome)
+ - Removed perk penalty from failing EE steps
+ - Other miscellaneous tweaks and fixes
+
+Shaolin Shuffle
+ - Ninja zombies now longer teleport; base ninja zombie speed has been increased by 15%
+ - The Banshee at spawn no longer clips through the bench
+ - Other miscellaneous tweaks and fixes
+
+Attack of the Radioactive Thing
+ - Certain objects are now easier to interact with
+ - Other miscellaneous tweaks and fixes
+
+The Beast from Beyond
+ - Phantom floppy disk now has VFX to better indicate its location
+ - The OSA assault rifle now has more starting ammo
+ - Certain objects are now easier to interact with
+ - Other miscellaneous tweaks and fixes
 
 # IW7-Mod
 
