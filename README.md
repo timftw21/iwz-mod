@@ -13,13 +13,16 @@ IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfar
 IWZ-MOD 0.5 adds Arcade Attack survival mode, expands Zombies progression and HUD options, improves third-person aiming and map interactions, and fixes inventory, records, localization, power-up, and Pack-a-Punch presentation issues. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
+
  - Fate and Fortune machine still needs to be implemented into survival maps
  - Certain fixes are only partially implemented (alien fuse interaction on Attack, gun laser behavior, etc.)
  - Allow custom music to be queued by the DJ in Zombies in Spaceland
  - Certain tweaks to how custom music behaves in the pre-game lobby
  - Certain vanilla hintstrings should be tweaked
  - Option to bypass map intro cinematics
- - The next survival map, "Island Panic!" (gotta think of an alliteration💀)
+ - The next survival map, Rave in the Redwood's "Island Panic!" (gotta think of an alliteration💀)
+ - More map-specific fixes and tweaks
+ - Fix crawler bug (they sometimes lose collision)
 
 # IWZ-MOD Changes
 
@@ -44,11 +47,13 @@ General
  - Certain calling card challenge requirements have been eased (some of them were clearly meant to pad the game's lifecycle)
  - XP rewards for completed challenges are now more generous
  - Custom lobby music is now supported; drag supported files into iw7-mod\custom_music to bring them in-game
+ - Red-screen visual is less intrusive
 
 Zombies in Spaceland
  - Small tweaks and fixes to the HUD
  - The SETICOM now takes 15 hits instead of 10 hits
  - Alien fuses now persist after first installation
+ - Zombies now ignore the player while playing arcade games
 
 Rave in the Redwoods
  - Boat speed to PaP island is now less than 15 seconds long (you're welcome)
@@ -56,7 +61,7 @@ Rave in the Redwoods
  - Other miscellaneous tweaks and fixes
 
 Shaolin Shuffle
- - Ninja zombies now longer teleport; base ninja zombie speed has been increased by 15%
+ - Ninja zombies no longer teleport; base ninja zombie speed has been increased by 15%
  - The Banshee at spawn no longer clips through the bench
  - Other miscellaneous tweaks and fixes
 
