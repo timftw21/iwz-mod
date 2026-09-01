@@ -24,6 +24,7 @@ namespace fastfiles
 	static utils::concurrency::container<std::vector<sound_bank_load_callback>> sound_bank_load_callbacks;
 	static utils::concurrency::container<std::vector<string_table_load_callback>> string_table_load_callbacks;
 	static utils::concurrency::container<std::vector<weapon_load_callback>> weapon_load_callbacks;
+	static utils::concurrency::container<std::vector<material_load_callback>> material_load_callbacks;
 
 	std::string get_current_fastfile()
 	{
@@ -67,6 +68,14 @@ namespace fastfiles
 		});
 	}
 
+	void on_material_loaded(material_load_callback callback)
+	{
+		material_load_callbacks.access([&callback](std::vector<material_load_callback>& callbacks)
+		{
+			callbacks.emplace_back(std::move(callback));
+		});
+	}
+
 	namespace
 	{
 		utils::hook::detour db_try_load_x_file_internal_hook;
@@ -78,6 +87,7 @@ namespace fastfiles
 		utils::hook::detour sys_createfile_hook;
 
 		constexpr auto gns_arcade_ui_zone = "iwz_gns_arcade";
+		constexpr auto zombies_camos_zone = "iwz_zombies_camos";
 
 		bool db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
 			const bool is_base_map, const bool was_paused, const int failure_mode)
@@ -179,6 +189,17 @@ namespace fastfiles
 			}
 
 			auto result = db_add_xasset_hook.invoke<game::XAssetHeader>(type, header_ptr);
+
+			if (type == game::ASSET_TYPE_MATERIAL && result.material)
+			{
+				material_load_callbacks.access([&result](const std::vector<material_load_callback>& callbacks)
+				{
+					for (const auto& callback : callbacks)
+					{
+						callback(result.material);
+					}
+				});
+			}
 
 			if (type == game::ASSET_TYPE_SOUND_BANK && result.soundBank)
 			{
@@ -331,6 +352,11 @@ namespace fastfiles
 			if (!game::environment::is_dedi())
 			{
 				add_zone("iw7mod_ui_mp", game::DB_ZONE_UI | game::DB_ZONE_CUSTOM, 0);
+				if (add_zone(zombies_camos_zone, game::DB_ZONE_GLOBAL_TIER1 | game::DB_ZONE_CUSTOM, 1))
+				{
+					console::info("[IWZ][ZombiesCamos] queueing texture zone=%s scope=global-tier1\n",
+						zombies_camos_zone);
+				}
 				if (add_zone(gns_arcade_ui_zone, game::DB_ZONE_UI | game::DB_ZONE_CUSTOM, 0))
 				{
 					console::info("[IWZ][GhostsNSkullsArcade] queueing frontend artwork zone=%s\n",

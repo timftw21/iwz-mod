@@ -412,6 +412,9 @@ namespace localized_strings
 			override("IWZ_GNS_ARCADE_START_ATTACK", "Hold [{+usereload,+activate}] to start SKULLHOP");
 			override("IWZ_GNS_ARCADE_START_BEAST", "Hold [{+usereload,+activate}] to start SKULLBREAKER");
 			override("IWZ_GNS_ARCADE_START_GENERIC", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS ARCADE");
+			override("IWZ_CAMO_NEON_ROT", "Neon Rot");
+			override("IWZ_CAMO_NEON_ROT_UNLOCK", "Get 5 headshots with the M1 in Zombies.");
+			override("IWZ_WEAPON_CAMO_EARNED", "WEAPON CAMO EARNED");
 			override("IWZ_CP_DISCO_STANDARD_ENTER_THIS_AREA", "enter this area");
 			// GSC localized-string operands require a resident LocalizeEntry. Reuse
 			// Spaceland's authored fourth intro line and gate its replacement on the
@@ -448,6 +451,7 @@ namespace localized_strings
 			console::info("[IWZ][Localization] registered red interaction warnings moneyKey=COOP_INTERACTIONS_NEED_MONEY powerKey=COOP_INTERACTIONS_REQUIRES_POWER ticketKey=CP_ZMB_INTERACTIONS_NEED_TICKETS\n");
 			console::info("[IWZ][GhostsNSkullsHUD] registered shared text overrides tracking='Tracking...' objectivePunctuation=exclamation escapedPunctuationVerified=3\n");
 			console::info("[IWZ][GhostsNSkullsArcade] registered per-game activation hints count=5\n");
+			console::info("[IWZ][ZombiesCamos] registered localization camo=Neon_Rot:5-headshots splashHeader='WEAPON CAMO EARNED'\n");
 			console::info("[IWZ][Localization] registered door-action overrides lowercaseCount=4 shaolinPapKey=CP_DISCO_INTERACTIONS_ENTER_THIS_AREA shaolinPapCapitalized=1 shaolinStandardKey=IWZ_CP_DISCO_STANDARD_ENTER_THIS_AREA residentZone=iwz_gns_arcade\n");
 			console::info("[IWZ][Localization] registered plural pillage-item overrides bioSpikes=1 gasGrenades=1 clusterGrenades=1\n");
 			console::info("[IWZ][Localization] registered wording overrides c4PickupKey=ZOMBIE_PILLAGE_PICKUP_C4 ammoFullKey=COOP_GAME_PLAY_AMMO_MAX\n");

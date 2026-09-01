@@ -1,0 +1,11 @@
+// CP uses global_mp as its shared tier-one rendering base. Keep those stock
+// shader assets external while the custom zone owns the new camo material and
+// texture payload.
+techset,2d
+techset,l_sm_replace_i0c0s0o0n0e0pa0_b1-0c1s1o1na1e1_2uvt_bafsp_vm
+image,blank_e
+image,blank_o
+image,blank_n_30b20617_packed_nog
+image,blank_n
+image,blank_c_blank_sg_packed_cs
+image,blank_c_00000000_packed_a

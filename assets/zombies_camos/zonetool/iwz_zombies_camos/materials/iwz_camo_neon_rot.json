@@ -1,0 +1,162 @@
+{
+    "techniqueSet->name": "l_sm_replace_i0c0s0o0n0e0pa0_b1-0c1s1o1na1e1_2uvt_bafsp_vm",
+    "gameFlags": 144,
+    "unkFlags": 0,
+    "sortKey": 2,
+    "renderFlags": 2,
+    "textureAtlasRowCount": 1,
+    "textureAtlasColumnCount": 1,
+    "textureAtlasFrameBlend": 0,
+    "textureAtlasAsArray": 0,
+    "surfaceTypeBits": 4398046511104,
+    "stateFlags": 25,
+    "cameraRegion": 11,
+    "materialType": 0,
+    "assetFlags": 0,
+    "constantTable": [
+        {
+            "name": "secondarySam",
+            "nameHash": 28846999,
+            "literal": [
+                0.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "name": "emissivePara",
+            "nameHash": 1323547990,
+            "literal": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "name": "colorTint1",
+            "nameHash": 2006164043,
+            "literal": [
+                1.0,
+                1.0,
+                1.0,
+                1.0
+            ]
+        },
+        {
+            "name": "colorTint",
+            "nameHash": 3054254906,
+            "literal": [
+                1.0,
+                1.0,
+                1.0,
+                1.0
+            ]
+        },
+        {
+            "name": "reflectionRa",
+            "nameHash": 3344177073,
+            "literal": [
+                8096.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "name": "emissivePara",
+            "nameHash": 3944623239,
+            "literal": [
+                1.0,
+                0.0,
+                0.0,
+                0.0
+            ]
+        },
+        {
+            "name": "secondarySam",
+            "nameHash": 4044143062,
+            "literal": [
+                1.0,
+                1.0,
+                0.0,
+                0.0
+            ]
+        }
+    ],
+    "textureTable": [
+        {
+            "image": "blank_e",
+            "semantic": 2,
+            "samplerState": 19,
+            "lastCharacter": 112,
+            "firstCharacter": 101,
+            "typeHash": 878789447
+        },
+        {
+            "image": "blank_o",
+            "semantic": 9,
+            "samplerState": 19,
+            "lastCharacter": 49,
+            "firstCharacter": 115,
+            "typeHash": 1253113093
+        },
+        {
+            "image": "blank_n_30b20617_packed_nog",
+            "semantic": 15,
+            "samplerState": 19,
+            "lastCharacter": 112,
+            "firstCharacter": 110,
+            "typeHash": 1507003663
+        },
+        {
+            "image": "blank_n",
+            "semantic": 5,
+            "samplerState": 19,
+            "lastCharacter": 49,
+            "firstCharacter": 110,
+            "typeHash": 2486480606
+        },
+        {
+            "image": "blank_c_blank_sg_packed_cs",
+            "semantic": 14,
+            "samplerState": 19,
+            "lastCharacter": 112,
+            "firstCharacter": 99,
+            "typeHash": 2695565377
+        },
+        {
+            "image": "blank_c_00000000_packed_a",
+            "semantic": 16,
+            "samplerState": 19,
+            "lastCharacter": 112,
+            "firstCharacter": 115,
+            "typeHash": 2771134132
+        },
+        {
+            "image": "iwz_camo_neon_rot_c",
+            "semantic": 2,
+            "samplerState": 19,
+            "lastCharacter": 49,
+            "firstCharacter": 99,
+            "typeHash": 3054311504
+        },
+        {
+            "image": "blank_e",
+            "semantic": 2,
+            "samplerState": 19,
+            "lastCharacter": 49,
+            "firstCharacter": 101,
+            "typeHash": 3230247958
+        },
+        {
+            "image": "iwz_camo_neon_rot_sg",
+            "semantic": 8,
+            "samplerState": 19,
+            "lastCharacter": 49,
+            "firstCharacter": 115,
+            "typeHash": 3532022562
+        }
+    ]
+}

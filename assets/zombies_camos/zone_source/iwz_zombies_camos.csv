@@ -1,0 +1,13 @@
+// Resolve IW's native weapon-replacement and UI techniques while building.
+// mp/camotable.csv column 3 is a target material, so this zone owns both the
+// full weapon material and the 2D preview material.
+require,techsets_global_mp
+require,global_mp
+require,techsets_ui
+require,ui
+ignore,iwz_zombies_camos_external
+image,iwz_camo_neon_rot_c
+image,iwz_camo_neon_rot_sg
+image,iwz_camo_neon_rot_icon
+material,iwz_camo_neon_rot
+material,iwz_camo_neon_rot_icon

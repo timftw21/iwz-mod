@@ -6,6 +6,7 @@ namespace database
 	struct SndBank;
 	struct StringTable;
 	struct WeaponCompleteDef;
+	struct Material;
 }
 
 namespace fastfiles
@@ -14,6 +15,7 @@ namespace fastfiles
 	using sound_bank_load_callback = std::function<void(database::SndBank*)>;
 	using string_table_load_callback = std::function<void(database::StringTable*)>;
 	using weapon_load_callback = std::function<void(database::WeaponCompleteDef*)>;
+	using material_load_callback = std::function<void(database::Material*)>;
 
 	std::string get_current_fastfile();
 	bool exists(const std::string& zone);
@@ -21,4 +23,5 @@ namespace fastfiles
 	void on_sound_bank_loaded(sound_bank_load_callback callback);
 	void on_string_table_loaded(string_table_load_callback callback);
 	void on_weapon_loaded(weapon_load_callback callback);
+	void on_material_loaded(material_load_callback callback);
 }
