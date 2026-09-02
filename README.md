@@ -32,6 +32,7 @@ General
  - Added client options, such as player name, name color, skipping intro cinematics, pause on focus lost, mute on focus lost, and XP rate
  - Added zombies-specific options, such as camera perspective options, HUD options, and an in-game timer for all modes
  - A variety of fixes and tweaks to the Zombies' menus
+ - Added a Restart Match button to the in-game pause menu (glorified map_restart)
  - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; first survival map is "Arcade Attack!"
  - Ghosts 'N Skulls Arcade: select Ghosts 'N Skulls games without completing their tedious in-game steps
  - CAST button allows the player to choose their character
