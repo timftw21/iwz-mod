@@ -19,7 +19,7 @@ IWZ-MOD 0.5 adds Arcade Attack survival mode, expands Zombies progression and HU
  - Allow custom music to be queued by the DJ in Zombies in Spaceland
  - Certain tweaks to how custom music behaves in the pre-game lobby
  - Certain vanilla hintstrings should be tweaked
- - Option to bypass map intro cinematics
+ - Zombies camos (framework is working)
  - The next survival map, Rave in the Redwood's "Island Panic!" (gotta think of an alliteration💀)
  - More map-specific fixes and tweaks
  - Fix crawler bug (they sometimes lose collision)
