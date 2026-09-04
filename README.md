@@ -20,7 +20,7 @@ IWZ-MOD 0.5 adds Arcade Attack survival mode, expands Zombies progression and HU
  - Certain tweaks to how custom music behaves in the pre-game lobby
  - Certain vanilla hintstrings should be tweaked
  - Zombies camos (framework is working)
- - The next survival map, Rave in the Redwood's "Island Panic!" (gotta think of an alliteration💀)
+ - The next survival map, Rave in the Redwood's "Rave Rampage"
  - More map-specific fixes and tweaks
  - Fix crawler bug (they sometimes lose collision)
 
