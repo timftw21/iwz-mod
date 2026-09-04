@@ -914,6 +914,8 @@ namespace command
 				"Whether the current Zombies private match is an IWZ Survival map");
 			game::Dvar_RegisterBool("iwz_survival_browse", false, game::DVAR_FLAG_NONE,
 				"Whether the Zombies film browser was opened from the Survival option");
+			game::Dvar_RegisterBool("iwz_directors_death_active", false, game::DVAR_FLAG_NONE,
+				"Server-controlled Death Wish scene-counter state");
 			game::Dvar_RegisterInt("iwz_powerup_weight_infinite_grenades", 4, 1, 100, game::DVAR_FLAG_SAVED,
 				"Relative drop weight for the Infinite Grenades powerup (stock is 5)");
 			game::Dvar_RegisterInt("iwz_powerup_weight_carpenter", 4, 1, 100, game::DVAR_FLAG_SAVED,

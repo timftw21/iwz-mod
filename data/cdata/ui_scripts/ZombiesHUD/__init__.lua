@@ -103,6 +103,38 @@ local function refreshInGameTimer(hud, hudClassName)
 	end
 end
 
+local function installDeathWishSceneColor(widget, controllerIndex, textElements)
+	local mapName = Engine.GetDvarString("mapname")
+	if mapName ~= "cp_rave" and mapName ~= "cp_zmb" then
+		return
+	end
+
+	local lastActive = nil
+	local function refreshColor()
+		local active = Engine.GetDvarBool("iwz_directors_death_active")
+		if active == lastActive then
+			return
+		end
+		lastActive = active
+		local color = active and 0xFF2020 or 0xFFFFFF
+		for _, text in ipairs(textElements) do
+			text:SetRGBFromInt(color, 0)
+		end
+		print("[IWZ][DeathWish] scene color widget=" .. widget.id ..
+			" active=" .. tostring(active) .. " color=" .. (active and "red" or "white"))
+	end
+	widget:addEventHandler("iwz_death_wish_tick", refreshColor)
+	widget:addElement(LUI.UITimer.new(nil, {
+		interval = 100,
+		event = "iwz_death_wish_tick",
+		disposable = false,
+		broadcastToRoot = false,
+		stopped = false,
+		controllerIndex = controllerIndex
+	}))
+	refreshColor()
+end
+
 local zombiesHudClasses = {
 	{name = "ZMHUD", class = LUI.ZMHUD},
 	{name = "ZMHUDDLC1", class = LUI.ZMHUDDLC1},
@@ -155,6 +187,22 @@ for _, hudEntry in ipairs(zombiesHudClasses) do
 		if stockInit then
 			hudClass.init = function(self, controllerIndex)
 				stockInit(self, controllerIndex)
+
+				if hudClassName == "ZMHUD" or hudClassName == "ZMHUDDLC1" then
+					-- Both maps build the persistent corner counter separately from
+					-- CPClapboardBase. HUD.AddWidget stores its container in _widget;
+					-- WaveNumberContainer owns WaveNumber's Scene and waveNum text.
+					local container = self.waveNumber and self.waveNumber._widget
+					local counter = container and container.WaveNumber
+					if counter and counter.Scene and counter.waveNum then
+						installDeathWishSceneColor(counter, controllerIndex,
+							{counter.Scene, counter.waveNum})
+					else
+						print("[IWZ][DeathWish] persistent scene counter unavailable" ..
+							" wrapper=" .. tostring(self.waveNumber ~= nil) ..
+							" container=" .. tostring(container ~= nil))
+					end
+				end
 
 				local clockAvailable = game and game.getmonotonicmilliseconds ~= nil
 				local bossTimerContainer = getBossTimerContainer(self)
@@ -381,6 +429,9 @@ else
 			_1080p * 9, _1080p * 128, _1080p * 53.5, _1080p * 85.5)
 		self:addElement(Scene)
 		self.Scene = Scene
+
+		installDeathWishSceneColor(self, controllerIndex,
+			{Scene, Waves, WavesTriple, WavesExtended})
 
 		self._animationSets.DefaultAnimationSet = function()
 			self._sequences.DefaultSequence = function()

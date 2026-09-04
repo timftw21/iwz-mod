@@ -88,6 +88,7 @@ namespace fastfiles
 
 		constexpr auto gns_arcade_ui_zone = "iwz_gns_arcade";
 		constexpr auto zombies_camos_zone = "iwz_zombies_camos";
+		constexpr auto directors_death_zone = "iwz_directors_death";
 
 		bool db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
 			const bool is_base_map, const bool was_paused, const int failure_mode)
@@ -287,10 +288,21 @@ namespace fastfiles
 		void db_load_x_assets_stub(game::XZoneInfo* zone_info, const unsigned int zone_count, const char sync_mode)
 		{
 			const game::XZoneInfo* film_zone = nullptr;
+			const game::XZoneInfo* death_wish_map_zone = nullptr;
 			bool timer_zone_already_queued = false;
+			bool directors_death_already_queued = false;
 
 			for (auto i = 0u; i < zone_count; ++i)
 			{
+				if (zone_info[i].name && (!strcmp(zone_info[i].name, "cp_rave") ||
+					!strcmp(zone_info[i].name, "cp_zmb")))
+				{
+					death_wish_map_zone = &zone_info[i];
+				}
+				if (zone_info[i].name && !strcmp(zone_info[i].name, directors_death_zone))
+				{
+					directors_death_already_queued = true;
+				}
 				if (zone_info[i].name && !strcmp(zone_info[i].name, pap_timer::get_zone_name()))
 				{
 					timer_zone_already_queued = true;
@@ -301,19 +313,31 @@ namespace fastfiles
 				}
 			}
 
-			if (!film_zone || timer_zone_already_queued || !fastfiles::exists(pap_timer::get_zone_name()))
-			{
-				return db_load_x_assets_hook.invoke<void>(zone_info, zone_count, sync_mode);
-			}
-
 			std::vector<game::XZoneInfo> zones;
 			merge(&zones, zone_info, zone_count);
-			zones.push_back({pap_timer::get_zone_name(), film_zone->allocFlags | game::DB_ZONE_CUSTOM,
-				film_zone->freeFlags});
+			if (film_zone && !timer_zone_already_queued && fastfiles::exists(pap_timer::get_zone_name()))
+			{
+				zones.push_back({pap_timer::get_zone_name(), film_zone->allocFlags | game::DB_ZONE_CUSTOM,
+					film_zone->freeFlags});
 
-			console::info("[IWZ][PaPTimer] queueing BSP restoration zone=%s after map=%s "
-				"allocFlags=0x%X freeFlags=0x%X\n",
-				pap_timer::get_zone_name(), film_zone->name, film_zone->allocFlags, film_zone->freeFlags);
+				console::info("[IWZ][PaPTimer] queueing BSP restoration zone=%s after map=%s "
+					"allocFlags=0x%X freeFlags=0x%X\n",
+					pap_timer::get_zone_name(), film_zone->name, film_zone->allocFlags, film_zone->freeFlags);
+			}
+			if (death_wish_map_zone && !directors_death_already_queued)
+			{
+				if (fastfiles::exists(directors_death_zone))
+				{
+					zones.push_back({directors_death_zone, death_wish_map_zone->allocFlags | game::DB_ZONE_CUSTOM,
+						death_wish_map_zone->freeFlags});
+					console::info("[IWZ][DeathWish] queueing red jar zone=%s after map=%s\n",
+						directors_death_zone, death_wish_map_zone->name);
+				}
+				else
+				{
+					console::error("[IWZ][DeathWish] missing particle zone=%s\n", directors_death_zone);
+				}
+			}
 
 			return db_load_x_assets_hook.invoke<void>(zones.data(), static_cast<unsigned int>(zones.size()), sync_mode);
 		}

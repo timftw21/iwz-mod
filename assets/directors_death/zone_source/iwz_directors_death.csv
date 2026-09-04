@@ -1,0 +1,6 @@
+// Stock Rave materials are references; load this zone after cp_rave.
+material,,eq/vfx_energy_zmb_satanic_floor_sym_03
+material,,eq/vfx_mist_alien_a_lp
+material,,eq/vfx_pyro_spark_burst_atlas_gray
+material,,eq/vfx_vol_smk_veiny_loop
+vfx,vfx/iwz/directors_death_jar_red

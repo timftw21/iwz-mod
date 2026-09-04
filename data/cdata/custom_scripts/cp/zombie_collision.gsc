@@ -61,15 +61,18 @@ monitor_zombie_spawns()
     {
         level waittill("agent_spawned", agent);
 
-        if (!isdefined(agent) || !isdefined(agent.agent_type) || !isdefined(level.agent_definition) || !isdefined(level.agent_definition[agent.agent_type]))
+        if (!isdefined(agent) || !isagent(agent))
+            continue;
+
+        // Slots can also be reused by non-zombie agents. Clear the previous
+        // occupant's crawler state before filtering by the new agent's species.
+        iwz_set_agent_crawler(agent, 0);
+        if (!isdefined(agent.agent_type) || !isdefined(level.agent_definition) || !isdefined(level.agent_definition[agent.agent_type]))
             continue;
 
         definition = level.agent_definition[agent.agent_type];
         if (isdefined(definition["species"]) && definition["species"] == "zombie")
         {
-            // Entity numbers are recycled. Clear any crawler collision state left by
-            // the previous occupant before this agent can enter player movement.
-            iwz_set_agent_crawler(agent, 0);
             agent disable_zombie_player_push();
             collision_log("monitor attached ent=" + agent getentitynumber() + " type=" + agent.agent_type + " playerPush=disabled distance=" + agent.preventplayerpushdist);
             agent thread monitor_zombie_traversal();
@@ -118,6 +121,7 @@ monitor_zombie_crawler_bounds()
     // The server bounds above are not sufficient to fix its vertical response, so
     // record the shortened capsule top for the native collision classifier.
     iwz_set_agent_crawler(self, 1);
+    self thread clear_crawler_collision_on_death();
     self setorigin(self.origin, 1);
     scripts\engine\utility::waitframe();
     after = self physics_getcharactercollisioncapsule();
@@ -126,6 +130,13 @@ monitor_zombie_crawler_bounds()
         " beforeRadius=" + before["radius"] + " beforeHalfHeight=" + before["half_height"] +
         " afterRadius=" + after["radius"] + " afterHalfHeight=" + after["half_height"] +
         " playerPushDistance=" + self.preventplayerpushdist + " verticalClearanceFilter=1");
+}
+
+clear_crawler_collision_on_death()
+{
+    level endon("game_ended");
+    self waittill("death");
+    iwz_set_agent_crawler(self, 0);
 }
 
 monitor_zombie_traversal()

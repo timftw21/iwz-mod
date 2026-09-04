@@ -239,7 +239,8 @@ local function buildCPPrivateMatchMenu(menu, controller)
 	end
 
 	addCastInfo(self, controllerIndex)
-	print("[IWZ][ZombiesCast] lobby controls attached")
+	print("[IWZ][ZombiesCast] lobby controls attached map=" .. getCurrentFilm() ..
+		" selection=" .. game:getzombiescharacter())
 
 	self:addEventHandler("menu_create", function(root)
 		root:AddButtonHelperText({

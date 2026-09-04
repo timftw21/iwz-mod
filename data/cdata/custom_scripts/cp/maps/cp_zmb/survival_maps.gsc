@@ -1011,19 +1011,19 @@ survival_portal_active_fx()
         if (!scripts\engine\utility::is_true(self.iwz_pap_visual_active))
         {
             wall_face_center = (2174.3, -1688.01, 164.349);
-            // The trace point is the wall face, while the map-authored arcade
-            // portal model sits at Y=-1666. Push the visual 22.01 units along
-            // the measured (0,1,0) normal so the effect is in the portal plane
-            // rather than intersecting the wall.
+            // The portal model sits at Y=-1666, 22.01 units in front of the
+            // measured wall. Recess the image 8 units inside the ring while
+            // retaining 14.01 units of clearance from the wall.
+            portal_inset = 8;
             desired_visual_center =
-                wall_face_center + (0, 22.01, 0);
+                wall_face_center + (0, 22.01 - portal_inset, 0);
             visual_forward = (0, 1, 0);
 
             // The dumped vfx_zmb_centportal_active_rnr runner contains a
             // fixed local-space placement of (15,0,108). playfxontag placed
             // that offset above/behind the requested wall point. Spawn the FX
             // through the stock fast-travel path and subtract the transformed
-            // authored offset so its visible center lands on the portal plane.
+            // authored offset so its visible center lands inside the ring.
             visual_spawn_origin =
                 desired_visual_center - (0, 15, 108);
             self.iwz_pap_visual_fx = spawnfx(
@@ -1036,7 +1036,8 @@ survival_portal_active_fx()
                 "wallFaceCenter=" + wall_face_center +
                 " desiredCenter=" + desired_visual_center +
                 " authoredPortalOrigin=" + self._id_D682.origin +
-                " outwardWallNormalOffset=(0,22.01,0) " +
+                " portalInset=" + portal_inset +
+                " outwardWallNormalOffset=(0,14.01,0) " +
                 " bakedLocalOffset=(15,0,108) " +
                 "spawnOrigin=" + visual_spawn_origin +
                 " forward=" + visual_forward +

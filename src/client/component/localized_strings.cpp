@@ -74,6 +74,30 @@ namespace localized_strings
 			{"ZM_CONTRACTS_SPECIAL_KILLS", "Kill ^3&&1^7 special guest zombies."},
 		};
 
+		// Stock pickup wording from localize.json; zombies_pillage selects the
+		// ZOMBIE/COOP keys below. Keep the authored binding and weapon placeholders.
+		constexpr localization_override pickup_hint_overrides[]
+		{
+			{"ZOMBIE_PILLAGE_PICKUP_TICKETS", "Hold [{+activate}] to pick up Tickets"},
+			{"ZOMBIE_PILLAGE_PICKUP_CONCUSSION_GRENADE", "Hold [{+activate}] to pick up Concussion Grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_BETTY", "Hold [{+activate}] to pick up a Bouncing Betty"},
+			{"ZOMBIE_PILLAGE_PICKUP_POINTS", "Hold [{+activate}] to pick up Cash"},
+			{"ZOMBIE_PILLAGE_PICKUP_FRAG_GRENADE", "Hold [{+activate}] to pick up Frag Grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_PLASMA_GRENADE", "Hold [{+activate}] to pick up Plasma Grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_C4", "Hold [{+activate}] to pick up C4"},
+			{"ZOMBIE_PILLAGE_PICKUP_SEMTEX", "Hold [{+activate}] to pick up Semtex Grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_BOLA_BARRAGE", "Hold [{+activate}] to pick up Bola Barrage"},
+			{"COOP_PILLAGE_PICKUP_CLUSTER_GRENADE", "Hold [{+activate}] to pick up Cluster Grenades"},
+			{"COOP_PILLAGE_PICKUP_GAS_GRENADE", "Hold [{+activate}] to pick up Gas Grenades"},
+			{"PLATFORM_PICKUPNEWWEAPONGAMEPAD", "Hold &&1 to pick up &&2"},
+			{"PLATFORM_PICKUPNEWWEAPONGAMEPADHEAVY", "Hold &&1 to pick up heavy weapon &&2"},
+			{"PLATFORM_SWAPWEAPONSGAMEPAD", "Hold &&1 for &&2"},
+			{"PLATFORM_SWAPWEAPONSGAMEPADHEAVY", "Hold &&1 for heavy weapon &&2"},
+			{"WEAPON_CLAYMORE_PICKUP", "Hold^3 &&1 ^7to pickup Claymore Mines"},
+			{"WEAPON_PROXIMITY_EXPLOSIVE_PICKUP", "Hold^3 &&1 ^7to pickup I.E.D."},
+			{"WEAPON_PICKUP_AXE", "Hold^3 &&1 ^7for Axe"},
+		};
+
 		constexpr localization_override chi_primary_binding_overrides[]
 		{
 			{"CP_DISCO_CHALLENGES_OFFHAND",
@@ -91,6 +115,7 @@ namespace localized_strings
 		constexpr std::string_view survival_only_override_keys[]
 		{
 			"CP_ZMB_INTRO_LINE_4",
+			"CP_RAVE_INTRO_LINE_4",
 		};
 
 		std::string normalize_key(const std::string_view key)
@@ -194,7 +219,8 @@ namespace localized_strings
 			{
 				console::info("[IWZ][Localization] materialized registered override key='%s' source=%s\n",
 					lookup_key.data(), source);
-				if (_stricmp(lookup_key.data(), "CP_ZMB_INTRO_LINE_4") == 0 &&
+				if ((_stricmp(lookup_key.data(), "CP_ZMB_INTRO_LINE_4") == 0 ||
+					_stricmp(lookup_key.data(), "CP_RAVE_INTRO_LINE_4") == 0) &&
 					!logged_survival_objective_override.exchange(true))
 				{
 					console::info("[IWZ][Survival] materialized objective localization key='%s' text='Survive until you die!' mode=survival-only\n",
@@ -416,10 +442,11 @@ namespace localized_strings
 			override("IWZ_CAMO_NEON_ROT_UNLOCK", "Get 5 headshots with the M1 in Zombies.");
 			override("IWZ_WEAPON_CAMO_EARNED", "WEAPON CAMO EARNED");
 			override("IWZ_CP_DISCO_STANDARD_ENTER_THIS_AREA", "enter this area");
-			// GSC localized-string operands require a resident LocalizeEntry. Reuse
-			// Spaceland's authored fourth intro line and gate its replacement on the
-			// Survival dvar so ordinary Spaceland retains its stock objective.
+			// GSC localized-string operands require resident LocalizeEntry assets.
+			// Reuse each map's authored fourth intro line and gate replacement on
+			// the Survival dvar so ordinary matches retain their stock objectives.
 			override("CP_ZMB_INTRO_LINE_4", "Survive until you die!");
+			override("CP_RAVE_INTRO_LINE_4", "Survive until you die!");
 			// zombie_doors uses the default key on Spaceland and each sequel map
 			// assigns one of the three map-specific keys to level.enter_area_hint.
 			// The interaction engine supplies Hold/bind/cost around this value.
@@ -427,10 +454,11 @@ namespace localized_strings
 			override("CP_RAVE_ENTER_THIS_AREA", "enter this area");
 			override("CP_DISCO_INTERACTIONS_ENTER_THIS_AREA", "Enter this area");
 			override("CP_TOWN_INTERACTIONS_ENTER_THIS_AREA", "enter this area");
+			override("CP_TOWN_INTERACTIONS_HIDDEN_LEAVE", "Hold [{+usereload,+activate}] to return to the film");
+			override("CP_TOWN_INTERACTIONS_HIDDEN_TELEPORT", "Hold [{+usereload,+activate}] to access the Projection Room");
 			override("COOP_PILLAGE_FOUND_BIO_SPIKE", "Found Bio Spikes");
 			override("COOP_PILLAGE_FOUND_GAS_GRENADE", "Found Gas Grenades");
 			override("COOP_PILLAGE_FOUND_CLUSTER_GRENADE", "Found Cluster Grenades");
-			override("ZOMBIE_PILLAGE_PICKUP_C4", "Press and hold [{+activate}] to pick up C4");
 			override("COOP_GAME_PLAY_AMMO_MAX", "Ammunition already full");
 			override("COOP_PERK_MACHINES_1000",
 				"\"Improve your game with deadly aim!\"\n"
@@ -440,6 +468,10 @@ namespace localized_strings
 				override(key, value);
 			}
 			for (const auto& [key, value] : chi_primary_binding_overrides)
+			{
+				override(key, value);
+			}
+			for (const auto& [key, value] : pickup_hint_overrides)
 			{
 				override(key, value);
 			}
@@ -454,12 +486,15 @@ namespace localized_strings
 			console::info("[IWZ][ZombiesCamos] registered localization camo=Neon_Rot:5-headshots splashHeader='WEAPON CAMO EARNED'\n");
 			console::info("[IWZ][Localization] registered door-action overrides lowercaseCount=4 shaolinPapKey=CP_DISCO_INTERACTIONS_ENTER_THIS_AREA shaolinPapCapitalized=1 shaolinStandardKey=IWZ_CP_DISCO_STANDARD_ENTER_THIS_AREA residentZone=iwz_gns_arcade\n");
 			console::info("[IWZ][Localization] registered plural pillage-item overrides bioSpikes=1 gasGrenades=1 clusterGrenades=1\n");
-			console::info("[IWZ][Localization] registered wording overrides c4PickupKey=ZOMBIE_PILLAGE_PICKUP_C4 ammoFullKey=COOP_GAME_PLAY_AMMO_MAX\n");
+			console::info("[IWZ][Localization] registered pickup hint overrides count=%zu prefix=Hold removedSome=C4,ClusterGrenades,GasGrenades\n",
+				std::size(pickup_hint_overrides));
+			console::info("[IWZ][Localization] registered wording override ammoFullKey=COOP_GAME_PLAY_AMMO_MAX\n");
+			console::info("[IWZ][Localization] removed trailing periods from portal hints keys=CP_TOWN_INTERACTIONS_HIDDEN_LEAVE,CP_TOWN_INTERACTIONS_HIDDEN_TELEPORT\n");
 			console::info("[IWZ][Localization] registered punctuation overrides deadeyeDewdrops=1 bountyDescriptions=%zu\n",
 				std::size(bounty_description_overrides));
 			console::info("[IWZ][Localization] registered bracketed Chi primary-binding overrides count=%zu scope=challenge-and-rank1-rewards numericPlaceholderYellow=1 bottomRightHud=unchanged\n",
 				std::size(chi_primary_binding_overrides));
-			console::info("[IWZ][Survival] registered mode-gated localization objectiveKey=CP_ZMB_INTRO_LINE_4 lockedExitHint=disabled fallback=stock-values\n");
+			console::info("[IWZ][Survival] registered mode-gated localization objectiveKeys=CP_ZMB_INTRO_LINE_4,CP_RAVE_INTRO_LINE_4 lockedExitHint=disabled fallback=stock-values\n");
 
 			seh_string_ed_get_string_hook.create(0x140CBBB10, &seh_string_ed_get_string);
 		}

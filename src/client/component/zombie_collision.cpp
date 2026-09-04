@@ -6,6 +6,7 @@
 #include "console/console.hpp"
 #include "gsc/script_extension.hpp"
 #include "gsc/script_error.hpp"
+#include "scripting.hpp"
 
 #include <utils/hook.hpp>
 
@@ -18,7 +19,10 @@ namespace zombie_collision
 		constexpr auto max_gentities = 2048;
 		constexpr auto entitynum_none = 0x7FF;
 		constexpr auto character_collision_entity_number_offset = 0x1C;
-		constexpr auto character_collision_origin_z_offset = 0x30;
+		// The anti-lag character record starts with its world origin. The resolver
+		// at 0x1406FF2D0..0x1406FF2D9 subtracts record +0/+4/+8 from ps->origin.
+		// +0x30 is not origin Z and is commonly zero on level ground.
+		constexpr auto character_collision_origin_z_offset = 0x08;
 		constexpr auto crawler_clearance_epsilon = 0.5f;
 		constexpr auto crawler_word_count = max_gentities / 64;
 
@@ -62,6 +66,19 @@ namespace zombie_collision
 			return (crawler_entities[word].load(std::memory_order_acquire) & mask) != 0;
 		}
 
+		void clear_crawler_entities()
+		{
+			bool had_crawlers = false;
+			for (auto& word : crawler_entities)
+			{
+				had_crawlers |= word.exchange(0, std::memory_order_acq_rel) != 0;
+			}
+			if (had_crawlers)
+			{
+				console::info("[IWZ][CrawlerCollision] cleared crawler state on game shutdown\n");
+			}
+		}
+
 		int pm_get_character_collision_type_stub(game::pmove_t* pm, const int local_entity_number,
 			const bool allow_soft_push, const void* character_collision)
 		{
@@ -86,9 +103,9 @@ namespace zombie_collision
 						{
 							console::info(
 								"[IWZ][CrawlerCollision] vertical clearance passed ent=%i "
-								"playerFeetZ=%.2f crawlerTopZ=%.2f clearance=%.2f; "
+								"playerFeetZ=%.2f crawlerOriginZ=%.2f crawlerTopZ=%.2f clearance=%.2f; "
 								"character response ignored\n",
-								entity_number, player_feet_z, crawler_top_z, vertical_clearance);
+								entity_number, player_feet_z, crawler_origin_z, crawler_top_z, vertical_clearance);
 						}
 
 						// IW's character resolver does not account for the crawler's
@@ -102,8 +119,8 @@ namespace zombie_collision
 					{
 						console::info(
 							"[IWZ][CrawlerCollision] vertical overlap retained ent=%i "
-							"playerFeetZ=%.2f crawlerTopZ=%.2f clearance=%.2f\n",
-							entity_number, player_feet_z, crawler_top_z, vertical_clearance);
+							"playerFeetZ=%.2f crawlerOriginZ=%.2f crawlerTopZ=%.2f clearance=%.2f\n",
+							entity_number, player_feet_z, crawler_origin_z, crawler_top_z, vertical_clearance);
 					}
 				}
 			}
@@ -243,7 +260,7 @@ namespace zombie_collision
 			}
 			else if (!enabled && was_enabled)
 			{
-				console::info("[IWZ][CrawlerCollision] cleared recycled crawler ent=%i\n",
+				console::info("[IWZ][CrawlerCollision] cleared crawler ent=%i\n",
 					entity->s.number);
 			}
 
@@ -265,9 +282,16 @@ namespace zombie_collision
 
 			gsc::function::add("iwz_set_agent_collision_bounds", set_agent_collision_bounds);
 			gsc::function::add("iwz_set_agent_crawler", set_agent_crawler);
+			scripting::on_shutdown([](bool /*free_scripts*/, bool post_shutdown)
+			{
+				if (post_shutdown)
+				{
+					clear_crawler_entities();
+				}
+			});
 			console::info(
 				"[IWZ][CrawlerCollision] vertical-clearance character-response filter registered "
-				"classifier=0x1406FB040 entityNumberOffset=0x1C originZOffset=0x30 epsilon=%.2f\n",
+				"classifier=0x1406FB040 entityNumberOffset=0x1C originZOffset=0x08 epsilon=%.2f\n",
 				crawler_clearance_epsilon);
 			console::info("[IWZ][CollisionBounds] agent collision-bounds function registered boundsOffset=280\n");
 		}

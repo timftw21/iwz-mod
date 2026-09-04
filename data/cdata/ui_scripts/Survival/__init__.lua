@@ -1,10 +1,14 @@
 local SURVIVAL_MODE_NAME = "SURVIVAL"
-local SURVIVAL_MAP_NAME = "ARCADE ATTACK!"
 local SURVIVAL_DVAR = "iwz_survival_mode"
 local SURVIVAL_BROWSE_DVAR = "iwz_survival_browse"
 local ARCADE_DVAR = "iwz_gns_arcade"
 local ARCADE_GAME_DVAR = "iwz_gns_arcade_game"
 local ARCADE_RESULT_DVAR = "iwz_gns_arcade_result"
+
+local survivalMaps = {
+	cp_zmb = "ARCADE ATTACK!",
+	cp_rave = "RAVE RAMPAGE"
+}
 
 local bossDvars = {
 	"scr_direct_to_grey",
@@ -100,12 +104,14 @@ end
 
 
 local function beginSurvivalBrowse(controllerIndex)
-	clearArcadeMode()
-	resetBossMode()
-	Engine.ExecNow("set " .. SURVIVAL_DVAR .. " 0")
+	-- CPMaps previews posters; MapButton commits the map only on selection.
+	-- Keep the current lobby mode and cast intact until that same commit point.
 	Engine.ExecNow("set " .. SURVIVAL_BROWSE_DVAR .. " 1")
-	updatePartyState()
-	log("film browser opened controller=" .. controllerIndex .. " replacement=cp_zmb->" .. SURVIVAL_MAP_NAME)
+	log("film browser opened controller=" .. controllerIndex ..
+		" selectedMap=" .. Engine.GetDvarString("ui_mapname") ..
+		" survival=" .. tostring(Engine.GetDvarBool(SURVIVAL_DVAR)) ..
+		" cast=" .. game:getzombiescharacter() ..
+		" available=cp_zmb->" .. survivalMaps.cp_zmb .. ",cp_rave->" .. survivalMaps.cp_rave)
 	LUI.FlowManager.RequestAddMenu("CPMaps", true, controllerIndex)
 end
 
@@ -123,7 +129,7 @@ MenuBuilder.m_types["MapButton"] = function(menu, controller)
 			return
 		end
 
-		local disabled = Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) and map.ref ~= "cp_zmb"
+		local disabled = Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) and survivalMaps[map.ref] == nil
 		self.Button:SetButtonDisabled(disabled)
 
 		if disabled and not loggedDisabledSurvivalFilms[map.ref] then
@@ -139,10 +145,12 @@ MenuBuilder.m_types["MapButton"] = function(menu, controller)
 	-- mutating the shared frontEnd.maps data source used by Choose Film.
 	self.Button.Text.setText = function(element, text, duration)
 		local map = self:GetDataSource()
-		if map ~= nil and map.ref == "cp_zmb" and Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
-			text = SURVIVAL_MAP_NAME
+		local survivalMapName = map ~= nil and survivalMaps[map.ref] or nil
+		if survivalMapName ~= nil and Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
+			text = survivalMapName
 			if not loggedLabelOverride then
-				log("film label write intercepted controller=" .. controllerIndex .. " ref=cp_zmb label=" .. SURVIVAL_MAP_NAME)
+				log("film label write intercepted controller=" .. controllerIndex ..
+					" ref=" .. map.ref .. " label=" .. survivalMapName)
 				loggedLabelOverride = true
 			end
 		end
@@ -154,8 +162,9 @@ MenuBuilder.m_types["MapButton"] = function(menu, controller)
 	-- above is what guarantees later stock writes cannot restore Spaceland.
 	self.Button:SubscribeToModelThroughElement(self, "name", function()
 		local map = self:GetDataSource()
-		if map ~= nil and map.ref == "cp_zmb" and Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
-			self.Button.Text:setText(SURVIVAL_MAP_NAME, 0)
+		local survivalMapName = map ~= nil and survivalMaps[map.ref] or nil
+		if survivalMapName ~= nil and Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
+			self.Button.Text:setText(survivalMapName, 0)
 		end
 
 		refreshSurvivalFilmEligibility()
@@ -170,9 +179,13 @@ MenuBuilder.m_types["MapButton"] = function(menu, controller)
 			log("film selection deferred to stock reason=missing row data source controller=" .. actionController)
 			return stockAction(element, event)
 		end
+		-- Stock MapButton opens the store for unowned films without selecting one.
+		if not map.isOwned:GetValue(actionController) then
+			return stockAction(element, event)
+		end
 
 		local mapRef = map.ref
-		if Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) and mapRef ~= "cp_zmb" then
+		if Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) and survivalMaps[mapRef] == nil then
 			log("film selection rejected controller=" .. actionController .. " map=" .. mapRef ..
 				" reason=disabled for Survival")
 			return
@@ -199,8 +212,10 @@ MenuBuilder.m_types["CPMaps"] = function(menu, controller)
 
 	self:addEventHandler("menu_close", function()
 		if Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
-			clearSurvivalMode("left Survival film browser without a selection", true)
-			updatePartyState()
+			Engine.ExecNow("set " .. SURVIVAL_BROWSE_DVAR .. " 0")
+			log("film browser canceled; lobby selection preserved map=" .. Engine.GetDvarString("ui_mapname") ..
+				" survival=" .. tostring(Engine.GetDvarBool(SURVIVAL_DVAR)) ..
+				" cast=" .. game:getzombiescharacter())
 		end
 	end)
 
@@ -278,11 +293,37 @@ end
 MenuBuilder.m_types["CPMatchDetails"] = function(menu, controller)
 	local self = originalCPMatchDetails(menu, controller)
 	local controllerIndex = getControllerIndex(controller)
+	local stockMapNameSetText = self.MapName.setText
+	local loggedMapNameOverride = false
+
+	-- CPMatchDetails owns a stock map-name subscription which may run after
+	-- ours. Transform every final write while Survival is selected so the
+	-- MAP field cannot revert to Rave in the Redwoods asynchronously.
+	self.MapName.setText = function(element, text, duration)
+		if Engine.GetDvarBool(SURVIVAL_DVAR) then
+			local mapRef = Engine.GetDvarString("ui_mapname")
+			local mapName = survivalMaps[mapRef]
+			if mapName ~= nil then
+				text = mapName
+				if not loggedMapNameOverride then
+					log("match-details map label write intercepted controller=" .. controllerIndex ..
+						" ref=" .. mapRef .. " label=" .. mapName)
+					loggedMapNameOverride = true
+				end
+			end
+		end
+
+		return stockMapNameSetText(element, text, duration)
+	end
 
 	local function refreshModeName()
 		if Engine.GetDvarBool(SURVIVAL_DVAR) then
 			self.GameType:setText(SURVIVAL_MODE_NAME, 0)
-			self.MapName:setText(SURVIVAL_MAP_NAME, 0)
+			local mapRef = Engine.GetDvarString("ui_mapname")
+			local mapName = survivalMaps[mapRef]
+			if mapName ~= nil then
+				self.MapName:setText(mapName, 0)
+			end
 		end
 	end
 
@@ -292,4 +333,5 @@ MenuBuilder.m_types["CPMatchDetails"] = function(menu, controller)
 	return self
 end
 
-log("frontend integration registered map=cp_zmb label=" .. SURVIVAL_MAP_NAME)
+log("frontend integration registered maps=cp_zmb,cp_rave labels=" ..
+	survivalMaps.cp_zmb .. "," .. survivalMaps.cp_rave)

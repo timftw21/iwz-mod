@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 0.5 adds Arcade Attack survival mode, expands Zombies progression and HUD options, improves third-person aiming and map interactions, and fixes inventory, records, localization, power-up, and Pack-a-Punch presentation issues. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 0.6 adds Rave Rampage survival mode, the Death Wish zombie-speed toggle for both survival maps, and the Neon Rot weapon camo. It also fixes crawler collision, preserves lobby selections when canceling the survival browser, protects players using Shaolin's phone booths, and improves pickup and portal hints. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -20,9 +20,7 @@ IWZ-MOD 0.5 adds Arcade Attack survival mode, expands Zombies progression and HU
  - Certain tweaks to how custom music behaves in the pre-game lobby
  - Certain vanilla hintstrings should be tweaked
  - Zombies camos (framework is working)
- - The next survival map, Rave in the Redwood's "Rave Rampage"
  - More map-specific fixes and tweaks
- - Fix crawler bug (they sometimes lose collision)
 
 # IWZ-MOD Changes
 
@@ -33,7 +31,10 @@ General
  - Added zombies-specific options, such as camera perspective options, HUD options, and an in-game timer for all modes
  - A variety of fixes and tweaks to the Zombies' menus
  - Added a Restart Match button to the in-game pause menu (glorified map_restart)
- - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; first survival map is "Arcade Attack!"
+ - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!" and "Rave Rampage"
+ - Death Wish lets players make slower zombies run in survival maps, with toggle sounds, a red soul jar, and a red scene counter while enabled
+ - Added the Neon Rot camo, unlocked by earning 5 headshot kills with the M1 in Zombies
+ - Canceling the survival film browser now preserves the selected game mode, map, and cast
  - Ghosts 'N Skulls Arcade: select Ghosts 'N Skulls games without completing their tedious in-game steps
  - CAST button allows the player to choose their character
  - Power-ups now spawn more frequently (will probably require some more adjustments)
@@ -41,6 +42,7 @@ General
  - Sprinting zombies are now slightly slower
  - Interactions with traversing zombies do not push the player like a fucking bouncy ball anymore
  - General improvements to zombie collision and interactions (it's not perfect, but it's better!)
+ - Fixed crawlers intermittently losing collision
  - Climbing ladders and other objects is now significantly faster
  - In-game pause menu now displays a weapon XP widget
  - The match summary now displays cards for weapon levels and unlocked calling cards
@@ -64,6 +66,7 @@ Rave in the Redwoods
 Shaolin Shuffle
  - Ninja zombies no longer teleport; base ninja zombie speed has been increased by 15%
  - The Banshee at spawn no longer clips through the bench
+ - Zombies ignore players while they are using phone booths
  - Other miscellaneous tweaks and fixes
 
 Attack of the Radioactive Thing
