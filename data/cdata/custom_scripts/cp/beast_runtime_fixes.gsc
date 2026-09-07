@@ -1,3 +1,4 @@
+// IWZ-LOAD: map=cp_final
 main()
 {
     if (getdvar("ui_mapname") != "cp_final")
@@ -13,6 +14,24 @@ main()
     final_starting_vo = getfunction("scripts/cp/maps/cp_final/cp_final_vo", "final_starting_vo");
     willard_intro_vo = getfunction("scripts/cp/maps/cp_final/cp_final_vo", "willard_intro_vo");
     new_wave_sound = getfunction("scripts/cp/zombies/zombies_spawning", "_id_BDD4");
+    move_players = getfunction("scripts/cp/maps/cp_final/cp_final_rhino_boss", "move_players_to_rhino_fight");
+    if (isdefined(move_players))
+    {
+        replacefunc(move_players, ::move_players_to_rhino_with_transition);
+        beast_fix_log("installed PaP-to-rhino transition using stock hidden travel tube");
+    }
+    else
+        beast_fix_log("rhino transition hook unavailable: move_players_to_rhino_fight lookup failed");
+
+    loadout = getfunction("scripts/cp/maps/cp_final/cp_final_final_boss", "bossfight_loadout");
+    if (isdefined(loadout))
+    {
+        level.iwz_beast_stock_loadout = loadout;
+        replacefunc(loadout, ::bossfight_loadout_with_transition);
+        beast_fix_log("installed rhino-to-Mephistopheles loadout portal transition");
+    }
+    else
+        beast_fix_log("Mephistopheles transition hook unavailable: bossfight_loadout lookup failed");
 
     installed = 0;
     if (isdefined(dissolve_corpse))
@@ -82,6 +101,7 @@ post_load()
 
     install_authoritative_dispatch_boundaries();
     level thread listen_for_beast_floppy_test_command();
+    level thread listen_for_beast_boss_test();
     beast_fix_log("started Beast floppy test monitor; " +
         "Scene 1 audio owner=presented HUD splash " +
         "subsequentSceneOwner=cp_final spawning stock helper");
@@ -90,6 +110,193 @@ post_load()
 beast_fix_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("BeastFixes", message);
+}
+
+move_players_to_rhino_with_transition()
+{
+    level endon("game_ended");
+    level.currentneilstate = "angry";
+    players = level.players;
+    offsets = [(50,50,0), (-50,50,0), (50,-50,0), (-50,-50,0)];
+    direct = scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight();
+    // Direct Boss Battle already places players in the arena during setup.
+    if (!direct)
+    {
+        foreach (index, player in players)
+        {
+            player.iwz_boss_travelling = 1;
+            player thread travel_through_boss_portal((2896,2868,-68) + offsets[index], (4,270,0));
+        }
+        foreach (player in players)
+        {
+            while (isdefined(player) && isdefined(player.iwz_boss_travelling))
+                wait 0.05;
+        }
+    }
+    foreach (player in players)
+    {
+        if (!isdefined(player))
+            continue;
+        player scripts\cp\utility::removedamagemodifier("papRoom", 0);
+        player.is_off_grid = undefined;
+        player.kicked_out = undefined;
+        set_in_pap_room_with_projector_audio(player, 0);
+        player thread scripts\cp\maps\cp_final\cp_final::update_special_mode_for_player(player);
+    }
+    beast_fix_log("rhino arrival complete players=" + players.size + " directBoss=" + direct);
+}
+
+bossfight_loadout_with_transition()
+{
+    level endon("game_ended");
+    // Loadout setup runs once. Restore its entry before calling the original
+    // so its wheel, perks, spawn selection and five-minute timer stay stock.
+    loadout = level.iwz_beast_stock_loadout;
+    replacefunc(loadout, loadout);
+    force_transition = scripts\engine\utility::is_true(level.iwz_test_meph_transition);
+    level.iwz_test_meph_transition = undefined;
+    if (!force_transition && (!scripts\engine\utility::flag_exist("start_rhino_sequence") ||
+        !scripts\engine\utility::flag("start_rhino_sequence")))
+    {
+        [[loadout]]();
+        return;
+    }
+
+    players = level.players;
+    beast_fix_log("Mephistopheles loadout portal started players=" + players.size);
+    foreach (player in players)
+    {
+        player.iwz_boss_travelling = 1;
+        player thread travel_through_boss_portal(undefined, undefined, 1);
+    }
+    foreach (player in players)
+    {
+        while (isdefined(player) && isdefined(player.iwz_boss_travelling))
+            wait 0.05;
+    }
+
+    // Everyone remains behind the portal's white screen while stock code
+    // selects the afterlife-arcade spawns and prepares the loadout room.
+    [[loadout]]();
+    foreach (player in players)
+    {
+        if (!isdefined(player))
+            continue;
+        player thread finish_boss_portal_travel();
+        beast_fix_log("Mephistopheles loadout arrival player=" + (player getentitynumber()) + " origin=" + player.origin);
+    }
+}
+
+travel_through_boss_portal(destination, destination_angles, hold_white)
+{
+    level endon("game_ended");
+    self endon("disconnect");
+    beast_fix_log("boss portal started player=" + (self getentitynumber()) + " from=" + self.origin);
+    self notify("left_hidden_room_early");
+    self.kicked_out = 1;
+    self scripts\cp\utility::allow_player_interactions(0);
+    self scripts\cp\powers\coop_powers::power_disablepower();
+    self.disable_consumables = 1;
+    self.isfasttravelling = 1;
+    self forceusehintoff();
+    self notify("delete_equipment");
+    self scripts\cp\utility::adddamagemodifier("papRoom", 0.0, 0);
+    self scripts\cp\zombies\zombie_afterlife_arcade::add_white_screen();
+    // Reuse the authored exit tunnel, camera movement and portal-travel sound.
+    mover = scripts\cp\maps\cp_final\cp_final_fast_travel::move_through_tube(
+        self, "hidden_travel_tube_end", "hidden_travel_tube_start", 1);
+    self unlink();
+    self dontinterpolate();
+    if (isdefined(destination))
+    {
+        self setorigin(destination);
+        self setplayerangles(destination_angles);
+    }
+    self playershow();
+    mover delete();
+    if (!scripts\engine\utility::is_true(hold_white))
+        finish_boss_portal_travel();
+    self.iwz_boss_travelling = undefined;
+    beast_fix_log("boss portal tunnel complete player=" + (self getentitynumber()) + " origin=" + self.origin);
+}
+
+finish_boss_portal_travel()
+{
+    level endon("game_ended");
+    self endon("disconnect");
+    self scripts\cp\zombies\zombie_afterlife_arcade::remove_white_screen(0.1);
+    self scripts\cp\utility::removedamagemodifier("papRoom", 0);
+    self.kicked_out = undefined;
+    self.isfasttravelling = undefined;
+    self.disable_consumables = undefined;
+    self scripts\cp\powers\coop_powers::power_enablepower();
+    self scripts\cp\utility::allow_player_interactions(1);
+    self scripts\cp\cp_interaction::refresh_interaction();
+    self notify("fast_travel_complete");
+    beast_fix_log("boss portal controls restored player=" + (self getentitynumber()));
+}
+
+listen_for_beast_boss_test()
+{
+    level endon("game_ended");
+    for (;;)
+    {
+        level waittill("iwz_test_beast_boss", player, meph_loadout);
+        if (!isdefined(player) || !isplayer(player))
+            continue;
+        if (!scripts\engine\utility::flag_exist("start_rhino_sequence") ||
+            scripts\engine\utility::flag("start_rhino_sequence") ||
+            isdefined(level.meph_fight_started) ||
+            scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight())
+        {
+            player iprintlnbold("Boss transition test unavailable: boss active or map not ready");
+            beast_fix_log("boss transition test rejected: boss active, direct mode or not initialized");
+            continue;
+        }
+        if (scripts\engine\utility::is_true(meph_loadout))
+        {
+            if (!isdefined(level.iwz_beast_stock_loadout) || !isdefined(level.bossfight_magicwheel) ||
+                !isdefined(level.boss_fnf_interaction) || getdvarint("skip_bossfight_loadout") == 1 ||
+                scripts\engine\utility::is_true(level.debug_boss_fight_skip_loadout))
+            {
+                player iprintlnbold("Loadout test unavailable: room not ready or loadout skipping enabled");
+                beast_fix_log("Meph loadout test rejected: room not ready or loadout skipping enabled");
+                continue;
+            }
+            player iprintlnbold("Testing boss-arena-to-Meph loadout portal");
+            beast_fix_log("Meph loadout test started player=" + (player getentitynumber()));
+            // Prepare a quiet arena without starting the Rhino fight or granting
+            // quest completion. The real Meph entry sets up the loadout room.
+            level.zombies_paused = 1;
+            scripts\engine\utility::flag_set("pause_wave_progression");
+            offsets = [(50,50,0), (-50,50,0), (50,-50,0), (-50,-50,0)];
+            foreach (index, candidate in level.players)
+            {
+                candidate notify("left_hidden_room_early");
+                candidate scripts\cp\utility::adddamagemodifier("papRoom", 0.0, 0);
+                candidate setorigin((2896,2868,-68) + offsets[index]);
+                candidate setplayerangles((4,270,0));
+                candidate.is_off_grid = undefined;
+                set_in_pap_room_with_projector_audio(candidate, 0);
+            }
+            wait 2;
+            level.iwz_test_meph_transition = 1;
+            scripts\cp\maps\cp_final\cp_final_final_boss::start_boss_fight();
+            beast_fix_log("Meph loadout test complete: stock loadout room and countdown active");
+            continue;
+        }
+        player iprintlnbold("Testing PaP-to-boss teleport; this starts the boss fight");
+        beast_fix_log("boss transition test started player=" + (player getentitynumber()));
+        // Exercise normal PaP travel first, then the same boss-start callback
+        // reached after everyone activates N31L. No quest-completion flags.
+        foreach (candidate in level.players)
+            scripts\cp\maps\cp_final\cp_final_fast_travel::travel_through_hidden_tube(candidate);
+        wait 2;
+        foreach (candidate in level.players)
+            candidate notify("left_hidden_room_early");
+        scripts\cp\maps\cp_final\cp_final_mpq::completeenterbossfight();
+        beast_fix_log("boss transition test complete: stock rhino fight started");
+    }
 }
 
 install_authoritative_dispatch_boundaries()

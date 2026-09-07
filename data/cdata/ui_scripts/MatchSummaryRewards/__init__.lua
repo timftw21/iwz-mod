@@ -68,6 +68,18 @@ local function installAARCallingCardBounds()
 		if weaponRef and context == LUI.ItemCard.contexts.AAR_PROGRESSION and
 			itemType == LUI.ItemCard.types.WEAPON then
 			local cardData = self and self._itemCardData
+			-- Level cards use the same white HUD artwork as the in-game
+			-- weapon-level splash, rather than the colored armory image.
+			local icon = Engine.TableLookup("cp/zombies/zombie_splashtable.csv", 0,
+				"ranked_up_weapon_" .. weaponRef, 3)
+			if cardData and cardData.image and icon and icon ~= "" then
+				cardData.image:SetValue(controllerIndex, icon)
+				print("[IWZ][MatchSummaryRewards] weapon level artwork weapon=" ..
+					tostring(weaponRef) .. " icon=" .. icon .. " source=HUD-level-splash")
+			else
+				print("[IWZ][MatchSummaryRewards] weapon level artwork unavailable weapon=" ..
+					tostring(weaponRef))
+			end
 			if cardData and cardData.rank and cardData.rankIcon and cardData.rankName then
 				cardData.rank:SetValue(controllerIndex, weaponLevel)
 				cardData.rankName:SetValue(controllerIndex, "")

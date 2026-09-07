@@ -1,3 +1,4 @@
+// IWZ-LOAD: map=cp_disco
 post_load()
 {
     if (getdvar("ui_mapname") != "cp_disco")

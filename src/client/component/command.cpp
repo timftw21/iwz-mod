@@ -728,6 +728,31 @@ namespace command
 			}
 		}
 
+		void cmd_test_beast_boss_transition(const int client_num, const bool meph_loadout = false)
+		{
+			const auto* command_name = meph_loadout ? "testMephLoadoutTransition" : "testBeastBossTransition";
+			const auto* map = game::Dvar_FindVar("mapname");
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP ||
+				!map || !map->current.string || _stricmp(map->current.string, "cp_final") != 0)
+			{
+				game::shared::client_println(client_num, "This command is only available on The Beast from Beyond");
+				return;
+			}
+			try
+			{
+				const scripting::entity player{{static_cast<uint16_t>(client_num), 0}};
+				const scripting::entity level{*game::levelEntityId};
+				scripting::notify(level, "iwz_test_beast_boss", {player, meph_loadout});
+				console::info("[IWZ][BeastFixes] %s dispatched client=%d target=%s\n", command_name,
+					client_num, meph_loadout ? "Mephistopheles loadout room" : "rhino fight");
+			}
+			catch (const std::exception& e)
+			{
+				console::error("[IWZ][BeastFixes] %s failed: %s\n", command_name, e.what());
+				game::shared::client_println(client_num, "Unable to start the boss transition test");
+			}
+		}
+
 		void cmd_spawn_beast_floppy(const int client_num)
 		{
 			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
@@ -933,7 +958,7 @@ namespace command
 			game::Dvar_RegisterFloat("iwz_low_health_blood_scale", 0.25f, 0.10f, 1.0f, game::DVAR_FLAG_SAVED,
 				"Center-origin scale of the Zombies low-health blood overlay (stock is 0.10; larger pushes blood toward the edges)");
 			game::Dvar_RegisterBool("iwz_double_xp", false, game::DVAR_FLAG_SAVED,
-				"Double Zombies level and weapon XP");
+				"Double Zombies level XP, weapon XP, and key earnings");
 			game::Dvar_RegisterInt("iwz_challenge_tier5_xp", 2500, 1, 100000, game::DVAR_FLAG_SAVED,
 				"Base XP awarded by Tier 5 Zombies challenges");
 			game::Dvar_RegisterInt("iwz_challenge_splash_duration_ms", 3000, 2500, 10000, game::DVAR_FLAG_SAVED,
@@ -1167,6 +1192,18 @@ namespace command
 				}
 
 				cmd_spawn_beast_floppy(client_num);
+			});
+
+			add_sv("testBeastBossTransition", [](const int client_num, const params_sv&)
+			{
+				if (game::shared::cheats_ok(client_num, true))
+					cmd_test_beast_boss_transition(client_num);
+			});
+
+			add_sv("testMephLoadoutTransition", [](const int client_num, const params_sv&)
+			{
+				if (game::shared::cheats_ok(client_num, true))
+					cmd_test_beast_boss_transition(client_num, true);
 			});
 
 			add_sv("winGNS", [](const int client_num, const params_sv&)

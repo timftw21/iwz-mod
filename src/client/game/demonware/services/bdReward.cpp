@@ -11,6 +11,8 @@
 #include <utils/flags.hpp>
 
 #include "../loot/loot.hpp"
+#include "../loot/key_rewards.hpp"
+#include "game/game.hpp"
 
 #define TRUE_KEY_AMOUNT(num) num * 100
 
@@ -47,7 +49,6 @@ namespace demonware
 
 	void bdReward::reportRewardEvents(service_server* server, byte_buffer* buffer) const
 	{
-		static int mission_instanced_id_cache = 0;
 		static int mission_set_instanced_id_cache = 0;
 
 		std::string platform;
@@ -58,14 +59,14 @@ namespace demonware
 
 		static bool has_passed_dud_daily_login = false; // daily login calls twice, and the first one means nothing
 
-		buffer->read_string(&platform);
-		buffer->read_uint16(&numEvents);
-		buffer->read_int32(&rewardEventType); // none 0, json 1
-
-		assert(rewardEventType == 1);
-		assert(numEvents == 1);
-
-		buffer->read_string(&json_buffer);
+		if (!buffer->read_string(&platform) || !buffer->read_uint16(&numEvents) ||
+			!buffer->read_int32(&rewardEventType) || numEvents != 1 || rewardEventType != 1 ||
+			!buffer->read_string(&json_buffer))
+		{
+			console::warn("[IWZ][Keys] invalid reward event envelope\n");
+			server->create_reply(this->task_id(), BD_REWARD_EVENTS_DATA_ERROR).send();
+			return;
+		}
 
 		const auto send = [&](nlohmann::json& json_reply)
 		{
@@ -88,273 +89,313 @@ namespace demonware
 			reply.send(&reply_buffer, true);
 		};
 
-		nlohmann::json json;
-		json = json.parse(json_buffer);
-
-		const auto action = json["Action"].get<std::string>();
-		if (action == "DailyLogin")
+		try
 		{
-			if (!has_passed_dud_daily_login)
+			nlohmann::json json;
+			json = json.parse(json_buffer);
+
+			const auto action = json["Action"].get<std::string>();
+			if (action == "DailyLogin")
 			{
-				console::redudant("[%s] ignoring first call of DailyLogin", __func__);
-				has_passed_dud_daily_login = true;
-				server->create_reply(this->task_id(), BD_NO_ERROR).send();
-				return;
+				if (!has_passed_dud_daily_login)
+				{
+					console::redudant("[%s] ignoring first call of DailyLogin", __func__);
+					has_passed_dud_daily_login = true;
+					server->create_reply(this->task_id(), BD_NO_ERROR).send();
+					return;
+				}
+
+				console::important("[%s] handling daily login rewards\n", __func__);
+
+				nlohmann::json json_reply;
+				json_reply["Action"] = "DailyLoginResponse";
+
+				auto is_new_day = loot::is_new_day();
+				const auto days_logged_in = loot::get_days_logged_in();
+				const auto login_day_count = days_logged_in + (is_new_day ? 1 : 0);
+				if (is_new_day)
+					loot::set_days_logged_in(login_day_count);
+
+				json_reply["LoginDayCount"] = login_day_count;
+				json_reply["FirstTimeToday"] = is_new_day;
+				json_reply["LoginDayCountSP"] = login_day_count;
+				json_reply["FirstTimeTodaySP"] = is_new_day;
+
+				// Packs
+				json_reply["BasicPacks"] = nlohmann::json::value_type::array();
+
+				// this lets you give currency for the daily login
+				json_reply["BasicPacks"][0]["Currencies"] = nlohmann::json::value_type::object();
+
+				// give the plyer 60 keys daily for logins
+				if (is_new_day)
+				{
+					json_reply["BasicPacks"][0]["Currencies"]["11"] = TRUE_KEY_AMOUNT(60);
+
+					auto current_keys = loot::get_currency_balance(loot::CurrencyType::keys);
+					loot::set_currency_balance( loot::CurrencyType::keys, current_keys + (TRUE_KEY_AMOUNT(60)) );
+					loot::save(); // save because we read it a few lines down
+				}
+				else
+					json_reply["BasicPacks"][0]["Currencies"]["11"] = 0;
+
+				json_reply["BasicPacks"][0]["Currencies"]["12"] = 0; // salvage
+				json_reply["BasicPacks"][0]["Currencies"]["20"] = 0; // codpoints
+
+				// ?
+				json_reply["BasicPacks"][0]["Items"] = nlohmann::json::value_type::array();
+				json_reply["BasicPacks"][0]["Id"] = 200018;
+
+				json_reply["SeasonPassPacks"] = nlohmann::json::value_type::array();
+
+				// Extra Items
+				json_reply["ExtraItems"] = nlohmann::json::value_type::array();
+
+				// Items
+				json_reply["Items"] = nlohmann::json::value_type::array();
+
+				// mp/loot/iw7_loot_crate_loot_master.csv
+				for (auto i = 0; i < 6; ++i)
+				{
+					auto item_id = 70000 + i;
+					json_reply["Items"][i]["ItemId"] = item_id;
+					json_reply["Items"][i]["Collision"] = 0; // not sure what this does
+					auto amount = loot::get_item_balance(item_id);
+					json_reply["Items"][i]["Balance"] = amount;
+				}
+
+				// Currencies
+				json_reply["Currencies"] = nlohmann::json::value_type::array();
+
+				// Keys
+				json_reply["Currencies"][0]["CurrencyId"] = loot::CurrencyType::keys;
+				json_reply["Currencies"][0]["Balance"] = loot::get_currency_balance(loot::CurrencyType::keys);
+
+				// Salvage
+				json_reply["Currencies"][1]["CurrencyId"] = loot::CurrencyType::salvage;
+				json_reply["Currencies"][1]["Balance"] = loot::get_currency_balance(loot::CurrencyType::salvage);
+
+				// CodPoints
+				json_reply["Currencies"][2]["CurrencyId"] = loot::CurrencyType::codpoints;
+				json_reply["Currencies"][2]["Balance"] = loot::get_currency_balance(loot::CurrencyType::codpoints);
+
+				json_reply["ClientTx"] = json["ClientTx"];
+
+				loot::save();
+
+				send(json_reply);
 			}
-
-			console::important("[%s] handling daily login rewards\n", __func__);
-
-			nlohmann::json json_reply;
-			json_reply["Action"] = "DailyLoginResponse";
-
-			auto is_new_day = loot::is_new_day();
-			const auto days_logged_in = loot::get_days_logged_in();
-			const auto login_day_count = days_logged_in + (is_new_day ? 1 : 0);
-			if (is_new_day)
-				loot::set_days_logged_in(login_day_count);
-
-			json_reply["LoginDayCount"] = login_day_count;
-			json_reply["FirstTimeToday"] = is_new_day;
-			json_reply["LoginDayCountSP"] = login_day_count;
-			json_reply["FirstTimeTodaySP"] = is_new_day;
-
-			// Packs
-			json_reply["BasicPacks"] = nlohmann::json::value_type::array();
-
-			// this lets you give currency for the daily login
-			json_reply["BasicPacks"][0]["Currencies"] = nlohmann::json::value_type::object();
-
-			// give the plyer 60 keys daily for logins
-			if (is_new_day)
+			else if (action == "ClaimLootCrates")
 			{
-				json_reply["BasicPacks"][0]["Currencies"]["11"] = TRUE_KEY_AMOUNT(60);
+				nlohmann::json json_reply;
+				json_reply["Action"] = "ClaimLootCratesResponse";
 
-				auto current_keys = loot::get_currency_balance(loot::CurrencyType::keys);
-				loot::set_currency_balance( loot::CurrencyType::keys, current_keys + (TRUE_KEY_AMOUNT(60)) );
-				loot::save(); // save because we read it a few lines down
+				json_reply["Packs"] = nlohmann::json::value_type::array();
+				json_reply["Items"] = nlohmann::json::value_type::array();
+				json_reply["Currencies"] = nlohmann::json::value_type::array();
+
+				// Items, Packs
+				const auto rule_id = json["RuleId"].is_number_integer() ? json["RuleId"].get<int>() : 0;
+				const auto crate_id = 70000 + rule_id;
+
+				console::demonware("\n[DW]: supply drop open requested (crate id = %d)\n", crate_id);
+
+				int itemidx = 0;
+
+				auto crate_balance = loot::get_item_balance(crate_id);
+				console::demonware("[DW]: crate balance is %d for %d\n", crate_balance, crate_id);
+
+				const auto has_unlock_all_loot = dvars::cg_unlockall_loot && dvars::cg_unlockall_loot->current.enabled;
+
+				if (!has_unlock_all_loot && !crate_balance)
+				{
+					console::error("ClaimLootCrates: crate_balance is 0\n");
+					server->create_reply(this->task_id(), BD_MARKETPLACE_INSUFFICIENT_ITEM_QUANTITY).send();
+					return;
+				}
+
+				auto new_crate_balance = crate_balance;
+
+				if (has_unlock_all_loot)
+				{
+					console::demonware("[DW]: ignoring crate balance");
+				}
+				else
+				{
+					new_crate_balance = crate_balance - 1;
+					console::demonware("[DW]: new crate balance is %d for %d\n", new_crate_balance, crate_id);
+				}
+
+				json_reply["Items"][itemidx]["ItemId"] = crate_id;
+				json_reply["Items"][itemidx]["Collision"] = 0; // not sure what this does
+				json_reply["Items"][itemidx]["Balance"] = new_crate_balance;
+				itemidx++;
+
+				loot::set_item_balance(crate_id, new_crate_balance);
+
+				auto loot = loot::get_random_loot(crate_id);
+				if (loot.empty())
+				{
+					console::error("ClaimLootCrates: missing LootCrate logic for %d, this may be supported later!\n", crate_id);
+					server->create_reply(this->task_id(), BD_MARKETPLACE_ERROR).send();
+					return;
+				}
+
+				for (auto i = 0; i < loot.size(); i++)
+				{
+					const auto item_id = loot[i].id;
+
+					json_reply["Packs"][i] = item_id;
+
+					const auto balance = loot::get_item_balance(item_id) + 1;
+					loot::set_item_balance(item_id, balance);
+
+					json_reply["Items"][i + itemidx]["ItemId"] = item_id;
+					json_reply["Items"][i + itemidx]["Collision"] = 0;
+					json_reply["Items"][i + itemidx]["Balance"] = balance;
+
+					console::demonware("[DW]: + giving loot %d for %d\n", item_id, i);
+				}
+
+				loot::save();
+
+				console::demonware("[DW]: saving loot\n\n");
+
+				json_reply["Error"] = "";
+				json_reply["ClientTx"] = json["ClientTx"];
+
+				send(json_reply);
+			}
+			else if (action == "StartMission")
+			{
+				console::demonware("[DW]: mission start requested...\n");
+
+				console::demonware("%s\n", json_buffer.data());
+
+				[[maybe_unused]] const auto match_id = json["MatchId"].get<int>(); // always 0
+				const auto mission_id = json["MissionId"].get<int>();
+				[[maybe_unused]] const auto mission_set_instanced_id = json["MissionSetInstanceId"].get<unsigned int>();
+
+				nlohmann::json json_reply;
+				json_reply["Action"] = "StartMissionResponse";
+
+				json_reply["MissionInstanceId"] = loot::begin_key_reward(mission_id);
+
+				console::info("[IWZ][Keys] mission started mode=%s mission=%d instance=%d\n",
+					mission_id == 1 ? "zombies" : mission_id == 0 ? "multiplayer" : "other",
+					mission_id, json_reply["MissionInstanceId"].get<int>());
+
+				send(json_reply);
+				console::demonware("%s\n", json_reply.dump().data());
+			}
+			else if (action == "StartMissionSet") // aka StartContract
+			{
+				console::demonware("[DW]: contract start requested...\n");
+
+				console::demonware("%s\n", json_buffer.data());
+
+				const auto mission_set_id = json["MissionSetId"].get<unsigned int>();
+
+				nlohmann::json json_reply;
+				json_reply["Action"] = "StartMissionSetResponse";
+
+				json_reply["MissionSetId"] = mission_set_id;
+				json_reply["MissionSetInstanceId"] = mission_set_instanced_id_cache++;
+
+				send(json_reply);
+				console::demonware("%s\n", json_reply.dump().data());
+			}
+			else if (action == "EndMission")
+			{
+				console::demonware("[DW]: mission end requested...\n");
+
+				console::demonware("%s\n", json_buffer.data());
+
+				[[maybe_unused]] const auto match_id = json["MatchId"].get<int>(); // always 0
+				const auto mission_id = json["MissionId"].get<int>();
+				const auto mission_instance_id = json["MissionInstanceId"].get<unsigned int>();
+				const auto mission_result = json["MissionResult"].get<int>();
+				const auto time_played = json["TimePlayed"].get<int>();
+				[[maybe_unused]] const auto client_tx = json["ClientTx"].get<std::string>();
+
+				nlohmann::json json_reply;
+				json_reply["Action"] = "EndMissionResponse";
+
+				json_reply["Packs"] = nlohmann::json::value_type::array();
+				json_reply["Items"] = nlohmann::json::value_type::array();
+				json_reply["Currencies"] = nlohmann::json::value_type::array();
+
+				const auto* event = game::Dvar_FindVar("online_double_keys");
+				const bool event_double_keys = event &&
+					((event->type == game::DVAR_TYPE_BOOL && event->current.enabled) ||
+					 (event->type == game::DVAR_TYPE_INT && event->current.integer > 0));
+				const auto* xp_toggle = game::Dvar_FindVar("iwz_double_xp");
+				const bool toggle_double_keys = mission_id == 1 && xp_toggle &&
+					xp_toggle->type == game::DVAR_TYPE_BOOL && xp_toggle->current.enabled;
+				// Select by the submitted mission: rewards can arrive after leaving Zombies.
+				// The option and the stock event enable the same bonus; they do not stack.
+				const bool double_keys = event_double_keys || toggle_double_keys;
+				const auto earned = loot::calculate_match_keys(mission_id, mission_result, time_played, double_keys);
+				const auto payout = loot::finish_key_reward(mission_instance_id, mission_id, earned);
+				json_reply["ClientTx"] = json["ClientTx"];
+				// The native handler computes earned keys from the absolute balance,
+				// then refreshes commerce and feeds the stock after-action display.
+				json_reply["Currencies"].push_back({{"CurrencyId", loot::CurrencyType::keys},
+					{"Balance", payout.balance}});
+				console::info("[IWZ][Keys] mission ended mode=%s mission=%d instance=%u "
+					"result=%d seconds=%d policy=approximation-v1 doubleKeys=%d event=%d xpToggle=%d "
+					"earnedHundredths=%u balanceHundredths=%u->%u status=%s\n",
+					mission_id == 1 ? "zombies" : mission_id == 0 ? "multiplayer" : "other",
+					mission_id, mission_instance_id, mission_result, time_played, double_keys,
+					event_double_keys, toggle_double_keys,
+					payout.balance - payout.before, payout.before, payout.balance,
+					payout.accepted ? "saved" : "duplicate-or-unknown-instance");
+
+				send(json_reply);
+				console::demonware("%s\n", json_reply.dump().data());
+			}
+			else if (action == "EndMissionSet") // aka EndContract
+			{
+				console::demonware("[DW]: contract end requested...\n");
+
+				console::demonware("%s\n", json_buffer.data());
+
+				const auto mission_set_id = json["MissionSetId"].get<unsigned int>();
+				[[maybe_unused]] const auto mission_set_instance_id = json["MissionSetInstanceId"].get<unsigned int>();
+				[[maybe_unused]] const auto client_tx = json["ClientTx"].get<std::string>();
+
+				nlohmann::json json_reply;
+				json_reply["Action"] = "EndMissionSetResponse";
+
+				json_reply["MissionSetId"] = mission_set_id;
+
+				json_reply["Packs"] = nlohmann::json::value_type::array();
+				json_reply["Items"] = nlohmann::json::value_type::array();
+				json_reply["Currencies"] = nlohmann::json::value_type::array();
+
+				send(json_reply);
+				console::demonware("%s\n", json_reply.dump().data());
+			}
+			else if (action == "ResetMissions")
+			{
+				console::demonware("[DW]: mission reset requested...\n");
+
+				console::demonware("%s\n", json_buffer.data());
+
+				// Key reward instance IDs are persistent and must never be recycled.
+				// Preserve pending starts from other local controllers as well.
+				mission_set_instanced_id_cache = 0;
 			}
 			else
-				json_reply["BasicPacks"][0]["Currencies"]["11"] = 0;
-
-			json_reply["BasicPacks"][0]["Currencies"]["12"] = 0; // salvage
-			json_reply["BasicPacks"][0]["Currencies"]["20"] = 0; // codpoints
-
-			// ?
-			json_reply["BasicPacks"][0]["Items"] = nlohmann::json::value_type::array();
-			json_reply["BasicPacks"][0]["Id"] = 200018;
-
-			json_reply["SeasonPassPacks"] = nlohmann::json::value_type::array();
-
-			// Extra Items
-			json_reply["ExtraItems"] = nlohmann::json::value_type::array();
-
-			// Items
-			json_reply["Items"] = nlohmann::json::value_type::array();
-
-			// mp/loot/iw7_loot_crate_loot_master.csv
-			for (auto i = 0; i < 6; ++i)
 			{
-				auto item_id = 70000 + i;
-				json_reply["Items"][i]["ItemId"] = item_id;
-				json_reply["Items"][i]["Collision"] = 0; // not sure what this does
-				auto amount = loot::get_item_balance(item_id);
-				json_reply["Items"][i]["Balance"] = amount;
+				console::demonware("[DW]: unhandled reward action \"%s\"...\n", action.data());
 			}
-
-			// Currencies
-			json_reply["Currencies"] = nlohmann::json::value_type::array();
-
-			// Keys
-			json_reply["Currencies"][0]["CurrencyId"] = loot::CurrencyType::keys;
-			json_reply["Currencies"][0]["Balance"] = loot::get_currency_balance(loot::CurrencyType::keys);
-
-			// Salvage
-			json_reply["Currencies"][1]["CurrencyId"] = loot::CurrencyType::salvage;
-			json_reply["Currencies"][1]["Balance"] = loot::get_currency_balance(loot::CurrencyType::salvage);
-
-			// CodPoints
-			json_reply["Currencies"][2]["CurrencyId"] = loot::CurrencyType::codpoints;
-			json_reply["Currencies"][2]["Balance"] = loot::get_currency_balance(loot::CurrencyType::codpoints);
-
-			json_reply["ClientTx"] = json["ClientTx"];
-
-			loot::save();
-
-			send(json_reply);
 		}
-		else if (action == "ClaimLootCrates")
+		catch (const std::exception& error)
 		{
-			nlohmann::json json_reply;
-			json_reply["Action"] = "ClaimLootCratesResponse";
-
-			json_reply["Packs"] = nlohmann::json::value_type::array();
-			json_reply["Items"] = nlohmann::json::value_type::array();
-			json_reply["Currencies"] = nlohmann::json::value_type::array();
-
-			// Items, Packs
-			const auto rule_id = json["RuleId"].is_number_integer() ? json["RuleId"].get<int>() : 0;
-			const auto crate_id = 70000 + rule_id;
-
-			console::demonware("\n[DW]: supply drop open requested (crate id = %d)\n", crate_id);
-
-			int itemidx = 0;
-
-			auto crate_balance = loot::get_item_balance(crate_id);
-			console::demonware("[DW]: crate balance is %d for %d\n", crate_balance, crate_id);
-
-			const auto has_unlock_all_loot = dvars::cg_unlockall_loot && dvars::cg_unlockall_loot->current.enabled;
-
-			if (!has_unlock_all_loot && !crate_balance)
-			{
-				console::error("ClaimLootCrates: crate_balance is 0\n");
-				server->create_reply(this->task_id(), BD_MARKETPLACE_INSUFFICIENT_ITEM_QUANTITY).send();
-				return;
-			}
-
-			auto new_crate_balance = crate_balance;
-
-			if (has_unlock_all_loot)
-			{
-				console::demonware("[DW]: ignoring crate balance");
-			}
-			else
-			{
-				new_crate_balance = crate_balance - 1;
-				console::demonware("[DW]: new crate balance is %d for %d\n", new_crate_balance, crate_id);
-			}
-
-			json_reply["Items"][itemidx]["ItemId"] = crate_id;
-			json_reply["Items"][itemidx]["Collision"] = 0; // not sure what this does
-			json_reply["Items"][itemidx]["Balance"] = new_crate_balance;
-			itemidx++;
-
-			loot::set_item_balance(crate_id, new_crate_balance);
-
-			auto loot = loot::get_random_loot(crate_id);
-			if (loot.empty())
-			{
-				console::error("ClaimLootCrates: missing LootCrate logic for %d, this may be supported later!\n", crate_id);
-				server->create_reply(this->task_id(), BD_MARKETPLACE_ERROR).send();
-				return;
-			}
-
-			for (auto i = 0; i < loot.size(); i++)
-			{
-				const auto item_id = loot[i].id;
-
-				json_reply["Packs"][i] = item_id;
-
-				const auto balance = loot::get_item_balance(item_id) + 1;
-				loot::set_item_balance(item_id, balance);
-
-				json_reply["Items"][i + itemidx]["ItemId"] = item_id;
-				json_reply["Items"][i + itemidx]["Collision"] = 0;
-				json_reply["Items"][i + itemidx]["Balance"] = balance;
-
-				console::demonware("[DW]: + giving loot %d for %d\n", item_id, i);
-			}
-
-			loot::save();
-
-			console::demonware("[DW]: saving loot\n\n");
-
-			json_reply["Error"] = "";
-			json_reply["ClientTx"] = json["ClientTx"];
-
-			send(json_reply);
-		}
-		else if (action == "StartMission")
-		{
-			console::demonware("[DW]: mission start requested...\n");
-
-			console::demonware("%s\n", json_buffer.data());
-
-			[[maybe_unused]] const auto match_id = json["MatchId"].get<int>(); // always 0
-			[[maybe_unused]] const auto mission_id = json["MissionId"].get<int>();
-			[[maybe_unused]] const auto mission_set_instanced_id = json["MissionSetInstanceId"].get<unsigned int>();
-			
-			nlohmann::json json_reply;
-			json_reply["Action"] = "StartMissionResponse";
-
-			json_reply["MissionInstanceId"] = mission_instanced_id_cache++;
-
-			send(json_reply);
-			console::demonware("%s\n", json_reply.dump().data());
-		}
-		else if (action == "StartMissionSet") // aka StartContract
-		{
-			console::demonware("[DW]: contract start requested...\n");
-
-			console::demonware("%s\n", json_buffer.data());
-
-			const auto mission_set_id = json["MissionSetId"].get<unsigned int>();
-
-			nlohmann::json json_reply;
-			json_reply["Action"] = "StartMissionSetResponse";
-
-			json_reply["MissionSetId"] = mission_set_id;
-			json_reply["MissionSetInstanceId"] = mission_set_instanced_id_cache++;
-
-			send(json_reply);
-			console::demonware("%s\n", json_reply.dump().data());
-		}
-		else if (action == "EndMission")
-		{
-			console::demonware("[DW]: mission end requested...\n");
-
-			console::demonware("%s\n", json_buffer.data());
-
-			[[maybe_unused]] const auto match_id = json["MatchId"].get<int>(); // always 0
-			[[maybe_unused]] const auto mission_id = json["MissionId"].get<int>();
-			[[maybe_unused]] const auto mission_instance_id = json["MissionInstanceId"].get<unsigned int>();
-			[[maybe_unused]] const auto mission_result = json["MissionResult"].get<int>();
-			[[maybe_unused]] const auto time_played = json["TimePlayed"].get<int>();
-			[[maybe_unused]] const auto client_tx = json["ClientTx"].get<std::string>();
-
-			nlohmann::json json_reply;
-			json_reply["Action"] = "EndMissionResponse";
-
-			json_reply["Packs"] = nlohmann::json::value_type::array();
-			json_reply["Items"] = nlohmann::json::value_type::array();
-			json_reply["Currencies"] = nlohmann::json::value_type::array();
-
-			send(json_reply);
-			console::demonware("%s\n", json_reply.dump().data());
-		}
-		else if (action == "EndMissionSet") // aka EndContract
-		{
-			console::demonware("[DW]: contract end requested...\n");
-
-			console::demonware("%s\n", json_buffer.data());
-
-			const auto mission_set_id = json["MissionSetId"].get<unsigned int>();
-			[[maybe_unused]] const auto mission_set_instance_id = json["MissionSetInstanceId"].get<unsigned int>();
-			[[maybe_unused]] const auto client_tx = json["ClientTx"].get<std::string>();
-
-			nlohmann::json json_reply;
-			json_reply["Action"] = "EndMissionSetResponse";
-
-			json_reply["MissionSetId"] = mission_set_id;
-
-			json_reply["Packs"] = nlohmann::json::value_type::array();
-			json_reply["Items"] = nlohmann::json::value_type::array();
-			json_reply["Currencies"] = nlohmann::json::value_type::array();
-
-			send(json_reply);
-			console::demonware("%s\n", json_reply.dump().data());
-		}
-		else if (action == "ResetMissions")
-		{
-			console::demonware("[DW]: mission reset requested...\n");
-
-			console::demonware("%s\n", json_buffer.data());
-
-			mission_instanced_id_cache = 0;
-			mission_set_instanced_id_cache = 0;
-		}
-		else
-		{
-			console::demonware("[DW]: unhandled reward action \"%s\"...\n", action.data());
+			console::error("[IWZ][Keys] reward request failed: %s\n", error.what());
+			server->create_reply(this->task_id(), BD_REWARD_EVENTS_TRANSACTION_ERROR).send();
+			return;
 		}
 
 		server->create_reply(this->task_id(), BD_NO_ERROR).send();

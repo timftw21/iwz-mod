@@ -1,7 +1,9 @@
 .vs
 .vscode
 build/
-/docs/
+/docs/*
+!/docs/key-earning.md
+!/docs/laser-animation-visibility.md
 /reports/
 /.tmp/
 /minidumps/

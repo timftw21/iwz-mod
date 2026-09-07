@@ -8,6 +8,12 @@ end
 
 local stockInitAARScoreboardDataSources = InitAARScoreboardDataSources
 local MATCH_MAP_DVAR = "iwz_scoreboard_match_map"
+local survivalMapNames = {
+	cp_zmb = "ARCADE ATTACK!",
+	cp_rave = "RAVE RAMPAGE",
+	cp_disco = "SUBWAY SHUFFLE",
+	cp_town = "BEACH BLOODBATH"
+}
 
 if type(stockInitAARScoreboardDataSources) ~= "function" then
 	print("[IWZ][Scoreboard] install skipped reason=InitAARScoreboardDataSources unavailable")
@@ -112,6 +118,11 @@ local function resolveMatchMap(controllerIndex)
 
 	if capturedMapRef ~= nil and capturedMapRef ~= "" then
 		local displayName, lookupSource = mapDisplayName(capturedMapRef)
+		if Engine.GetDvarBool("iwz_scoreboard_match_survival") and
+			survivalMapNames[capturedMapRef] then
+			displayName = survivalMapNames[capturedMapRef]
+			lookupSource = "captured-survival"
+		end
 		cachedMapName = displayName
 		cachedMapRef = capturedMapRef
 		cachedMapSource = "gameplay-capture/" .. lookupSource

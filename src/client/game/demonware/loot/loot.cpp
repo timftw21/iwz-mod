@@ -601,8 +601,20 @@ namespace demonware
 
 		void save_json_data()
 		{
-			auto dump = json_buffer.dump(4);
-			utils::io::write_file(json_data_path, dump);
+			// Commit the wallet and consumed mission together. A failed write
+			// must not truncate the live wallet or acknowledge an unsaved payout.
+			const auto temporary_path = json_data_path + ".tmp";
+			utils::io::create_directory(std::filesystem::path(json_data_path).parent_path().string());
+			std::ofstream stream(temporary_path, std::ios::binary | std::ios::trunc);
+			stream << json_buffer.dump(4);
+			stream.flush();
+			const bool written = stream.good();
+			stream.close();
+			if (!written || stream.fail() || !MoveFileExA(temporary_path.c_str(),
+				json_data_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+			{
+				throw std::runtime_error("Unable to save loot wallet");
+			}
 		}
 
 		void read_json_data()
@@ -651,6 +663,70 @@ namespace demonware
 		{
 			read_json_data();
 			return json_read<std::uint32_t>(json_buffer["Currency"][std::to_string(currency_id)]["Balance"]);
+		}
+
+		void commit_key_reward_state(const nlohmann::json& state, const std::uint32_t balance)
+		{
+			const auto previous_state = json_buffer["KeyRewards"];
+			const auto previous_balance = get_currency_balance(CurrencyType::keys);
+			json_buffer["KeyRewards"] = state;
+			set_currency_balance(CurrencyType::keys, balance);
+			try
+			{
+				save_json_data();
+			}
+			catch (...)
+			{
+				json_buffer["KeyRewards"] = previous_state;
+				set_currency_balance(CurrencyType::keys, previous_balance);
+				throw;
+			}
+		}
+
+		std::uint32_t begin_key_reward(const int mission_id)
+		{
+			const auto balance = get_currency_balance(CurrencyType::keys);
+			auto state = json_buffer["KeyRewards"];
+			if (state.is_null())
+				state = nlohmann::json::object();
+			const auto instance = state.value("NextInstanceId", 1u);
+			if (instance >= static_cast<std::uint32_t>(INT_MAX))
+				throw std::runtime_error("Key reward mission IDs exhausted");
+			state["NextInstanceId"] = instance + 1;
+			// Lobby visits also start missions. Bound abandoned records without
+			// recycling IDs or invalidating another local player's recent start.
+			auto pending = state.value("Pending", nlohmann::json::array());
+			if (pending.size() >= 64)
+				pending.erase(pending.begin());
+			pending.push_back({{"InstanceId", instance}, {"MissionId", mission_id}});
+			state["Pending"] = pending;
+			commit_key_reward_state(state, balance);
+			return instance;
+		}
+
+		match_key_reward finish_key_reward(const std::uint32_t instance_id,
+			const int mission_id, const std::uint32_t earned)
+		{
+			const auto before = get_currency_balance(CurrencyType::keys);
+			auto state = json_buffer["KeyRewards"];
+			if (state.is_null())
+				state = nlohmann::json::object();
+			auto pending = state.value("Pending", nlohmann::json::array());
+			const auto entry = std::find_if(pending.begin(), pending.end(), [&](const auto& item)
+			{
+				return item.at("InstanceId") == instance_id && item.at("MissionId") == mission_id;
+			});
+			if (entry == pending.end())
+				return {false, before, before};
+
+			// The stock UI reads signed balances. Never wrap an existing wallet,
+			// including one already above that limit from older tools.
+			const auto room = before < INT_MAX ? INT_MAX - before : 0u;
+			const auto balance = before + std::min(earned, room);
+			pending.erase(entry);
+			state["Pending"] = pending;
+			commit_key_reward_state(state, balance);
+			return {true, before, balance};
 		}
 
 		// daily login

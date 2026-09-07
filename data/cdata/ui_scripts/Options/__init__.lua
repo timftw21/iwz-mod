@@ -52,6 +52,17 @@ if Cac and Cac.IsDoubleXPActive and Cac.IsDoubleWeaponXPActive and not Cac.iwzDo
 	print("[IWZ][DoubleXP] level and weapon XP notification conditions installed")
 end
 
+if Cac and Cac.IsDoubleKeyActive and not Cac.iwzDoubleKeyConditionInstalled then
+	Cac.iwzDoubleKeyConditionInstalled = true
+	local stockIsDoubleKeyActive = Cac.IsDoubleKeyActive
+
+	Cac.IsDoubleKeyActive = function(...)
+		return isIwzDoubleXPEnabled() or stockIsDoubleKeyActive(...)
+	end
+
+	print("[IWZ][DoubleXP] double-key notification condition installed")
+end
+
 local nameColors = {
 	{label = "DEFAULT", code = ""},
 	{label = "RED", code = "^1"},
@@ -124,7 +135,8 @@ local function buildDvarToggleButton(controllerIndex, id, title, description, dv
 				button:dispatchEventToRoot({
 					name = "iwz_xp_rate_changed"
 				})
-				print("[IWZ][DoubleXP] option changed enabled=" .. tostring(enabled))
+				print("[IWZ][DoubleXP] option changed enabled=" .. tostring(enabled) ..
+					" affects=levelXP,weaponXP,keys")
 			elseif dvar == "iwz_zombies_hud" then
 				button:dispatchEventToRoot({
 					name = "iwz_hud_mode_changed",
@@ -396,7 +408,7 @@ local function buildClientOptions(_, controllerIndex)
 			controllerIndex,
 			"DoubleXP",
 			"XP RATE",
-			"Switch Zombies level and weapon progression between regular XP and double XP. Key progression is not affected.",
+			"Switch Zombies level XP, weapon XP, and key earnings between regular and double rates.",
 			"iwz_double_xp",
 			xpRateLabels
 		)
@@ -476,14 +488,40 @@ if DoubleXPNotifications and not LUI.iwzDoubleXPNotificationsPatched then
 	MenuBuilder.m_types["DoubleXPNotifications"] = function(menu, controller)
 		local self = DoubleXPNotifications(menu, controller)
 
+		-- Stock post-load closes inactive icons. Recreate them when the option
+		-- changes, and close disabled ones so the stacked layout has no gaps.
+		local function refreshOptionalIcon(name, material, active, left, before)
+			local icon = self[name]
+			if active then
+				if not icon then
+					icon = LUI.UIImage.new()
+					icon.id = name
+					icon:setImage(RegisterMaterial(material), 0)
+					icon:SetUseAA(true)
+					icon:SetAnchorsAndPosition(0, 1, 0, 1,
+						_1080p * left, _1080p * (left + 128), 0, _1080p * 128)
+					if before then
+						icon:addElementBefore(before)
+					else
+						self:addElement(icon)
+					end
+					self[name] = icon
+				end
+				icon:SetAlpha(1, 0)
+			elseif icon then
+				icon:close()
+				self[name] = nil
+			end
+		end
+
 		local function refreshIwzDoubleXPIcons()
 			if self.DoubleXP then
 				self.DoubleXP:SetAlpha(Cac.IsDoubleXPActive() and 1 or 0, 0)
 			end
 
-			if self.DoubleWeaponXP then
-				self.DoubleWeaponXP:SetAlpha(Cac.IsDoubleWeaponXPActive() and 1 or 0, 0)
-			end
+			refreshOptionalIcon("DoubleWeaponXP", "icon_iw7_xp_weapon",
+				Cac.IsDoubleWeaponXPActive(), 128, self.DoubleMissionTeamXP or self.DoubleKey)
+			refreshOptionalIcon("DoubleKey", "icon_iw7_xk", Cac.IsDoubleKeyActive(), 384)
 		end
 
 		self:addEventHandler("iwz_xp_rate_changed", refreshIwzDoubleXPIcons)
@@ -492,7 +530,7 @@ if DoubleXPNotifications and not LUI.iwzDoubleXPNotificationsPatched then
 		return self
 	end
 
-	print("[IWZ][DoubleXP] notification refresh hook installed")
+	print("[IWZ][DoubleXP] level, weapon, and key notification refresh hook installed")
 end
 
 local function suppressFocusPause(event)

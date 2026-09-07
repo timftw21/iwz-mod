@@ -22,6 +22,7 @@ namespace laser_visibility
 		constexpr auto bg_offhand_gesture_is_active = 0x140717210;
 		constexpr auto bg_offhand_gesture_get_gesture = 0x140716F60;
 		constexpr auto cg_get_weapon_map = 0x140212330;
+		constexpr auto cg_gesture_get_info = 0x140158570;
 		constexpr auto dobj_should_submit = 0x140A80960;
 		constexpr auto dobj_get_num_models = 0x140D7FB20;
 		constexpr auto dobj_get_model = 0x140D62520;
@@ -45,6 +46,23 @@ namespace laser_visibility
 		using num_bones_t = int(const game::XModel* model);
 		using remap_part_bits_t = void(const dobj_part_bits* source, int bone_offset, dobj_part_bits* result);
 
+		// CG_Gesture_GetInfo returns cg + 0x59814 + (slot * 2 + hand) * 0x44.
+		// UpdateAnimationState writes +0x38; UpdateMainTree consumes +0x34.
+		struct gesture_animation_info
+		{
+			std::byte prefix[0x2C];
+			float time;
+			float normalized_time;
+			float main_tree_weight;
+			int state; // 0 off, 1 playing, 2 in, 3 out
+			unsigned int main_anim;
+			unsigned int last_gesture;
+		};
+		static_assert(sizeof(gesture_animation_info) == 0x44);
+		static_assert(offsetof(gesture_animation_info, main_tree_weight) == 0x34);
+		static_assert(offsetof(gesture_animation_info, state) == 0x38);
+		static_assert(offsetof(gesture_animation_info, last_gesture) == 0x40);
+
 		enum class suppression_reason
 		{
 			visible,
@@ -52,6 +70,8 @@ namespace laser_visibility
 			selected_bone_hidden,
 			selected_model_hidden,
 			offhand_gesture_owns_hand,
+			gesture_animation,
+			gesture_keeps_primary,
 		};
 
 		struct submission_result
@@ -72,6 +92,9 @@ namespace laser_visibility
 			bool submitted{true};
 			bool gesture_resolved{};
 			bool gesture_cached{};
+			int animation_state{};
+			float main_tree_weight{1.0f};
+			bool primary_preserved{};
 		};
 
 		struct gesture_hand_selection
@@ -172,8 +195,8 @@ namespace laser_visibility
 				}
 
 				selection.gesture = gesture;
-				// This flag selects IW7's left-hand akimbo gesture path; "idle" names
-				// that path's animation fallback, not a hand that remains unaffected.
+				// This selects the special left-akimbo idle path, NOT exclusive gesture
+				// ownership. The right hand has an independent client animation state.
 				selection.hand = gesture->weaponSettings.useLeftIdleAkimbo ? 1u : 0u;
 				selection.index = gesture_index;
 				selection.type = type;
@@ -257,7 +280,7 @@ namespace laser_visibility
 				? "<unnamed>"
 				: selection.gesture->name;
 			console::info("[IWZ][LaserVisibility] offhand gesture type %d index %u slot %d '%s' priority %d "
-				"owns %s hand %u "
+				"idle fallback %s hand %u (not exclusive animation ownership) "
 				"(useLeftIdleAkimbo %u splitAnimsAkimbo %u flags %08X%s)\n",
 				static_cast<int>(selection.type), selection.index, selection.slot, gesture_name,
 				static_cast<int>(selection.gesture->priority),
@@ -333,6 +356,27 @@ namespace laser_visibility
 					current_laser.gesture_cached ? " cached through blend-out" : "");
 				break;
 			}
+
+			case suppression_reason::gesture_animation:
+				console::info("[IWZ][LaserVisibility] suppressed hand %u laser: client gesture '%s' "
+					"index %u priority %d slot %d animationState %d primaryWeight %.3f "
+					"(weaponState %d offhand %u gesture %08X)\n",
+					hand, current_laser.gesture && current_laser.gesture->name
+						? current_laser.gesture->name : "<unknown>",
+					current_laser.gesture_index,
+					current_laser.gesture ? static_cast<int>(current_laser.gesture->priority) : -1,
+					current_laser.gesture_slot,
+					current_laser.animation_state, current_laser.main_tree_weight,
+					weapon_state, offhand_weapon, gesture_flags);
+				break;
+
+			case suppression_reason::gesture_keeps_primary:
+				console::info("[IWZ][LaserVisibility] preserved hand %u laser: offhand gesture '%s' "
+					"leaves primary weapon available (gesturesDisablePrimary=0, slot %d gesture %08X)\n",
+					hand, current_laser.gesture && current_laser.gesture->name
+						? current_laser.gesture->name : "<unknown>",
+					current_laser.gesture_slot, gesture_flags);
+				break;
 
 			case suppression_reason::visible:
 				console::info("[IWZ][LaserVisibility] restored hand %u laser with its viewmodel "
@@ -473,6 +517,111 @@ namespace laser_visibility
 			return submitted;
 		}
 
+		bool gesture_replaces_weapon_animation(const gesture_animation_info& info)
+		{
+			// -1 means this slot did not contribute to the tree this frame. A weight
+			// of 1 leaves the normal weapon animation in control. Checking the client
+			// state also respects right-hand cancellation and the visual OUT phase.
+			return info.state >= 1 && info.state <= 3
+				&& info.main_tree_weight >= 0.0f && info.main_tree_weight < 1.0f;
+		}
+
+		bool is_weapon_interaction_gesture(const game::Gesture* gesture)
+		{
+			if (!gesture)
+			{
+				return false;
+			}
+
+			// Movement and demeanor also blend the primary animation, without
+			// replacing the gun. Classify the slot's asset, not the player's movement
+			// state: an interaction in the other slot must still hide its own laser.
+			switch (gesture->priority)
+			{
+			case game::GESTURE_PRIORITY_OFFHAND_SHIELD:
+			case game::GESTURE_PRIORITY_OFFHAND_THROWN_WEAPON:
+			case game::GESTURE_PRIORITY_OFFHAND_SCRIPT_WEAPON:
+			case game::GESTURE_PRIORITY_SCRIPT:
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		const game::WeaponDef* get_offhand_weapon_def(const int local_client_num,
+			const game::playerState_s* ps)
+		{
+			if (!ps || !ps->offhandGestureWeaponHandle)
+			{
+				return nullptr;
+			}
+			const auto* weapon_map = utils::hook::invoke<const std::byte*>(cg_get_weapon_map, local_client_num);
+			if (!weapon_map)
+			{
+				return nullptr;
+			}
+
+			// Same handle -> weapon index lookup as BG_Offhand_GetGesture at
+			// 0x140716F73. Do not gate on offhand flags: the client OUT animation
+			// can outlive them, and the weapon handle remains available then.
+			std::uint16_t weapon_index{};
+			std::memcpy(&weapon_index, weapon_map + 0xA +
+				static_cast<std::size_t>(ps->offhandGestureWeaponHandle) * 0x10, sizeof(weapon_index));
+			return weapon_index ? game::bg_weaponDefs[weapon_index] : nullptr;
+		}
+
+		bool offhand_preserves_primary(const game::WeaponDef* weapon, const game::Gesture* gesture)
+		{
+			static_assert(offsetof(game::WeaponDef, gesturesDisablePrimary) == 0xCE0);
+			if (!weapon || !gesture || weapon->gesturesDisablePrimary)
+			{
+				return false;
+			}
+
+			// Match the slot to this weapon, so a different overlapping gesture
+			// cannot inherit the exemption. These are the nine native offhand types.
+			return gesture == weapon->gestureAnimation || gesture == weapon->gesturePullback
+				|| gesture == weapon->gestureThrow || gesture == weapon->gestureDetonate
+				|| gesture == weapon->shieldDeployGesture || gesture == weapon->shieldFireWeapGesture
+				|| gesture == weapon->shieldDeployWhileFiring || gesture == weapon->shieldRetractWhileFiring
+				|| gesture == weapon->shieldBashGesture;
+		}
+
+		bool suppress_for_gesture_animation(const int local_client_num, const unsigned int hand)
+		{
+			const auto* offhand_weapon = hand == 0 ? get_offhand_weapon_def(local_client_num, current_laser.ps) : nullptr;
+			for (auto slot = 0u; slot < 2; ++slot)
+			{
+				const auto* info = utils::hook::invoke<const gesture_animation_info*>(
+					cg_gesture_get_info, local_client_num, slot, hand);
+				if (!info || !gesture_replaces_weapon_animation(*info))
+				{
+					continue;
+				}
+
+				const auto* gesture = info->last_gesture < 0x100
+					? utils::hook::invoke<const game::Gesture*>(bg_get_gesture, info->last_gesture) : nullptr;
+				if (!is_weapon_interaction_gesture(gesture))
+				{
+					continue;
+				}
+
+				current_laser.gesture = gesture;
+				current_laser.gesture_index = info->last_gesture;
+				current_laser.gesture_slot = static_cast<int>(slot);
+				current_laser.animation_state = info->state;
+				current_laser.main_tree_weight = info->main_tree_weight;
+				if (hand == 0 && offhand_preserves_primary(offhand_weapon, gesture))
+				{
+					current_laser.primary_preserved = true;
+					continue;
+				}
+				log_state(hand, suppression_reason::gesture_animation);
+				return true;
+			}
+			return false;
+		}
+
 		bool prepare_viewmodel_laser(const int local_client_num, const game::playerState_s* ps,
 			const unsigned int hand, const void* obj)
 		{
@@ -508,7 +657,17 @@ namespace laser_visibility
 				return false;
 			}
 
-			if (gesture.active && hand == gesture.hand)
+			// Read both slots for THIS hand, including direct viewmodel gestures and
+			// blend-out after the offhand server flag clears. Akimbo metadata cannot
+			// describe a single-wield or two-handed action such as drinking a gourd.
+			if (suppress_for_gesture_animation(local_client_num, hand))
+			{
+				return false;
+			}
+
+			// Preserve the tested left-akimbo idle suppression through the short
+			// interval after its slot ends but before the offhand ending flag clears.
+			if (gesture.active && hand == 1 && gesture.hand == 1)
 			{
 				log_state(hand, suppression_reason::offhand_gesture_owns_hand);
 				return false;
@@ -549,7 +708,8 @@ namespace laser_visibility
 				}
 			}
 
-			log_state(hand, suppression_reason::visible);
+			log_state(hand, current_laser.primary_preserved
+				? suppression_reason::gesture_keeps_primary : suppression_reason::visible);
 			return true;
 		}
 
@@ -613,6 +773,13 @@ namespace laser_visibility
 			constexpr std::array<std::uint8_t, 6> gesture_active_entry{0x8B, 0x81, 0x74, 0x08, 0x00, 0x00};
 			constexpr std::array<std::uint8_t, 5> get_offhand_gesture_entry{0x48, 0x83, 0xEC, 0x48, 0x48};
 			constexpr std::array<std::uint8_t, 5> get_weapon_map_entry{0x48, 0x63, 0xC1, 0x48, 0x8D};
+			constexpr std::array<std::uint8_t, 7> get_gesture_info_entry{0x40, 0x53, 0x48, 0x63, 0xC1, 0x8B, 0xDA};
+			constexpr std::array<std::uint8_t, 15> get_gesture_info_layout{
+				0x49, 0x8D, 0x14, 0x5B, 0x48, 0x6B, 0xCA, 0x44,
+				0x48, 0x81, 0xC1, 0x14, 0x98, 0x05, 0x00};
+			constexpr std::array<std::uint8_t, 8> gesture_state_and_weight{
+				0x8B, 0x48, 0x38, 0xF3, 0x0F, 0x10, 0x40, 0x34};
+			constexpr std::array<std::uint8_t, 7> disable_primary_field{0x80, 0xB8, 0xE0, 0x0C, 0x00, 0x00, 0x00};
 			constexpr std::array<std::uint8_t, 4> num_models_entry{0x0F, 0xB6, 0x41, 0x0F};
 			constexpr std::array<std::uint8_t, 7> get_model_entry{0x48, 0x8B, 0x81, 0xF0, 0x00, 0x00, 0x00};
 			constexpr std::array<std::uint8_t, 6> get_surfaces_entry{0x49, 0x63, 0xC0, 0x48, 0xC1, 0xE0};
@@ -635,6 +802,14 @@ namespace laser_visibility
 					get_offhand_gesture_entry.data(), get_offhand_gesture_entry.size()) == 0
 				&& std::memcmp(reinterpret_cast<const void*>(cg_get_weapon_map),
 					get_weapon_map_entry.data(), get_weapon_map_entry.size()) == 0
+				&& std::memcmp(reinterpret_cast<const void*>(cg_gesture_get_info),
+					get_gesture_info_entry.data(), get_gesture_info_entry.size()) == 0
+				&& std::memcmp(reinterpret_cast<const void*>(0x140159569),
+					get_gesture_info_layout.data(), get_gesture_info_layout.size()) == 0
+				&& std::memcmp(reinterpret_cast<const void*>(0x140161C6F),
+					gesture_state_and_weight.data(), gesture_state_and_weight.size()) == 0
+				&& std::memcmp(reinterpret_cast<const void*>(0x14071AFB7),
+					disable_primary_field.data(), disable_primary_field.size()) == 0
 				&& std::memcmp(reinterpret_cast<const void*>(dobj_get_num_models),
 					num_models_entry.data(), num_models_entry.size()) == 0
 				&& std::memcmp(reinterpret_cast<const void*>(dobj_get_model),
@@ -667,8 +842,9 @@ namespace laser_visibility
 			utils::hook::call(viewmodel_dobj_submission_call, record_viewmodel_dobj_submission);
 			utils::hook::call(viewmodel_laser_draw_call, viewmodel_laser_draw_stub());
 			utils::hook::call(cg_get_laser_orient_bone_matrix_call, selected_laser_bone_stub());
-			console::info("[IWZ][LaserVisibility] installed full-lifetime, gesture-hand-resolved and "
-				"renderer-parity laser suppression\n");
+			console::info("[IWZ][LaserVisibility] installed interaction-only per-hand client-animation laser suppression "
+				"for single/akimbo weapons, preserving available primary guns, with left-idle blend-out "
+				"and model visibility checks\n");
 		}
 	};
 }

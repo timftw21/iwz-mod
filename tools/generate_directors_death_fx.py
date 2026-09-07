@@ -136,11 +136,15 @@ def main():
     target = args.output / "zonetool" / ZONE / "particlesystem" / (TARGET + ".iw7VFX")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(data)
+    hint = args.output / "zonetool" / ZONE / "localizedstrings" / "IWZ_DEATH_WISH_HINT"
+    hint.parent.mkdir(parents=True, exist_ok=True)
+    hint.write_text("Hold ^3[{+usereload,+activate}]^7 to activate ^1Death Wish^7",
+                    encoding="utf-8")
     csv = args.output / "zone_source" / (ZONE + ".csv")
     csv.parent.mkdir(parents=True, exist_ok=True)
     csv.write_text("// Stock Rave materials are references; load this zone after cp_rave.\n" +
                    "".join(f"material,,{name}\n" for name in sorted(effect.materials)) +
-                   f"vfx,{TARGET}\n", encoding="utf-8")
+                   f"vfx,{TARGET}\nlocalize,IWZ_DEATH_WISH_HINT\n", encoding="utf-8")
     print(f"[DeathWish] {target}: {len(data)} bytes, 10 emitters, "
           f"{effect.color_modules} red color modules, {len(effect.materials)} stock materials")
 

@@ -295,7 +295,8 @@ namespace fastfiles
 			for (auto i = 0u; i < zone_count; ++i)
 			{
 				if (zone_info[i].name && (!strcmp(zone_info[i].name, "cp_rave") ||
-					!strcmp(zone_info[i].name, "cp_zmb")))
+					!strcmp(zone_info[i].name, "cp_zmb") || !strcmp(zone_info[i].name, "cp_disco") ||
+					!strcmp(zone_info[i].name, "cp_town")))
 				{
 					death_wish_map_zone = &zone_info[i];
 				}

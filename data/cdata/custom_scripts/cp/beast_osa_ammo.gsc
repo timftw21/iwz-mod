@@ -1,3 +1,4 @@
+// IWZ-LOAD: map=cp_final
 post_load()
 {
     if (getdvar("ui_mapname") != "cp_final")

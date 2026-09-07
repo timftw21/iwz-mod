@@ -47,6 +47,17 @@ namespace demonware
 		void set_currency_balance(const std::uint32_t currency_id, const std::uint32_t amount);
 		std::uint32_t get_currency_balance(const std::uint32_t currency_id);
 
+		struct match_key_reward
+		{
+			bool accepted;
+			std::uint32_t before;
+			std::uint32_t balance;
+		};
+
+		std::uint32_t begin_key_reward(int mission_id);
+		match_key_reward finish_key_reward(std::uint32_t instance_id,
+			int mission_id, std::uint32_t earned);
+
 		// daily login
 		bool is_new_day();
 		int get_days_logged_in();

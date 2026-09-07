@@ -1,8 +1,13 @@
+// IWZ-LOAD: referenced-only
 precache_death_wish(use_barrel)
 {
     setdvar("iwz_directors_death_active", 0);
     if (!getdvarint("iwz_survival_mode", 0))
         return;
+
+    replacefunc(scripts\cp\zombies\zombies_spawning::_id_E81B,
+        ::directors_death_wave_loop);
+    directors_death_log("scene wait hook installed scaleWhenActive=0.5 regularAndMaxAmmo=1");
 
     if (use_barrel)
         precachemodel("com_barrel_black");
@@ -107,7 +112,8 @@ setup_directors_death(settings)
         " hintOrigin=" + interaction.origin +
         " radius=96 cost=0 movement=movemodefunc movementField=movemode minimum=run" +
         " fx=vfx/iwz/directors_death_jar_red fxOrigin=" + interaction.fx_origin +
-        " feedback=red-jar,summon-sfx,red-scene");
+        " feedback=red-jar,summon-sfx,red-scene " +
+        "hint=state-localized hintStrings=1 sceneDelayScale=0.5");
 }
 
 create_directors_death_barrel_collision(barrel)
@@ -189,10 +195,11 @@ directors_death_feedback(interaction)
 
 directors_death_hint(interaction, player)
 {
-    if (level.iwz_directors_death_active)
-        return "Hold [{+usereload,+activate}] to deactivate Death Wish";
-
-    return "Hold [{+usereload,+activate}] to activate Death Wish";
+    // Localize the same key against the replicated active state on the client.
+    // Integer parameters do not consume hint slots and invalidate cached hint
+    // presentation when the action changes; localized text parameters do.
+    player.interaction_trigger sethintstringparams(level.iwz_directors_death_active);
+    return &"IWZ_DEATH_WISH_HINT";
 }
 
 toggle_directors_death(interaction, player)
@@ -227,21 +234,10 @@ toggle_directors_death(interaction, player)
         }
     }
 
-    foreach (other_player in level.players)
-    {
-        if (isdefined(other_player.last_interaction_point) &&
-            other_player.last_interaction_point == interaction &&
-            isdefined(other_player.interaction_trigger))
-        {
-            other_player.interaction_trigger sethintstring(
-                directors_death_hint(interaction, other_player));
-        }
-    }
-
     directors_death_log("toggle active=" + level.iwz_directors_death_active +
         " player=" + (player getentitynumber()) + " scene=" + level.wave_num +
         " generation=" + level.iwz_directors_death_generation +
-        " existingZombiesNotified=" + awake + " futureSpawns=covered");
+        " existingZombiesNotified=" + awake + " futureSpawns=covered hint=state-localized");
 }
 
 directors_death_rearm(interaction)
@@ -323,4 +319,144 @@ directors_death_move_mode(speed_round)
         }
     }
     return mode;
+}
+
+
+// The stock loop keeps its delay in a local set before the scene begins.
+// Preserve its full progression/reward flow and evaluate only the actual
+// between-scene wait here, after either a regular or Max Ammo wave ends.
+directors_death_wave_loop()
+{
+    level endon( "game_ended" );
+    var_0 = 5;
+    level._id_6870 = 0;
+    var_1 = 21;
+    level thread scripts\cp\zombies\zombies_spawning::_id_4094();
+    var_2 = 1;
+
+    for (;;)
+    {
+        scripts\cp\zombies\zombies_spawning::_id_13BCB();
+        scripts\cp\cp_persistence::update_lb_aliensession_wave( level.wave_num );
+
+        if ( level.wave_num > 0 )
+        {
+            if ( level.wave_num / 10 == var_2 )
+            {
+                level notify( "prize_restock" );
+
+                if ( scripts\cp\utility::map_check( 0 ) )
+                    level thread scripts\cp\cp_vo::try_to_play_vo( "dj_nag_ticket_restock", "zmb_dj_vo", "highest", 20, 0, 0, 1, 100 );
+
+                var_2++;
+            }
+
+            if ( getdvar( "ui_gametype" ) == "zombie" && ( scripts\cp\utility::isplayingsolo() || level.only_one_player ) )
+            {
+                if ( isdefined( level.players[0] ) )
+                {
+                    if ( level.wave_num == 2 )
+                        level.players[0] thread scripts\cp\cp_hud_message::wait_and_play_tutorial_message( "zombiehealth", 7 );
+                    else if ( level.wave_num == 3 )
+                        level.players[0] thread scripts\cp\cp_hud_message::wait_and_play_tutorial_message( "scenes", 7 );
+                    else if ( level.wave_num == 4 && !level.players[0] scripts\cp\cp_hud_message::get_has_seen_tutorial( "magic_wheel" ) )
+                    {
+                        level.players[0] thread scripts\cp\cp_hud_message::wait_and_play_tutorial_message( "magic_wheel", 7 );
+                        level.players[0] notify( "saw_wheel_tutorial" );
+                    }
+                    else if ( level.wave_num == 9 && !level.players[0] scripts\cp\cp_hud_message::get_has_seen_tutorial( "pap" ) )
+                        level.players[0] thread scripts\cp\cp_hud_message::wait_and_play_tutorial_message( "pap", 7 );
+                }
+            }
+
+            if ( getdvar( "ui_gametype" ) == "zombie" && !scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight() )
+            {
+                foreach ( var_4 in level.players )
+                {
+                    var_4 setclientomnvar( "zombie_wave_number", level.wave_num );
+                    var_4 scripts\cp\cp_merits::processmerit( "mt_highest_round" );
+                }
+            }
+        }
+
+        if ( scripts\cp\zombies\zombies_spawning::_id_FF9D( level.wave_num ) )
+        {
+            level notify( "event_wave_starting" );
+            scripts\cp\zombies\zombies_spawning::_id_E7F0( level.wave_num );
+        }
+        else
+        {
+            level notify( "regular_wave_starting" );
+
+            if ( level.power_on == 1 && level.wave_num > 5 )
+                level thread scripts\cp\cp_vo::try_to_play_vo( "dj_interup_wave_start", "zmb_dj_vo", "high", 4, 0, 0, 1, 40 );
+
+            if ( soundexists( "mus_zombies_newwave" ) && level.wave_num > 0 )
+                level thread scripts\cp\zombies\zombies_spawning::_id_BDD4();
+
+            scripts\cp\zombies\zombies_spawning::_id_1081A( level.wave_num );
+
+            if ( soundexists( "mus_zombies_endwave" ) && level.wave_num > 0 )
+                level thread scripts\cp\zombies\zombies_spawning::_id_BDD1();
+        }
+
+        if ( level.wave_num > 0 )
+            level notify( "spawn_wave_done" );
+
+        if ( level.wave_num > 2 )
+        {
+            if ( isdefined( level.final_wave_vo_func ) )
+                level thread [[ level.final_wave_vo_func ]]( level.wave_num );
+        }
+
+        var_6 = int( 1000 );
+
+        if ( level.wave_num < 21 )
+            var_6 = int( level.wave_num * 50 );
+
+        foreach ( var_4 in level.players )
+        {
+            if ( !scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight() )
+                var_4 scripts\cp\cp_persistence::give_player_xp( var_6, 1 );
+
+            var_4 scripts\cp\cp_merits::processmerit( "mt_total_rounds" );
+
+            if ( level.wave_num > 0 )
+                var_4 notify( "next_wave_notify" );
+
+            var_4.coaster_ridden_this_round = undefined;
+            var_4._id_2113 = 0;
+        }
+
+        if ( level.power_on == 1 && level.wave_num > 5 )
+            level thread scripts\cp\cp_vo::try_to_play_vo( "dj_interup_wave_end", "zmb_dj_vo", "high", 4, 0, 0, 1, 40 );
+
+        directors_death_scene_wait(var_0);
+        level thread scripts\cp\gametypes\zombie::replace_grenades_between_waves();
+
+        if ( isdefined( level.wave_complete_dialogues_func ) )
+            [[ level.wave_complete_dialogues_func ]]( level.wave_num );
+
+        var_9 = ( gettime() - level._id_13BDA ) / 1000;
+        scripts\cp\zombies\zombie_analytics::_id_AF90( level.wave_num, var_9, level.laststandnumber, level.timesinafterlife );
+
+        if ( level.wave_num > 1 )
+            scripts\cp\zombies\zombies_spawning::_id_13BDB();
+
+        level.wave_num = scripts\cp\zombies\zombies_spawning::_id_7B1C();
+        scripts\cp\cp_persistence::update_players_career_highest_wave( level.wave_num, level.script );
+        var_0 = scripts\cp\zombies\zombies_spawning::_id_7D00( var_0, level.wave_num );
+    }
+}
+
+directors_death_scene_wait(stock_seconds)
+{
+    seconds = stock_seconds;
+    active = scripts\engine\utility::is_true(level.iwz_directors_death_active);
+    if (active)
+        seconds *= 0.5;
+    directors_death_log("scene transition scene=" + level.wave_num +
+        " active=" + active + " stockSeconds=" + stock_seconds +
+        " actualSeconds=" + seconds);
+    wait(seconds);
 }

@@ -7,7 +7,9 @@ local ARCADE_RESULT_DVAR = "iwz_gns_arcade_result"
 
 local survivalMaps = {
 	cp_zmb = "ARCADE ATTACK!",
-	cp_rave = "RAVE RAMPAGE"
+	cp_rave = "RAVE RAMPAGE",
+	cp_disco = "SUBWAY SHUFFLE",
+	cp_town = "BEACH BLOODBATH"
 }
 
 local bossDvars = {
@@ -111,7 +113,8 @@ local function beginSurvivalBrowse(controllerIndex)
 		" selectedMap=" .. Engine.GetDvarString("ui_mapname") ..
 		" survival=" .. tostring(Engine.GetDvarBool(SURVIVAL_DVAR)) ..
 		" cast=" .. game:getzombiescharacter() ..
-		" available=cp_zmb->" .. survivalMaps.cp_zmb .. ",cp_rave->" .. survivalMaps.cp_rave)
+		" available=cp_zmb->" .. survivalMaps.cp_zmb .. ",cp_rave->" .. survivalMaps.cp_rave ..
+		",cp_disco->" .. survivalMaps.cp_disco .. ",cp_town->" .. survivalMaps.cp_town)
 	LUI.FlowManager.RequestAddMenu("CPMaps", true, controllerIndex)
 end
 
@@ -209,6 +212,9 @@ end
 
 MenuBuilder.m_types["CPMaps"] = function(menu, controller)
 	local self = originalCPMaps(menu, controller)
+	if Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
+		self.CPMenuTitle.MenuTitle:setText("SURVIVAL FILMS", 0)
+	end
 
 	self:addEventHandler("menu_close", function()
 		if Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
@@ -286,7 +292,7 @@ MenuBuilder.m_types["CPPrivateMatchButtons"] = function(menu, controller)
 		end
 	end)
 
-	log("private-match option inserted below Choose Film")
+	log("private-match option inserted below STANDARD FILMS")
 	return self
 end
 
@@ -295,6 +301,21 @@ MenuBuilder.m_types["CPMatchDetails"] = function(menu, controller)
 	local controllerIndex = getControllerIndex(controller)
 	local stockMapNameSetText = self.MapName.setText
 	local loggedMapNameOverride = false
+	local stockGameTypeSetText = self.GameType.setText
+	local lastModeLabel = nil
+	self.GameType.setText = function(element, text, duration)
+		if Engine.GetDvarBool(SURVIVAL_DVAR) then
+			text = SURVIVAL_MODE_NAME
+		elseif not Engine.GetDvarBool("scr_boss_battles_enabled") and
+			not Engine.GetDvarBool(ARCADE_DVAR) then
+			text = "STANDARD"
+		end
+		if lastModeLabel ~= text then
+			lastModeLabel = text
+			log("match-details mode label=" .. tostring(text))
+		end
+		return stockGameTypeSetText(element, text, duration)
+	end
 
 	-- CPMatchDetails owns a stock map-name subscription which may run after
 	-- ours. Transform every final write while Survival is selected so the
@@ -324,6 +345,9 @@ MenuBuilder.m_types["CPMatchDetails"] = function(menu, controller)
 			if mapName ~= nil then
 				self.MapName:setText(mapName, 0)
 			end
+		elseif not Engine.GetDvarBool("scr_boss_battles_enabled") and
+			not Engine.GetDvarBool(ARCADE_DVAR) then
+			self.GameType:setText("STANDARD", 0)
 		end
 	end
 
@@ -334,4 +358,4 @@ MenuBuilder.m_types["CPMatchDetails"] = function(menu, controller)
 end
 
 log("frontend integration registered maps=cp_zmb,cp_rave labels=" ..
-	survivalMaps.cp_zmb .. "," .. survivalMaps.cp_rave)
+	survivalMaps.cp_zmb .. "," .. survivalMaps.cp_rave .. "," .. survivalMaps.cp_disco)

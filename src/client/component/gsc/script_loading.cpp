@@ -30,6 +30,7 @@ namespace gsc
 		std::unordered_map<std::string, std::uint32_t> main_handles;
 		std::unordered_map<std::string, std::uint32_t> init_handles;
 		std::unordered_map<std::string, std::uint32_t> post_load_handles;
+		std::unordered_set<std::string> discovered_scripts;
 
 		utils::memory::allocator scriptfile_allocator;
 
@@ -76,6 +77,7 @@ namespace gsc
 			main_handles.clear();
 			init_handles.clear();
 			post_load_handles.clear();
+			discovered_scripts.clear();
 			loaded_scripts.clear();
 			scriptfile_allocator.clear();
 			free_script_memory();
@@ -268,8 +270,56 @@ namespace gsc
 			return {{reinterpret_cast<std::uint8_t*>(script_file->bytecode), static_cast<std::uint32_t>(script_file->bytecodeLen)}, stack_data};
 		}
 
+		void log_canonical_usage(const char* stage, const char* script)
+		{
+			// SL_GetCanonicalString (0x140BFD340): 4095 open-addressed slots,
+			// slot zero unused, followed by the string buffer at table + 0x4000.
+			const auto* table = *reinterpret_cast<const std::uint32_t**>(0x1460B94F8);
+			if (!table)
+				return;
+			unsigned int used = 0;
+			for (auto i = 1u; i < 4096; ++i)
+				used += table[i] != 0;
+			console::info("[IWZ][GSC] canonical names stage=%s script=%s used=%u capacity=4095 remaining=%u\n",
+				stage, script, used, 4095 - used);
+		}
+
+		bool should_auto_load_script(const std::string& name)
+		{
+			// Read the effective overlay file, not whichever search path discovered it.
+			// Runtime map guards are too late: linking already interns every name.
+			std::string source;
+			if (!read_raw_script_file(name + ".gsc", &source))
+				return true;
+			const auto header = std::string_view(source).substr(0, source.find_first_of("\r\n"));
+			constexpr std::string_view prefix = "// IWZ-LOAD: ";
+			if (!header.starts_with(prefix))
+				return true;
+			const auto scope = header.substr(prefix.size());
+			if (scope == "referenced-only")
+			{
+				console::info("[IWZ][GSC] auto-load skipped script=%s reason=referenced-only\n", name.data());
+				return false;
+			}
+			if (scope.starts_with("map="))
+			{
+				const auto* map = game::Dvar_FindVar("mapname");
+				const auto* active_map = map && map->current.string ? map->current.string : "";
+				if (scope.substr(4) != active_map)
+				{
+					console::info("[IWZ][GSC] auto-load skipped script=%s scope=%s activeMap=%s\n",
+						name.data(), std::string(scope).data(), active_map);
+					return false;
+				}
+			}
+			return true;
+		}
+
 		void load_script(const std::string& name)
 		{
+			if (!discovered_scripts.insert(name).second || !should_auto_load_script(name))
+				return;
+			log_canonical_usage("before-custom", name.data());
 			if (!game::Scr_LoadScript(name.data()))
 			{
 				return;
@@ -295,6 +345,7 @@ namespace gsc
 			{
 				post_load_handles[name] = post_load_handle;
 			}
+			log_canonical_usage("after-custom", name.data());
 		}
 
 		void load_scripts(const std::filesystem::path& root_dir, const std::filesystem::path& subfolder)
@@ -407,6 +458,7 @@ namespace gsc
 
 		void scr_end_load_scripts_stub(const char* a1)
 		{
+			log_canonical_usage("scripts-linked", "all");
 			// cleanup the compiler
 			gsc_ctx->cleanup();
 

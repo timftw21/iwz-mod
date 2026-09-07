@@ -8,9 +8,15 @@
 
 # IWZ-MOD
 
+Match keys now use a [documented approximation](docs/key-earning.md): Zombies
+awards 0.8 keys per completed Scene (125-key cap); multiplayer awards one key per
+five minutes, plus a 25% win bonus. Fractional keys persist between matches.
+Double-key events double these rewards. The Zombies Double XP toggle also enables
+double keys; enabling both keeps the bonus at 2x.
+
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 0.6 adds Rave Rampage survival mode, the Death Wish zombie-speed toggle for both survival maps, and the Neon Rot weapon camo. It also fixes crawler collision, preserves lobby selections when canceling the survival browser, protects players using Shaolin's phone booths, and improves pickup and portal hints. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 0.7 adds Subway Shuffle and Beach Bloodbath survival maps, match key rewards, and improved Death Wish effects and prompts. It also improves weapon laser visibility during animations, weapon reward artwork, survival menus, and map-specific interactions and effects. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -31,7 +37,7 @@ General
  - Added zombies-specific options, such as camera perspective options, HUD options, and an in-game timer for all modes
  - A variety of fixes and tweaks to the Zombies' menus
  - Added a Restart Match button to the in-game pause menu (glorified map_restart)
- - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!" and "Rave Rampage"
+ - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!", "Rave Rampage", "Subway Shuffle", and "Beach Bloodbath"
  - Death Wish lets players make slower zombies run in survival maps, with toggle sounds, a red soul jar, and a red scene counter while enabled
  - Added the Neon Rot camo, unlocked by earning 5 headshot kills with the M1 in Zombies
  - Canceling the survival film browser now preserves the selected game mode, map, and cast

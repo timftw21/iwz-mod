@@ -1,3 +1,4 @@
+// IWZ-LOAD: map=cp_town
 main()
 {
     if (getdvar("ui_mapname") != "cp_town")
@@ -34,7 +35,7 @@ main()
     replacefunc(nuke_fx, ::nuke_fx_stub);
     replacefunc(ray_gun_terminal, ::ray_gun_terminal_with_targeting_protection);
     replacefunc(exit_ray_gun_terminal, ::exit_ray_gun_terminal_with_targeting_restore);
-    attack_fix_log("installed scoped Attack interaction-use, off-grid nuke VFX, and ray-gun terminal targeting patches; stock battery state preserved for UI filtering");
+    attack_fix_log("installed scoped Attack interaction-use, missing-anchor nuke VFX, and ray-gun terminal targeting patches; stock battery state preserved for UI filtering");
 }
 
 post_load()
@@ -387,12 +388,12 @@ nuke_fx_stub(powerup, authored_anchors)
 
     local_anchors = [];
     valid_players = 0;
-    off_grid_players = 0;
-    fallback_players = 0;
+    effect_locations = scripts\engine\utility::getstructarray("effect_loc", "targetname");
 
-    // Preserve the stock authored blast locations for players in the main map.
-    // Attack's hidden Pack-a-Punch room is a separate off-grid space, so those
-    // world-space effects cannot be seen there and must not be sent to it.
+    // loot::get_fx_points includes the pickup itself, even when the map has
+    // no authored effect_loc structs. Attack has zero; Spaceland has 119 and
+    // Rave has 139. A nearby pickup is not equivalent to that visual coverage.
+    // Keep the stock world blasts, then supply the missing player coverage.
     foreach (anchor in authored_anchors)
     {
         if (!isdefined(anchor))
@@ -418,29 +419,30 @@ nuke_fx_stub(powerup, authored_anchors)
             continue;
 
         valid_players++;
-        needs_local_anchor = scripts\engine\utility::is_true(player.is_off_grid);
-        if (needs_local_anchor)
-            off_grid_players++;
-        else if (!has_nearby_nuke_anchor(player, authored_anchors, 750))
-            needs_local_anchor = 1;
-
-        if (!needs_local_anchor)
+        // These locations are missing throughout both normal Attack and Beach.
+        // An off-grid room also cannot see the main map's authored effects.
+        if (effect_locations.size > 0 &&
+            !scripts\engine\utility::is_true(player.is_off_grid))
             continue;
 
         view_angles = player getplayerangles();
+        forward = anglestoforward(view_angles);
+        eye = player geteye();
+        trace = bullettrace(eye, eye + forward * 64, 0, player);
+        local_origin = trace["position"] - forward * 8;
         local_angles = (0, view_angles[1], 0);
-        local_origin = player.origin + anglestoforward(local_angles) * 192 + (0, 0, 48);
         local_anchor = scripts\engine\utility::spawn_tag_origin(local_origin, local_angles);
         local_anchor show();
         local_anchor.iwz_nuke_player = player;
         local_anchors[local_anchors.size] = local_anchor;
         playfxontagforclients(level._effect["big_explo"], local_anchor, "tag_origin", player);
-        fallback_players++;
+        attack_fix_log("nuke player blast player=" + player getentitynumber() +
+            " origin=" + local_origin + " traceFraction=" + trace["fraction"]);
     }
 
-    attack_fix_log("nuke VFX dispatched authoredAnchors=" + authored_anchors.size +
-        " validPlayers=" + valid_players + " localFallbacks=" + fallback_players +
-        " offGridPlayers=" + off_grid_players);
+    attack_fix_log("nuke VFX dispatched stockAnchors=" + authored_anchors.size +
+        " mapEffectLocations=" + effect_locations.size + " validPlayers=" + valid_players +
+        " playerBlasts=" + local_anchors.size);
 
     wait(5);
 
@@ -470,19 +472,6 @@ nuke_fx_stub(powerup, authored_anchors)
 
         local_anchor delete();
     }
-}
-
-has_nearby_nuke_anchor(player, authored_anchors, max_distance)
-{
-    max_distance_squared = max_distance * max_distance;
-    foreach (anchor in authored_anchors)
-    {
-        if (isdefined(anchor) &&
-            distancesquared(player.origin, anchor.origin) <= max_distance_squared)
-            return 1;
-    }
-
-    return 0;
 }
 
 monitor_elvira_mirror_interaction()

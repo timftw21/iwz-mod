@@ -33,6 +33,7 @@ namespace gsc
 		std::unordered_map<const char*, const char*> vm_execute_hooks;
 		const char* target_function = nullptr;
 		std::atomic_uint32_t colorized_hint_log_count{0};
+		std::atomic_uint32_t model_contents_log_count{0};
 		std::atomic_bool logged_shaolin_decade_fix{false};
 		std::unordered_set<std::string> logged_missing_localized_hint_assets;
 
@@ -591,6 +592,46 @@ namespace gsc
 
 				return scripting::vector{entity.box.halfSize[0], entity.box.halfSize[1],
 					entity.box.halfSize[2]};
+			});
+
+			method::add("setcontents", [](const game::scr_entref_t ent, const function_args& args)
+			{
+				const auto contents = args[0].as<int>();
+				constexpr auto method_id = 0x82C7;
+				const auto original = meth_table[method_id - 0x8000];
+				if (original == nullptr)
+				{
+					throw std::runtime_error("stock setcontents method is unavailable");
+				}
+
+				// Keep stock argument/entity validation, relinking and the previous-mask
+				// return value. Native setcontents (0x140B39D00) only updates the entity;
+				// Havok bodies retain the old filter. Match solid() at 0x140B60AF6:
+				// update every body in both server physics worlds when an instance exists.
+				original(ent);
+				auto* entity = &game::g_entities[ent.entnum];
+				int instances = 0;
+				for (int world = 0; world < 2; ++world)
+				{
+					const auto instance = utils::hook::invoke<unsigned int>(0x140549870, world, entity);
+					if (instance != UINT_MAX)
+					{
+						utils::hook::invoke<void>(0x140550EC0, world, instance, contents);
+						++instances;
+					}
+				}
+				const auto log_index = model_contents_log_count.fetch_add(1);
+				if (log_index < 32)
+				{
+					console::info("[IWZ][ModelCollision] setcontents ent=%u contents=0x%X physicsWorldsUpdated=%i/2\n",
+						ent.entnum, static_cast<unsigned int>(contents), instances);
+				}
+				else if (log_index == 32)
+				{
+					console::info("[IWZ][ModelCollision] additional setcontents logs suppressed\n");
+				}
+				// original() already pushed the previous mask onto the script stack.
+				return scripting::script_value{};
 			});
 
 			method::add("sethintstring", [](const game::scr_entref_t ent, const function_args& args)

@@ -20,6 +20,28 @@ local function isZombieSplashMessage(messageType)
 		string.find(messageType.key, "LocalPlayerZombieSplash", 1, true) == 1
 end
 
+local function applyWeaponUnlockIcon(values)
+	local row = tonumber(values.splashIndex)
+	if row == nil or row < 0 or Engine.TableLookupByRow(SPLASH_TABLE, row, 1) ~=
+		"CP_SPLASHES_MERITS_WEAPON_EARNED" then
+		return
+	end
+
+	local meritRef = Engine.TableLookupByRow(SPLASH_TABLE, row, 0)
+	-- The unlock criteria map merit IDs to weapon refs, including names
+	-- that differ (mt_udm_unlock -> iw7_udm45). Do not guess asset names.
+	local weaponRef = Engine.TableLookup("mp/unlocks/CPWeaponUnlocks.csv", 5,
+		"coopMatchData.meritState." .. meritRef, 0)
+	local icon = weaponRef and weaponRef ~= "" and Cac.GetWeaponImage(weaponRef)
+	if icon and icon ~= "" then
+		values.icon = icon
+		log("weapon unlock artwork merit=" .. meritRef .. " weapon=" .. weaponRef ..
+			" icon=" .. icon .. " source=colored-weapon-image")
+	else
+		log("weapon unlock artwork unavailable merit=" .. tostring(meritRef))
+	end
+end
+
 local function getMeritMetadata(splashIndex, controllerIndex)
 	if splashIndex == nil then
 		return nil
@@ -103,6 +125,7 @@ if not LUI.UIMessageQueue.iwzChallengeSplashPatched then
 			return originalAddMessage(queue, messageType, values, dataSourcesTo)
 		end
 
+		applyWeaponUnlockIcon(values)
 		local metadata = getMeritMetadata(values.splashIndex, queue.controller)
 		if metadata == nil then
 			return originalAddMessage(queue, messageType, values, dataSourcesTo)

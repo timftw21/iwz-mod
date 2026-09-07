@@ -1,3 +1,4 @@
+// IWZ-LOAD: map=cp_rave
 main()
 {
     if (getdvar("ui_mapname") != "cp_rave")
