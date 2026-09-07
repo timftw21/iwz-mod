@@ -3,6 +3,7 @@
 
 #include "component/console/console.hpp"
 #include "game/game.hpp"
+#include <version.hpp>
 
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
@@ -11,7 +12,13 @@ namespace branding
 {
 	namespace
 	{
-		constexpr auto display_version = "IWZ-MOD 0.6";
+		const auto display_version = []
+		{
+			std::string version = SHORTVERSION;
+			if (version.ends_with(".0"))
+				version.resize(version.size() - 2);
+			return "IWZ-MOD " + version;
+		}();
 		utils::hook::detour ui_get_formatted_build_number_hook;
 		const char* ui_get_formatted_build_number_stub()
 		{
@@ -19,7 +26,7 @@ namespace branding
 			static bool once = ([]()
 			{
 				const char* build_num = ui_get_formatted_build_number_hook.invoke<const char*>();
-				utils::string::copy(buf, utils::string::va("%s (%s)", display_version, build_num));
+				utils::string::copy(buf, utils::string::va("%s (%s)", display_version.c_str(), build_num));
 				return true;
 			})();
 
@@ -38,7 +45,8 @@ namespace branding
 			}
 
 			ui_get_formatted_build_number_hook.create(0x140CD1170, ui_get_formatted_build_number_stub);
-			console::info("[IWZ][Branding] installed UI version label='%s'\n", display_version);
+			console::info("[IWZ][Branding] installed UI version label='%s' release='%s'\n",
+				display_version.c_str(), SHORTVERSION);
 		}
 	};
 }
