@@ -16,7 +16,7 @@ double keys; enabling both keeps the bonus at 2x.
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 0.7 adds Subway Shuffle and Beach Bloodbath survival maps, match key rewards, and improved Death Wish effects and prompts. It also improves weapon laser visibility during animations, weapon reward artwork, survival menus, and map-specific interactions and effects. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 0.8 adds Cargo Chaos, a survival map for The Beast from Beyond, with power and double Pack-a-Punch enabled, a permanent Magic Wheel featuring Venom Z, an unlocked Entangler pickup, and laser-button access to the Pack-a-Punch room. It also adds a centered perk wall, Death Wish, and stock cryptid special rounds with music and a final Max Ammo drop. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -37,7 +37,7 @@ General
  - Added zombies-specific options, such as camera perspective options, HUD options, and an in-game timer for all modes
  - A variety of fixes and tweaks to the Zombies' menus
  - Added a Restart Match button to the in-game pause menu (glorified map_restart)
- - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!", "Rave Rampage", "Subway Shuffle", and "Beach Bloodbath"
+ - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!", "Rave Rampage", "Subway Shuffle", "Beach Bloodbath", and "Cargo Chaos"
  - Death Wish lets players make slower zombies run in survival maps, with toggle sounds, a red soul jar, and a red scene counter while enabled
  - Added the Neon Rot camo, unlocked by earning 5 headshot kills with the M1 in Zombies
  - Canceling the survival film browser now preserves the selected game mode, map, and cast

@@ -105,7 +105,8 @@ end
 
 local function installDeathWishSceneColor(widget, controllerIndex, textElements)
 	local mapName = Engine.GetDvarString("mapname")
-	if mapName ~= "cp_rave" and mapName ~= "cp_zmb" and mapName ~= "cp_disco" and mapName ~= "cp_town" then
+	if mapName ~= "cp_rave" and mapName ~= "cp_zmb" and mapName ~= "cp_disco" and
+		mapName ~= "cp_town" and mapName ~= "cp_final" then
 		return
 	end
 
@@ -189,7 +190,7 @@ for _, hudEntry in ipairs(zombiesHudClasses) do
 				stockInit(self, controllerIndex)
 
 				if hudClassName == "ZMHUD" or hudClassName == "ZMHUDDLC1" or
-					hudClassName == "ZMHUDDLC2" or hudClassName == "ZMHUDDLC3" then
+					hudClassName == "ZMHUDDLC2" or hudClassName == "ZMHUDDLC3" or hudClassName == "ZMHUDDLC4" then
 					-- These maps build the persistent corner counter separately from
 					-- CPClapboardBase. HUD.AddWidget stores its container in _widget;
 					-- WaveNumberContainer owns WaveNumber's Scene and waveNum text.

@@ -9,7 +9,8 @@ local survivalMaps = {
 	cp_zmb = "ARCADE ATTACK!",
 	cp_rave = "RAVE RAMPAGE",
 	cp_disco = "SUBWAY SHUFFLE",
-	cp_town = "BEACH BLOODBATH"
+	cp_town = "BEACH BLOODBATH",
+	cp_final = "CARGO CHAOS"
 }
 
 local bossDvars = {
@@ -114,7 +115,8 @@ local function beginSurvivalBrowse(controllerIndex)
 		" survival=" .. tostring(Engine.GetDvarBool(SURVIVAL_DVAR)) ..
 		" cast=" .. game:getzombiescharacter() ..
 		" available=cp_zmb->" .. survivalMaps.cp_zmb .. ",cp_rave->" .. survivalMaps.cp_rave ..
-		",cp_disco->" .. survivalMaps.cp_disco .. ",cp_town->" .. survivalMaps.cp_town)
+		",cp_disco->" .. survivalMaps.cp_disco .. ",cp_town->" .. survivalMaps.cp_town ..
+		",cp_final->" .. survivalMaps.cp_final)
 	LUI.FlowManager.RequestAddMenu("CPMaps", true, controllerIndex)
 end
 
@@ -357,5 +359,6 @@ MenuBuilder.m_types["CPMatchDetails"] = function(menu, controller)
 	return self
 end
 
-log("frontend integration registered maps=cp_zmb,cp_rave labels=" ..
-	survivalMaps.cp_zmb .. "," .. survivalMaps.cp_rave .. "," .. survivalMaps.cp_disco)
+log("frontend integration registered maps=cp_zmb,cp_rave,cp_disco,cp_town,cp_final labels=" ..
+	survivalMaps.cp_zmb .. "," .. survivalMaps.cp_rave .. "," .. survivalMaps.cp_disco ..
+	"," .. survivalMaps.cp_town .. "," .. survivalMaps.cp_final)

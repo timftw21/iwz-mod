@@ -1,0 +1,13 @@
+// All references below are present in cp_final.csv; load after cp_final.
+material,,eq/vfx_energy_shockwave_04
+material,,eq/vfx_energy_plasma_ball_loop
+material,,eq/vfx_postfx_shockwave_ring_motion_blurred
+material,,eq/vfx_vol_light_ray_01_gray_ul_gr
+material,,eq/vfx_dist_blast_wave_loop_sxy_30_ds
+material,,el/gfx_test01
+material,,el/vfx_zmb_paproom
+material,,mopw/vfx_zmb_paproom
+lightdef,,light_fx_default
+xmodelsurfs,,vfx_energy_portal_b_lod010v0p3_0040
+xmodel,vfx_energy_rave_portal_paproom
+vfx,vfx/iw7/levels/cp_rave/vfx_rave_portal_02

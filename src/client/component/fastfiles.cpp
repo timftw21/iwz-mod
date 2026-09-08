@@ -89,6 +89,7 @@ namespace fastfiles
 		constexpr auto gns_arcade_ui_zone = "iwz_gns_arcade";
 		constexpr auto zombies_camos_zone = "iwz_zombies_camos";
 		constexpr auto directors_death_zone = "iwz_directors_death";
+		constexpr auto cargo_chaos_zone = "iwz_cargo_chaos";
 
 		bool db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
 			const bool is_base_map, const bool was_paused, const int failure_mode)
@@ -291,18 +292,23 @@ namespace fastfiles
 			const game::XZoneInfo* death_wish_map_zone = nullptr;
 			bool timer_zone_already_queued = false;
 			bool directors_death_already_queued = false;
+			bool cargo_chaos_already_queued = false;
 
 			for (auto i = 0u; i < zone_count; ++i)
 			{
 				if (zone_info[i].name && (!strcmp(zone_info[i].name, "cp_rave") ||
 					!strcmp(zone_info[i].name, "cp_zmb") || !strcmp(zone_info[i].name, "cp_disco") ||
-					!strcmp(zone_info[i].name, "cp_town")))
+					!strcmp(zone_info[i].name, "cp_town") || !strcmp(zone_info[i].name, "cp_final")))
 				{
 					death_wish_map_zone = &zone_info[i];
 				}
 				if (zone_info[i].name && !strcmp(zone_info[i].name, directors_death_zone))
 				{
 					directors_death_already_queued = true;
+				}
+				if (zone_info[i].name && !strcmp(zone_info[i].name, cargo_chaos_zone))
+				{
+					cargo_chaos_already_queued = true;
 				}
 				if (zone_info[i].name && !strcmp(zone_info[i].name, pap_timer::get_zone_name()))
 				{
@@ -338,6 +344,18 @@ namespace fastfiles
 				{
 					console::error("[IWZ][DeathWish] missing particle zone=%s\n", directors_death_zone);
 				}
+			}
+
+			if (death_wish_map_zone && !strcmp(death_wish_map_zone->name, "cp_final") && !cargo_chaos_already_queued)
+			{
+				if (fastfiles::exists(cargo_chaos_zone))
+				{
+					zones.push_back({cargo_chaos_zone, death_wish_map_zone->allocFlags | game::DB_ZONE_CUSTOM,
+						death_wish_map_zone->freeFlags});
+					console::info("[IWZ][CargoChaos] queueing PaP image zone=%s after map=cp_final\n", cargo_chaos_zone);
+				}
+				else
+					console::error("[IWZ][CargoChaos] missing PaP image zone=%s\n", cargo_chaos_zone);
 			}
 
 			return db_load_x_assets_hook.invoke<void>(zones.data(), static_cast<unsigned int>(zones.size()), sync_mode);

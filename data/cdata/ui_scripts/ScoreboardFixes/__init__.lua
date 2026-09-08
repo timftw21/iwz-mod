@@ -12,7 +12,8 @@ local survivalMapNames = {
 	cp_zmb = "ARCADE ATTACK!",
 	cp_rave = "RAVE RAMPAGE",
 	cp_disco = "SUBWAY SHUFFLE",
-	cp_town = "BEACH BLOODBATH"
+	cp_town = "BEACH BLOODBATH",
+	cp_final = "CARGO CHAOS"
 }
 
 if type(stockInitAARScoreboardDataSources) ~= "function" then

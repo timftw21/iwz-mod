@@ -118,6 +118,7 @@ namespace localized_strings
 			"CP_RAVE_INTRO_LINE_4",
 			"CP_DISCO_INTRO_LINE_4",
 			"CP_TOWN_INTRO_LINE_4",
+			"CP_FINAL_INTRO_LINE_4",
 		};
 
 		std::string normalize_key(const std::string_view key)
@@ -260,7 +261,8 @@ namespace localized_strings
 				if ((_stricmp(lookup_key.data(), "CP_ZMB_INTRO_LINE_4") == 0 ||
 					_stricmp(lookup_key.data(), "CP_RAVE_INTRO_LINE_4") == 0 ||
 					_stricmp(lookup_key.data(), "CP_DISCO_INTRO_LINE_4") == 0 ||
-					_stricmp(lookup_key.data(), "CP_TOWN_INTRO_LINE_4") == 0) &&
+					_stricmp(lookup_key.data(), "CP_TOWN_INTRO_LINE_4") == 0 ||
+					_stricmp(lookup_key.data(), "CP_FINAL_INTRO_LINE_4") == 0) &&
 					!logged_survival_objective_override.exchange(true))
 				{
 					console::info("[IWZ][Survival] materialized objective localization key='%s' text='Survive until you die!' mode=survival-only\n",
@@ -522,6 +524,7 @@ namespace localized_strings
 			override("CP_RAVE_INTRO_LINE_4", "Survive until you die!");
 			override("CP_DISCO_INTRO_LINE_4", "Survive until you die!");
 			override("CP_TOWN_INTRO_LINE_4", "Survive until you die!");
+			override("CP_FINAL_INTRO_LINE_4", "Survive until you die!");
 			// zombie_doors uses the default key on Spaceland and each sequel map
 			// assigns one of the three map-specific keys to level.enter_area_hint.
 			// The interaction engine supplies Hold/bind/cost around this value.
@@ -572,7 +575,7 @@ namespace localized_strings
 				std::size(bounty_description_overrides));
 			console::info("[IWZ][Localization] registered bracketed Chi primary-binding overrides count=%zu scope=challenge-and-rank1-rewards numericPlaceholderYellow=1 bottomRightHud=unchanged\n",
 				std::size(chi_primary_binding_overrides));
-			console::info("[IWZ][Survival] registered mode-gated localization objectiveKeys=CP_ZMB_INTRO_LINE_4,CP_RAVE_INTRO_LINE_4,CP_DISCO_INTRO_LINE_4,CP_TOWN_INTRO_LINE_4 lockedExitHint=disabled fallback=stock-values\n");
+			console::info("[IWZ][Survival] registered mode-gated localization objectiveKeys=CP_ZMB_INTRO_LINE_4,CP_RAVE_INTRO_LINE_4,CP_DISCO_INTRO_LINE_4,CP_TOWN_INTRO_LINE_4,CP_FINAL_INTRO_LINE_4 lockedExitHint=disabled fallback=stock-values\n");
 
 			seh_string_ed_get_string_hook.create(0x140CBBB10, &seh_string_ed_get_string);
 		}

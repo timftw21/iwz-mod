@@ -296,6 +296,20 @@ namespace gsc
 			if (!header.starts_with(prefix))
 				return true;
 			const auto scope = header.substr(prefix.size());
+			if (scope == "survival-only" || scope == "gns-arcade-only")
+			{
+				const auto* mode = game::Dvar_FindVar(scope == "survival-only" ?
+					"iwz_survival_mode" : "iwz_gns_arcade");
+				// UI-created console dvars are strings until explicitly registered.
+				const auto enabled = mode && ((mode->type == game::DVAR_TYPE_BOOL && mode->current.enabled) ||
+					(mode->type == game::DVAR_TYPE_INT && mode->current.integer != 0) ||
+					(mode->type == game::DVAR_TYPE_STRING && mode->current.string && std::atoi(mode->current.string) != 0));
+				if (!enabled)
+				{
+					console::info("[IWZ][GSC] auto-load skipped script=%s reason=%s\n", name.data(), std::string(scope).c_str());
+					return false;
+				}
+			}
 			if (scope == "referenced-only")
 			{
 				console::info("[IWZ][GSC] auto-load skipped script=%s reason=referenced-only\n", name.data());

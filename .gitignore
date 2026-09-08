@@ -4,6 +4,7 @@ build/
 /docs/*
 !/docs/key-earning.md
 !/docs/laser-animation-visibility.md
+!/docs/cargo-chaos.md
 /reports/
 /.tmp/
 /minidumps/
