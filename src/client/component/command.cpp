@@ -1104,6 +1104,31 @@ namespace command
 				cmd_give(client_num, params.get_all());
 			});
 
+			add_sv("maxweaponlevel", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+				{
+					return;
+				}
+				if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP || game::Com_FrontEnd_IsInFrontEnd())
+				{
+					game::shared::client_println(client_num, "Use maxweaponlevel while holding a weapon in a Zombies match");
+					console::warn("[IWZ][WeaponPrestige] maxweaponlevel rejected client=%d reason=not_zombies_match\n", client_num);
+					return;
+				}
+				try
+				{
+					const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+					console::info("[IWZ][WeaponPrestige] maxweaponlevel requested client=%d\n", client_num);
+					scripting::call_script_function(player, "custom_scripts/cp/weapon_prestige", "max_held_weapon_level", {});
+				}
+				catch (const std::exception& error)
+				{
+					console::error("[IWZ][WeaponPrestige] maxweaponlevel failed client=%d error=%s\n", client_num, error.what());
+					game::shared::client_println(client_num, "Unable to max the held weapon; see console log");
+				}
+			});
+
 			add_sv("dropweapon", [](const int client_num, const params_sv& params)
 			{
 				if (!game::shared::cheats_ok(client_num, true))

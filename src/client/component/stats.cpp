@@ -473,6 +473,19 @@ namespace stats
 	public:
 		void post_unpack() override
 		{
+			// The stock CP loadout DDL has six entries (optic + five attachments).
+			// Keep the prestige attachment outside that fixed-size, versioned save.
+			// USERINFO carries each client's selection to the server, including on
+			// reconnect/map change; gameplay still validates prestige and unlocks.
+			// String dvars use the engine string allocator, which is not initialized
+			// during post_unpack. Register on the main pipeline like other saved strings.
+			scheduler::once([]()
+			{
+				game::Dvar_RegisterString("iwz_weapon_attachments", "",
+					game::DVAR_FLAG_SAVED | game::DVAR_FLAG_USERINFO,
+					"Zombies prestige attachment selections (weapon ID:attachment ID)");
+				console::info("[IWZ][WeaponPrestige] registered saved client attachment selections stage=main; Zombies cap=1 reward=sixth attachment\n");
+			}, scheduler::main);
 			fastfiles::on_string_table_loaded(reduce_zombies_rank_xp);
 			console::info("[IWZ][Progression] registered Zombies rank-table XP reduction table='%s' ranks=1-%d percent=10 rounding=nearest\n",
 				zombies_rank_table_name, zombies_rank_count);

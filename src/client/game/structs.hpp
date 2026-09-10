@@ -1094,10 +1094,13 @@ namespace game
 	{
 		void* dummy;
 		playerState_s predictedPlayerState;
-		char __pad0[19160 - sizeof(playerState_s) - 8];
+		char __pad0[19156 - sizeof(playerState_s) - 8];
+		int localClientNum;
 		CubemapShot cubemapShot;
 		int cubemapSize;
-		char __pad1[305200];
+		char __pad1[28];
+		int time;
+		char __pad_time[305168];
 		float viewModelAxis[4][3];
 		char __pad2[168476];
 		int renderScreen;
@@ -1106,17 +1109,25 @@ namespace game
 		int mapRestart;
 		int spectatingThirdPerson;
 		int renderingThirdPerson;
-		char __pad3[60792];
+		float thirdPersonGunPitch;
+		float thirdPersonGunYaw;
+		float thirdPersonCameraSide;
+		char __pad3[60780];
 		bool m_deathCameraFailsafeLock;
 		char __pad4[3];
 		char __pad5[486328];
 	}; static_assert(sizeof(cg_s) == 1040040);
+	static_assert(offsetof(cg_s, localClientNum) == 0x4AD4);
 	static_assert(offsetof(cg_s, cubemapShot) == 19160);
 	static_assert(offsetof(cg_s, cubemapSize) == 19164);
+	static_assert(offsetof(cg_s, time) == 0x4AFC);
 	static_assert(offsetof(cg_s, viewModelAxis) == 324368);
 	static_assert(offsetof(cg_s, renderScreen) == 492892);
 	static_assert(offsetof(cg_s, spectatingThirdPerson) == 492908);
 	static_assert(offsetof(cg_s, renderingThirdPerson) == 492912);
+	static_assert(offsetof(cg_s, thirdPersonGunPitch) == 0x78574);
+	static_assert(offsetof(cg_s, thirdPersonGunYaw) == 0x78578);
+	static_assert(offsetof(cg_s, thirdPersonCameraSide) == 0x7857C);
 	static_assert(offsetof(cg_s, m_deathCameraFailsafeLock) == 553708);
 
 	struct GfxLight

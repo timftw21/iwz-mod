@@ -159,6 +159,48 @@ namespace fx
 				console::warn("[IWZ][RaveBuoy] visibility tome 2 validation failed; baked distances unchanged\n");
 		}
 
+		void fix_shaolin_window_frames(game::GfxWorld* world)
+		{
+			constexpr auto model_name = "cp_disco_bsp_window_01";
+			constexpr std::array distances{841.96563720703125f, 2000.0f, 4210.2236328125f};
+			constexpr std::array<unsigned short, 3> triangles{300, 116, 44};
+			auto* model = game::DB_FindXAssetHeader(game::ASSET_TYPE_XMODEL, model_name, false).model;
+			if (!world->dpvs.smodelDrawInsts || !model || !model->name ||
+				std::strcmp(model->name, model_name) != 0 || model->numLods != distances.size())
+			{
+				console::warn("[IWZ][ShaolinWindows] window model validation failed; LOD meshes unchanged\n");
+				return;
+			}
+			for (size_t index = 0; index < distances.size(); ++index)
+			{
+				const auto& lod = model->lodInfo[index];
+				const auto* mesh = lod.modelSurfs;
+				const auto expected_triangles = mesh == model->lodInfo[0].modelSurfs ? triangles[0] : triangles[index];
+				if (!nearly_equal(lod.dist, distances[index]) || lod.numsurfs != 1 ||
+					!mesh || mesh->numsurfs != 1 || !mesh->surfs || mesh->surfs[0].triCount != expected_triangles)
+				{
+					console::warn("[IWZ][ShaolinWindows] window LOD validation failed lod=%zu; meshes unchanged\n", index);
+					return;
+				}
+			}
+
+			// The reported hit (500,1050.22,1160.96) belongs to this 16-window
+			// facade. Its auto-generated middle LOD removes the outer trim; the
+			// final LOD has zero front-facing area. Keep the intact 300-triangle
+			// mesh at each tier, including its material indices and surface data.
+			// The map's existing cull distances and Umbra visibility stay valid.
+			for (size_t index = 1; index < distances.size(); ++index)
+			{
+				model->lodInfo[index] = model->lodInfo[0];
+				model->lodInfo[index].dist = distances[index];
+			}
+			unsigned int instances = 0;
+			for (auto index = 0u; index < world->dpvs.smodelCount; ++index)
+				instances += world->dpvs.smodelDrawInsts[index].model == model;
+			console::info("[IWZ][ShaolinWindows] repaired model='%s' instances=%u LODTriangles=300/116/44->300/300/300 finalDistance=%.3f\n",
+				model_name, instances, distances.back());
+		}
+
 		bool fix_beast_glare()
 		{
 			auto* world = *game::g_world;
@@ -232,6 +274,10 @@ namespace fx
 			else if (world && world->name && std::strcmp(world->name, "maps/cp/cp_rave.d3dbsp") == 0)
 			{
 				fix_rave_buoy_distance(*game::g_world);
+			}
+			else if (world && world->name && std::strcmp(world->name, "maps/cp/cp_disco.d3dbsp") == 0)
+			{
+				fix_shaolin_window_frames(*game::g_world);
 			}
 		}
 

@@ -1,15 +1,10 @@
 local SPLASH_TABLE = "cp/zombies/zombie_splashtable.csv"
-local CAMO_TABLE = "mp/camotable.csv"
-local MENU_CAMOS_TABLE = "mp/menucamos.csv"
-local CAMO_UNLOCK_TABLE = "mp/unlocks/camounlocks.csv"
 local WEAPON_REF = "iw7_m1c"
 
 local CAMOS = {
 	{
 		id = "NeonRot",
-		index = "253",
 		ref = "camo253",
-		unlockRef = "iw7_m1c+camo253",
 		-- Custom progression must not borrow a real weapon's analytics bucket.
 		-- This saved IWZ dvar is readable by gameplay, native unlock rules, and UI.
 		progressDvar = "iwz_neon_rot_headshots",
@@ -117,35 +112,11 @@ if Engine.InFrontend() then
 				LOADOUT.MakePersonalizationItemsListDataSource ~= nil))
 	end
 
-	for _, camo in ipairs(CAMOS) do
-		local camoRow = Engine.TableLookupGetRowNum(CAMO_TABLE, 1, camo.ref)
-		local menuRow = Engine.TableLookupGetRowNum(
-			MENU_CAMOS_TABLE, 0, camo.index)
-		local unlockRow = Engine.TableLookupGetRowNum(
-			CAMO_UNLOCK_TABLE, 0, camo.unlockRef)
-		local progressRead, progress = readProgress(controllerIndex, camo)
-		local nativeUnlocked = false
-		local nativeUnlockRead = false
-		if controllerIndex ~= nil and controllerIndex >= 0 then
-			nativeUnlockRead, nativeUnlocked = pcall(
-				Engine.IsUnlocked,
-				controllerIndex,
-				"unlock",
-				camo.unlockRef,
-				true
-			)
-		end
-		log("frontend table audit camo=" .. camo.id ..
-			" controller=" .. tostring(controllerIndex) ..
-			" camoRow=" .. tostring(camoRow) ..
-			" menuRow=" .. tostring(menuRow) ..
-			" unlockRow=" .. tostring(unlockRow) ..
-			" progressSource=saved-dvar progressRef=" .. camo.progressDvar ..
-			" progressRead=" .. tostring(progressRead) ..
-			" progress=" .. tostring(progress) ..
-			" nativeUnlockRead=" .. tostring(nativeUnlockRead) ..
-			" nativeUnlocked=" .. tostring(nativeUnlocked))
-	end
+	-- TableLookup/IsUnlocked here synchronously wait for assets during boot.
+	-- The old diagnostic audit stalled title-screen startup for eight seconds.
+	-- Native table/material load callbacks already audit these assets; actual
+	-- unlock evaluation belongs to the personalization data-source callback above.
+	log("frontend hooks ready; asset audits handled by native load callbacks")
 	return
 end
 
@@ -163,7 +134,9 @@ if stockSplashIconZom == nil then
 	return
 end
 
-if not MenuBuilder.iwzZombiesCamoHexIconPatched then
+-- The loader runs this script once per UI VM. MenuBuilder is a locked stock
+-- module, so registering this constructor needs no extra module-level flag.
+do
 	MenuBuilder.m_types["splashIconZom"] = function(menu, controller)
 		local self = stockSplashIconZom(menu, controller)
 		local controllerIndex = controller and controller.controllerIndex
@@ -257,8 +230,7 @@ if not MenuBuilder.iwzZombiesCamoHexIconPatched then
 		return self
 	end
 
-	MenuBuilder.iwzZombiesCamoHexIconPatched = true
 	log("Film-specific camo icon port ready widget=splashIconZom films=5" ..
 		" shape=hex customCamos=" .. tostring(#CAMOS) ..
-		" stockMeritIcons=unchanged")
+		" stockMeritIcons=unchanged registration=once-per-ui-session")
 end

@@ -32,6 +32,13 @@ namespace console
 	} con_type;
 
 	game::dvar_t* console_log = nullptr;
+	namespace
+	{
+		std::mutex log_mutex;
+		std::string startup_log;
+		bool startup_log_truncated = false;
+		constexpr size_t startup_log_limit = 1024 * 1024;
+	}
 
 	void init_console_type()
 	{
@@ -123,8 +130,15 @@ namespace console
 			out.push_back('\n');
 		}
 
-		if (console_log)
-			utils::io::write_file(console_log->current.string, out, true);
+		{
+			std::lock_guard lock(log_mutex);
+			if (console_log)
+				utils::io::write_file(console_log->current.string, out, true);
+			else if (startup_log.size() + out.size() <= startup_log_limit)
+				startup_log.append(out);
+			else
+				startup_log_truncated = true;
+		}
 
 		if (console::is_enabled())
 		{
@@ -184,6 +198,18 @@ namespace console
 		if (initialized) return;
 		initialized = true;
 
+		// File logging also applies to -noconsole. Retain pre-main diagnostics
+		// until the engine string allocator and saved dvars are available.
+		scheduler::once([]()
+		{
+			auto* log = game::Dvar_RegisterString("g_consoleLog", "iw7-mod/logs/console.log", game::DVAR_FLAG_SAVED, "Where to write the console log");
+			std::lock_guard lock(log_mutex);
+			console_log = log;
+			if (startup_log_truncated) startup_log.append("[IWZ][Console] startup log exceeded 1 MiB; some messages were omitted\n");
+			utils::io::write_file(console_log->current.string, startup_log, true);
+			std::string{}.swap(startup_log);
+		}, scheduler::main);
+
 		init_console_type();
 		if (get_console_type() == con_type_none)
 		{
@@ -202,9 +228,5 @@ namespace console
 			::syscon::init();
 		}
 
-		scheduler::once([]()
-		{
-			console_log = game::Dvar_RegisterString("g_consoleLog", "iw7-mod/logs/console.log", game::DVAR_FLAG_SAVED, "Where to write the console log");
-		}, scheduler::main);
 	}
 }

@@ -14,6 +14,7 @@ main()
     final_starting_vo = getfunction("scripts/cp/maps/cp_final/cp_final_vo", "final_starting_vo");
     willard_intro_vo = getfunction("scripts/cp/maps/cp_final/cp_final_vo", "willard_intro_vo");
     new_wave_sound = getfunction("scripts/cp/zombies/zombies_spawning", "_id_BDD4");
+    can_use_interaction = getfunction("scripts/cp/cp_interaction", "can_use_interaction");
     move_players = getfunction("scripts/cp/maps/cp_final/cp_final_rhino_boss", "move_players_to_rhino_fight");
     if (isdefined(move_players))
     {
@@ -34,6 +35,15 @@ main()
         beast_fix_log("Mephistopheles transition hook unavailable: bossfight_loadout lookup failed");
 
     installed = 0;
+    if (isdefined(can_use_interaction))
+    {
+        replacefunc(can_use_interaction, ::can_use_interaction_with_airborne_fuses);
+        installed++;
+        beast_fix_log("installed airborne Alien Fuse interaction exception target=pap_fusebox");
+    }
+    else
+        beast_fix_log("Alien Fuse hook unavailable: can_use_interaction lookup failed");
+
     if (isdefined(dissolve_corpse))
     {
         replacefunc(dissolve_corpse, ::dissolve_corpse_without_hidden_collision);
@@ -91,7 +101,7 @@ main()
         beast_fix_log("new-wave cue hook unavailable: retail zombies_spawning::_id_BDD4 lookup failed");
 
     beast_fix_log("pre-load installation complete hooks=" + installed +
-        "/6 pendingPostLoad=interaction-properties");
+        "/7 pendingPostLoad=interaction-properties");
 }
 
 post_load()
@@ -110,6 +120,45 @@ post_load()
 beast_fix_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("BeastFixes", message);
+}
+
+can_use_interaction_with_airborne_fuses(interaction)
+{
+    // Stock cp_interaction::can_use_interaction from both dumps, with only
+    // the grounded requirement relaxed for this map's elevated fuse pickup.
+    if (!isdefined(interaction))
+        return 0;
+
+    if (scripts\engine\utility::is_true(self.iscarrying))
+        return 0;
+
+    if (scripts\engine\utility::is_true(interaction.disabled) ||
+        !scripts\cp\utility::areinteractionsenabled() || self isinphase())
+        return 0;
+
+    if (self secondaryoffhandbuttonpressed() || self isthrowinggrenade() || self fragbuttonpressed())
+        return 0;
+
+    airborne = !self isonground();
+    if (airborne && interaction.script_noteworthy != "pap_fusebox")
+        return 0;
+
+    if (interaction.script_noteworthy == "game_race" &&
+        distancesquared(self.origin, interaction.origin) > 576)
+        return 0;
+
+    if (interaction.script_noteworthy == "ritual_stone" &&
+        scripts\engine\utility::is_true(self.rave_mode))
+        return 0;
+
+    if (airborne && !isdefined(self.iwz_beast_airborne_fuse_logged))
+    {
+        self.iwz_beast_airborne_fuse_logged = 1;
+        beast_fix_log("airborne Alien Fuse interaction allowed player=" +
+            (self getentitynumber()) + " origin=" + self.origin +
+            " interactionOrigin=" + interaction.origin);
+    }
+    return 1;
 }
 
 move_players_to_rhino_with_transition()

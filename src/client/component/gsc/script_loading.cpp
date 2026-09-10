@@ -457,6 +457,9 @@ namespace gsc
 
 				return {{}, script_data};
 			});
+
+			console::info("[IWZ][GSC] compiler sound binding playlocalsound=0x%04X expected=0x8242\n",
+				gsc_ctx->meth_id("playlocalsound"));
 		}
 
 		void scr_begin_load_scripts_stub(bool a1)

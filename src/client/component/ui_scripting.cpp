@@ -211,7 +211,12 @@ namespace ui_scripting
 			for (const auto& candidate : candidates)
 			{
 				print_loading_script(std::filesystem::path(candidate.root_script).parent_path().generic_string());
+				const auto started = std::chrono::steady_clock::now();
 				load_script(candidate.root_script, candidate.data);
+				const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now() - started).count();
+				console::info("[IWZ][LUI][Timing] script='%s' elapsedMs=%lld\n",
+					candidate.logical_name.data(), static_cast<long long>(elapsed));
 			}
 		}
 
@@ -419,7 +424,12 @@ namespace ui_scripting
 
 		void lui_cod_init_stub(const bool frontend, const bool error_recovery)
 		{
+			const auto stock_started = std::chrono::steady_clock::now();
 			lui_cod_init_hook.invoke<void>(frontend, error_recovery);
+			const auto stock_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - stock_started).count();
+			console::info("[IWZ][LUI][Timing] stockInit frontend=%d elapsedMs=%lld\n",
+				frontend, static_cast<long long>(stock_elapsed));
 
 			const auto state = *game::hks::lua_state;
 			if (state == nullptr)
@@ -454,9 +464,12 @@ namespace ui_scripting
 
 			console::info("[IWZ][LUI] loading custom scripts generation=%llu state=%p frontend=%d errorRecovery=%d\n",
 				lui_generation, state, frontend, error_recovery);
+			const auto custom_started = std::chrono::steady_clock::now();
 			try_start();
-			console::info("[IWZ][LUI] custom scripts ready generation=%llu loaded=%zu\n",
-				lui_generation, globals.loaded_scripts.size());
+			const auto custom_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - custom_started).count();
+			console::info("[IWZ][LUI] custom scripts ready generation=%llu loaded=%zu elapsedMs=%lld\n",
+				lui_generation, globals.loaded_scripts.size(), static_cast<long long>(custom_elapsed));
 		}
 
 		void hks_shutdown_stub()

@@ -34,6 +34,12 @@ namespace localized_strings
 
 		constexpr localization_override bounty_description_overrides[]
 		{
+			// Zombies also uses these five MP weapon-class descriptions.
+			{"INTEL_MP_CONTRACT_KILLS_AR", "Earn ^3&&1^7 kills with an assault rifle."},
+			{"INTEL_MP_CONTRACT_KILLS_LMG", "Earn ^3&&1^7 kills with a LMG."},
+			{"INTEL_MP_CONTRACT_KILLS_SG", "Earn ^3&&1^7 kills with a shotgun."},
+			{"INTEL_MP_CONTRACT_KILLS_SNIPER", "Earn ^3&&1^7 kills with a sniper rifle."},
+			{"INTEL_MP_CONTRACT_KILLS_SMG", "Earn ^3&&1^7 kills with a SMG."},
 			{"ZM_CONTRACTS_WEEK_DESC", "New Zombies Bounties are available for the week."},
 			{"ZM_CONTRACTS_KILLS_HEADSHOTS", "Earn ^3&&1^7 headshot kills."},
 			{"ZM_CONTRACTS_CASH_EARNED", "Earn ^3&&1^7 cash."},
@@ -117,6 +123,7 @@ namespace localized_strings
 			"CP_ZMB_INTRO_LINE_4",
 			"CP_RAVE_INTRO_LINE_4",
 			"CP_DISCO_INTRO_LINE_4",
+			"CP_TOWN_INTRO_LINE_3",
 			"CP_TOWN_INTRO_LINE_4",
 			"CP_FINAL_INTRO_LINE_4",
 		};
@@ -523,6 +530,9 @@ namespace localized_strings
 			override("CP_ZMB_INTRO_LINE_4", "Survive until you die!");
 			override("CP_RAVE_INTRO_LINE_4", "Survive until you die!");
 			override("CP_DISCO_INTRO_LINE_4", "Survive until you die!");
+			// Attack places its objective on line three and its clock on line four.
+			// Preserve that stock clock above Survival's line-four objective.
+			override("CP_TOWN_INTRO_LINE_3", "10:15:[{FAKE_INTRO_SECONDS:11}] in the morning");
 			override("CP_TOWN_INTRO_LINE_4", "Survive until you die!");
 			override("CP_FINAL_INTRO_LINE_4", "Survive until you die!");
 			// zombie_doors uses the default key on Spaceland and each sequel map
@@ -546,6 +556,7 @@ namespace localized_strings
 			{
 				override(key, value);
 			}
+			override("LUA_MENU_ZM_BOUNTY_TIMER", "BOUNTIES EXPIRE IN D:^1&&1^7 H:^1&&2^7 M:^1&&3^7");
 			for (const auto& [key, value] : chi_primary_binding_overrides)
 			{
 				override(key, value);
@@ -573,9 +584,10 @@ namespace localized_strings
 			console::info("[IWZ][Localization] removed trailing periods from portal hints keys=CP_TOWN_INTERACTIONS_HIDDEN_LEAVE,CP_TOWN_INTERACTIONS_HIDDEN_TELEPORT\n");
 			console::info("[IWZ][Localization] registered punctuation overrides deadeyeDewdrops=1 bountyDescriptions=%zu\n",
 				std::size(bounty_description_overrides));
+			console::info("[IWZ][BountyFixes] punctuation audit includes five shared MP weapon-class descriptions; timer wording='BOUNTIES EXPIRE IN'\n");
 			console::info("[IWZ][Localization] registered bracketed Chi primary-binding overrides count=%zu scope=challenge-and-rank1-rewards numericPlaceholderYellow=1 bottomRightHud=unchanged\n",
 				std::size(chi_primary_binding_overrides));
-			console::info("[IWZ][Survival] registered mode-gated localization objectiveKeys=CP_ZMB_INTRO_LINE_4,CP_RAVE_INTRO_LINE_4,CP_DISCO_INTRO_LINE_4,CP_TOWN_INTRO_LINE_4,CP_FINAL_INTRO_LINE_4 lockedExitHint=disabled fallback=stock-values\n");
+			console::info("[IWZ][Survival] registered mode-gated localization objectiveKeys=CP_ZMB_INTRO_LINE_4,CP_RAVE_INTRO_LINE_4,CP_DISCO_INTRO_LINE_4,CP_TOWN_INTRO_LINE_4,CP_FINAL_INTRO_LINE_4 beachClock=CP_TOWN_INTRO_LINE_3:10:15 lockedExitHint=disabled fallback=stock-values\n");
 
 			seh_string_ed_get_string_hook.create(0x140CBBB10, &seh_string_ed_get_string);
 		}

@@ -16,12 +16,12 @@ double keys; enabling both keeps the bonus at 2x.
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 0.8 adds Cargo Chaos, a survival map for The Beast from Beyond, with power and double Pack-a-Punch enabled, a permanent Magic Wheel featuring Venom Z, an unlocked Entangler pickup, and laser-button access to the Pack-a-Punch room. It also adds a centered perk wall, Death Wish, and stock cryptid special rounds with music and a final Max Ammo drop. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 0.9 brings weapon prestige to Zombies, including a sixth attachment slot, and improves loadout and bounty menus. It also speeds up title-screen startup, corrects third-person aiming, allows airborne alien-fuse pickups on Attack of the Radioactive Thing and The Beast from Beyond, and adds feedback when lethal equipment is empty. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
  - Fate and Fortune machine still needs to be implemented into survival maps
- - Certain fixes are only partially implemented (alien fuse interaction on Attack, gun laser behavior, etc.)
+ - Certain fixes are only partially implemented (gun laser behavior, etc.)
  - Allow custom music to be queued by the DJ in Zombies in Spaceland
  - Certain tweaks to how custom music behaves in the pre-game lobby
  - Certain vanilla hintstrings should be tweaked
@@ -36,6 +36,12 @@ General
  - Added client options, such as player name, name color, skipping intro cinematics, pause on focus lost, mute on focus lost, and XP rate
  - Added zombies-specific options, such as camera perspective options, HUD options, and an in-game timer for all modes
  - A variety of fixes and tweaks to the Zombies' menus
+ - Weapon prestige in Zombies unlocks a sixth attachment slot, with selections preserved across matches
+ - Loadout and personalization menus share consistent weapon-name strips and clearer weapon-level visuals
+ - Bounty completion and expiry information appears beneath the Bounties button
+ - Faster title-screen startup and improved startup diagnostics
+ - Third-person aiming follows the bullet path, with a shoulder offset for hipfire
+ - Attempting to use empty lethal equipment plays the purchase-denied sound
  - Added a Restart Match button to the in-game pause menu (glorified map_restart)
  - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!", "Rave Rampage", "Subway Shuffle", "Beach Bloodbath", and "Cargo Chaos"
  - Death Wish lets players make slower zombies run in survival maps, with toggle sounds, a red soul jar, and a red scene counter while enabled
@@ -73,16 +79,20 @@ Shaolin Shuffle
  - Ninja zombies no longer teleport; base ninja zombie speed has been increased by 15%
  - The Banshee at spawn no longer clips through the bench
  - Zombies ignore players while they are using phone booths
+ - Window frames remain visible at their intended render distances
  - Other miscellaneous tweaks and fixes
 
 Attack of the Radioactive Thing
  - Certain objects are now easier to interact with
+ - Alien fuses can be picked up while jumping
+ - Beach Bloodbath's opening screen shows the map's clock above the survival objective
  - Other miscellaneous tweaks and fixes
 
 The Beast from Beyond
  - Phantom floppy disk now has VFX to better indicate its location
  - The OSA assault rifle now has more starting ammo
  - Certain objects are now easier to interact with
+ - Alien fuses can be picked up while jumping
  - Other miscellaneous tweaks and fixes
 
 # IW7-Mod

@@ -14,6 +14,7 @@
 #include "script_loading.hpp"
 
 #include <utils/hook.hpp>
+#include <utils/info_string.hpp>
 
 namespace gsc
 {
@@ -677,6 +678,38 @@ namespace gsc
 
 				original(ent);
 				return scripting::script_value{};
+			});
+
+			method::add("iwzgetweaponattachments", [](const game::scr_entref_t ent, const function_args&)
+			{
+				if (ent.classnum != 0 || ent.entnum >= 18)
+				{
+					return scripting::script_value{std::string{}};
+				}
+				const auto* entity = game::GetEntity(ent);
+				if (entity == nullptr || entity->client == nullptr)
+				{
+					return scripting::script_value{std::string{}};
+				}
+				char userinfo[1024]{};
+				game::SV_GetUserinfo(ent.entnum, userinfo, sizeof(userinfo));
+				const auto length = strnlen_s(userinfo, sizeof(userinfo));
+				const utils::info_string info{std::string_view{userinfo, length}};
+				// CL's userinfo builder (0x1409B2850) enumerates USERINFO dvars via
+				// 0x1409B2E10. Keys are checksums formatted with "%d" by 0x140CEA620,
+				// NOT dvar names or unsigned decimal strings. This name hashes to
+				// 0xE401967F, transmitted as "-469657985". Use SV_GetUserinfo as the
+				// server stores a pointer per client, not a contiguous client_t array.
+				const auto key = std::to_string(static_cast<std::int32_t>(game::Dvar_GenerateChecksum("iwz_weapon_attachments")));
+				const auto selections = info.get(key);
+				if (selections.size() > 600 || selections.find_first_not_of("0123456789:,") != std::string::npos)
+				{
+					console::error("[IWZ][WeaponPrestige] rejected attachment userinfo player=%u bytes=%zu\n", ent.entnum, selections.size());
+					return scripting::script_value{std::string{}};
+				}
+				console::info("[IWZ][WeaponPrestige] read attachment userinfo player=%u key=%s userinfoBytes=%zu selectionBytes=%zu selections=%s\n",
+					ent.entnum, key.c_str(), length, selections.size(), selections.c_str());
+				return scripting::script_value{selections};
 			});
 
 			function::add("va", [](const function_args& args)

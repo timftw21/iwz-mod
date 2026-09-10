@@ -15,9 +15,8 @@ namespace thirdperson
 {
 	namespace
 	{
-		constexpr auto aim_trace_distance = 32000.0f;
-		constexpr auto bullet_trace_mask = 0x280E931;
-		constexpr auto invalid_command_time = std::numeric_limits<int>::min();
+		constexpr auto aim_projection_distance = 8192.0f;
+		constexpr auto shoulder_offset = 20.0f;
 
 		enum class reticle_state
 		{
@@ -28,135 +27,107 @@ namespace thirdperson
 			ui_suppressed,
 		};
 
-		struct legacy_trace_result
-		{
-			float fraction;
-			std::byte opaque[0x7C];
-		};
-
 		struct aim_solution
 		{
 			game::vec3_t origin{};
 			game::vec3_t direction{};
-			game::vec3_t hit_position{};
+			game::vec3_t camera_offset{};
+			game::vec2_t gun_angles{};
 			game::vec2_t screen_position{};
-			float trace_fraction = 1.0f;
 		};
 
-		struct aim_trace_cache
+		struct camera_aim_cache
 		{
 			const game::cg_s* cgame_glob = nullptr;
-			int command_time = invalid_command_time;
-			game::vec3_t view_angles{};
-			game::vec3_t origin{};
-			game::vec3_t direction{};
-			game::vec3_t hit_position{};
-			float trace_fraction = 1.0f;
+			int frame_time = 0;
+			aim_solution solution{};
 			bool valid = false;
 		};
 
-		reticle_state last_reticle_state = reticle_state::inactive;
-		aim_trace_cache cached_aim_trace{};
+		std::array<reticle_state, 2> last_reticle_states{};
+		std::array<camera_aim_cache, 2> camera_aim{};
+		bool use_camera_crosshair_position = false;
 		utils::hook::detour cg_calc_crosshair_position_hook;
 
-		bool vectors_equal(const game::vec3_t& lhs, const game::vec3_t& rhs)
+		void copy_vector(const float* source, game::vec3_t& destination)
 		{
-			return lhs[0] == rhs[0] && lhs[1] == rhs[1] && lhs[2] == rhs[2];
+			std::copy_n(source, 3, destination);
 		}
 
-		void copy_vector(const game::vec3_t& source, game::vec3_t& destination)
+		bool finite_vector(const game::vec3_t& vector)
 		{
-			destination[0] = source[0];
-			destination[1] = source[1];
-			destination[2] = source[2];
+			return std::all_of(std::begin(vector), std::end(vector),
+				[](const float value) { return std::isfinite(value); });
 		}
 
-		bool calculate_aim_world_point(const int local_client_num, const game::cg_s* cgame_glob,
-			aim_solution& solution)
+		bool third_person_enabled(const int local_client_num)
 		{
-			game::vec3_t origin{};
-			game::CG_GetPlayerViewOrigin(local_client_num, &cgame_glob->predictedPlayerState, &origin);
+			return local_client_num >= 0 && local_client_num < static_cast<int>(camera_aim.size()) &&
+				dvars::cg_thirdPerson && dvars::cg_thirdPerson->current.enabled &&
+				!game::Com_FrontEnd_IsInFrontEnd() &&
+				game::clientUIActives[local_client_num].cgameInitialized;
+		}
 
-			const auto& view_angles = cgame_glob->predictedPlayerState.viewangles;
-			const auto command_time = cgame_glob->predictedPlayerState.commandTime;
-			if (cached_aim_trace.valid && cached_aim_trace.cgame_glob == cgame_glob &&
-				cached_aim_trace.command_time == command_time &&
-				vectors_equal(cached_aim_trace.view_angles, view_angles) &&
-				vectors_equal(cached_aim_trace.origin, origin))
+		void third_person_view_trace_stub(const int local_client_num, const int entity_num,
+			const float* eye_origin, const float* camera_offset, const float* view_angles,
+			const bool world_space_up, const bool alternate_physics_phase,
+			float* camera_origin, float* gun_angles)
+		{
+			game::vec3_t offset{};
+			copy_vector(camera_offset, offset);
+			const auto enabled = third_person_enabled(local_client_num);
+			const auto* cgame_glob = enabled ? game::CG_GetLocalClientGlobals(local_client_num) : nullptr;
+			if (cgame_glob)
 			{
-				copy_vector(cached_aim_trace.origin, solution.origin);
-				copy_vector(cached_aim_trace.direction, solution.direction);
-				copy_vector(cached_aim_trace.hit_position, solution.hit_position);
-				solution.trace_fraction = cached_aim_trace.trace_fraction;
-				return true;
+				// Stock blends hip (-120,0,14) into ADS (-60,-20,4). Supply the
+				// missing hip shoulder offset before its collision/convergence traces.
+				// Keep the stock shoulder switch, ADS position, height and range.
+				const auto fraction = std::clamp(cgame_glob->predictedPlayerState.fWeaponPosFrac, 0.0f, 1.0f);
+				offset[1] -= shoulder_offset * cgame_glob->thirdPersonCameraSide * (1.0f - fraction);
 			}
 
-			game::vec3_t angles{view_angles[0], view_angles[1], view_angles[2]};
-			game::vec3_t direction{};
-			game::AngleVectors(angles, direction, nullptr, nullptr);
+			utils::hook::invoke<void>(0x1408B9D60, local_client_num, entity_num, eye_origin, offset,
+				view_angles, world_space_up, alternate_physics_phase, camera_origin, gun_angles);
 
-			game::vec3_t end
-			{
-				origin[0] + direction[0] * aim_trace_distance,
-				origin[1] + direction[1] * aim_trace_distance,
-				origin[2] + direction[2] * aim_trace_distance,
-			};
+			if (!cgame_glob)
+				return;
 
-			// IW7's client weapon-style traces use the detail-client physics world,
-			// point bounds, and the same MASK_SHOT value used by GSC bullettrace.
-			legacy_trace_result trace{};
-			game::Bounds bounds{};
-			game::PhysicsQuery_LegacyTrace(local_client_num * 3 + 2, &trace, origin, end, &bounds,
-				local_client_num, 0, bullet_trace_mask, 1, nullptr, 0);
-
-			if (!std::isfinite(trace.fraction))
-			{
-				return false;
-			}
-
-			trace.fraction = std::clamp(trace.fraction, 0.0f, 1.0f);
-			game::vec3_t hit_position
-			{
-				origin[0] + (end[0] - origin[0]) * trace.fraction,
-				origin[1] + (end[1] - origin[1]) * trace.fraction,
-				origin[2] + (end[2] - origin[2]) * trace.fraction,
-			};
-
-			cached_aim_trace.cgame_glob = cgame_glob;
-			cached_aim_trace.command_time = command_time;
-			copy_vector(view_angles, cached_aim_trace.view_angles);
-			copy_vector(origin, cached_aim_trace.origin);
-			copy_vector(direction, cached_aim_trace.direction);
-			copy_vector(hit_position, cached_aim_trace.hit_position);
-			cached_aim_trace.trace_fraction = trace.fraction;
-			cached_aim_trace.valid = true;
-
-			copy_vector(origin, solution.origin);
-			copy_vector(direction, solution.direction);
-			copy_vector(hit_position, solution.hit_position);
-			solution.trace_fraction = trace.fraction;
-			return true;
+			auto& cached = camera_aim[local_client_num];
+			cached.cgame_glob = cgame_glob;
+			cached.frame_time = cgame_glob->time;
+			copy_vector(camera_origin, cached.solution.origin);
+			copy_vector(offset, cached.solution.camera_offset);
+			game::AngleVectors(view_angles, cached.solution.direction, nullptr, nullptr);
+			cached.valid = finite_vector(cached.solution.origin) && finite_vector(cached.solution.direction);
 		}
 
 		bool calculate_projected_aim(const int local_client_num, const game::cg_s* cgame_glob,
 			const game::ScreenPlacement* placement, aim_solution& solution)
 		{
-			if (!calculate_aim_world_point(local_client_num, cgame_glob, solution))
-			{
+			if (!third_person_enabled(local_client_num) || !cgame_glob)
 				return false;
-			}
+			const auto& cached = camera_aim[local_client_num];
+			if (!cached.valid || cached.cgame_glob != cgame_glob || cached.frame_time != cgame_glob->time)
+				return false;
 
-			return game::CG_WorldPosToScreenPosReal(local_client_num, placement,
-				solution.hit_position, solution.screen_position);
+			solution = cached.solution;
+			solution.gun_angles[0] = cgame_glob->thirdPersonGunPitch;
+			solution.gun_angles[1] = cgame_glob->thirdPersonGunYaw;
+			// CG's shoulder-camera trace already converges the bullet direction
+			// (thirdPersonGunPitch/Yaw) on this camera ray. Project the ray itself:
+			// tracing again from uncorrected player angles adds parallax and makes
+			// the reticle jump between foreground and background surfaces.
+			game::vec3_t point{};
+			for (auto axis = 0; axis < 3; ++axis)
+				point[axis] = solution.origin[axis] + solution.direction[axis] * aim_projection_distance;
+			return game::CG_WorldPosToScreenPosReal(local_client_num, placement, point, solution.screen_position);
 		}
 
 		bool projected_aim_to_virtual_offset(const aim_solution& solution,
 			const game::ScreenPlacement* placement, float& virtual_x, float& virtual_y)
 		{
 			if (placement->scaleVirtualToReal[0] == 0.0f || placement->scaleVirtualToReal[1] == 0.0f)
-			{
 				return false;
-			}
 
 			const auto center_x = placement->realViewportPosition[0] + placement->realViewportSize[0] * 0.5f;
 			const auto center_y = placement->realViewportPosition[1] + placement->realViewportSize[1] * 0.5f;
@@ -167,25 +138,42 @@ namespace thirdperson
 
 		void cg_calc_crosshair_position_stub(const game::cg_s* cgame_glob, float* x, float* y)
 		{
+			use_camera_crosshair_position = false;
 			cg_calc_crosshair_position_hook.invoke<void>(cgame_glob, x, y);
-
-			if (!dvars::cg_thirdPerson || !dvars::cg_thirdPerson->current.enabled ||
-				game::Com_FrontEnd_IsInFrontEnd() || !game::clientUIActives[0].cgameInitialized ||
-				cgame_glob != game::CG_GetLocalClientGlobals(0))
-			{
+			if (!cgame_glob || !third_person_enabled(cgame_glob->localClientNum))
 				return;
-			}
 
-			const auto* const placement = game::ScrPlace_GetViewPlacement();
+			const auto* placement = game::ScrPlace_GetViewPlacement();
 			aim_solution solution{};
 			float virtual_x = 0.0f;
 			float virtual_y = 0.0f;
-			if (placement && calculate_projected_aim(0, cgame_glob, placement, solution) &&
+			if (placement && calculate_projected_aim(cgame_glob->localClientNum, cgame_glob, placement, solution) &&
 				projected_aim_to_virtual_offset(solution, placement, virtual_x, virtual_y))
 			{
 				*x = virtual_x;
 				*y = virtual_y;
+				use_camera_crosshair_position = true;
 			}
+		}
+
+		void* preserve_hip_crosshair_position_stub()
+		{
+			return utils::hook::assemble([](utils::hook::assembler& a)
+			{
+				const auto preserve_position = a.newLabel();
+				a.mov(rax, reinterpret_cast<int64_t>(&use_camera_crosshair_position));
+				a.cmp(byte_ptr(rax), 0);
+				a.jne(preserve_position);
+
+				// Replay the stock dynamic-crosshair check for every other view.
+				a.mov(rax, qword_ptr(0x141FA76F0));
+				a.cmp(byte_ptr(rax, 0x10), 0);
+				a.jne(preserve_position);
+				a.jmp(0x140790938);
+
+				a.bind(preserve_position);
+				a.jmp(0x14079095B);
+			});
 		}
 
 		void sync_stock_third_person(const bool enabled, const char* reason, const bool log_unchanged = false)
@@ -273,20 +261,20 @@ namespace thirdperson
 				color, material, 0);
 		}
 
-		void log_reticle_state(const reticle_state state, const float weapon_position_fraction = 0.0f,
+		void log_reticle_state(const int local_client_num, const reticle_state state, const float weapon_position_fraction = 0.0f,
 			const aim_solution* solution = nullptr, const float virtual_x = 0.0f,
 			const float virtual_y = 0.0f)
 		{
-			if (state == last_reticle_state)
+			if (state == last_reticle_states[local_client_num])
 			{
 				return;
 			}
 
-			last_reticle_state = state;
+			last_reticle_states[local_client_num] = state;
 			if (state == reticle_state::ui_suppressed)
 			{
-				console::info("[IWZ][Camera] third-person ADS reticle suppressed keyCatchers=0x%X\n",
-					*game::keyCatchers);
+				console::info("[IWZ][Camera] third-person ADS reticle suppressed client=%d keyCatchers=0x%X\n",
+					local_client_num, *game::keyCatchers);
 				return;
 			}
 
@@ -294,7 +282,7 @@ namespace thirdperson
 			switch (state)
 			{
 			case reticle_state::hip:
-				state_name = "hip-stock-only";
+				state_name = "hip-shoulder";
 				break;
 			case reticle_state::transition:
 				state_name = "ADS-transition";
@@ -308,15 +296,15 @@ namespace thirdperson
 
 			if (state != reticle_state::inactive && solution)
 			{
-				console::info("[IWZ][Camera] third-person reticle state=%s weaponPosFrac=%.3f "
-					"aimOrigin=(%.1f,%.1f,%.1f) aimDirection=(%.3f,%.3f,%.3f) "
-					"traceFraction=%.4f hit=(%.1f,%.1f,%.1f) screen=(%.1f,%.1f) "
+				console::info("[IWZ][Camera] third-person reticle client=%d state=%s weaponPosFrac=%.3f "
+					"anchor=camera-ray cameraOrigin=(%.1f,%.1f,%.1f) aimDirection=(%.3f,%.3f,%.3f) "
+					"cameraOffset=(%.1f,%.1f,%.1f) gunAngles=(%.3f,%.3f) screen=(%.1f,%.1f) "
 					"virtualOffset=(%.2f,%.2f)\n",
-					state_name, weapon_position_fraction,
+					local_client_num, state_name, weapon_position_fraction,
 					solution->origin[0], solution->origin[1], solution->origin[2],
 					solution->direction[0], solution->direction[1], solution->direction[2],
-					solution->trace_fraction,
-					solution->hit_position[0], solution->hit_position[1], solution->hit_position[2],
+					solution->camera_offset[0], solution->camera_offset[1], solution->camera_offset[2],
+					solution->gun_angles[0], solution->gun_angles[1],
 					solution->screen_position[0], solution->screen_position[1], virtual_x, virtual_y);
 			}
 		}
@@ -324,16 +312,17 @@ namespace thirdperson
 
 	void draw_reticle(const int local_client_num)
 	{
-		if (!dvars::cg_thirdPerson || !dvars::cg_thirdPerson->current.enabled ||
-			game::Com_FrontEnd_IsInFrontEnd() || !game::clientUIActives[0].cgameInitialized)
+		if (local_client_num < 0 || local_client_num >= static_cast<int>(last_reticle_states.size()))
+			return;
+		if (!third_person_enabled(local_client_num))
 		{
-			last_reticle_state = reticle_state::inactive;
+			last_reticle_states[local_client_num] = reticle_state::inactive;
 			return;
 		}
 
 		if (*game::keyCatchers != 0)
 		{
-			log_reticle_state(reticle_state::ui_suppressed);
+			log_reticle_state(local_client_num, reticle_state::ui_suppressed);
 			return;
 		}
 
@@ -343,7 +332,7 @@ namespace thirdperson
 		const auto* const cgame_glob = game::CG_GetLocalClientGlobals(local_client_num);
 		if (!draw_crosshair || !draw_crosshair->current.enabled || !material || !placement || !cgame_glob)
 		{
-			last_reticle_state = reticle_state::inactive;
+			last_reticle_states[local_client_num] = reticle_state::inactive;
 			return;
 		}
 
@@ -353,13 +342,14 @@ namespace thirdperson
 		aim_solution solution{};
 		if (!calculate_projected_aim(local_client_num, cgame_glob, placement, solution))
 		{
-			last_reticle_state = reticle_state::inactive;
+			last_reticle_states[local_client_num] = reticle_state::inactive;
 			return;
 		}
 
 		float virtual_x = 0.0f;
 		float virtual_y = 0.0f;
-		projected_aim_to_virtual_offset(solution, placement, virtual_x, virtual_y);
+		if (!projected_aim_to_virtual_offset(solution, placement, virtual_x, virtual_y))
+			return;
 		const auto center_x = solution.screen_position[0];
 		const auto center_y = solution.screen_position[1];
 		const auto weapon_position_fraction = std::clamp(cgame_glob->predictedPlayerState.fWeaponPosFrac,
@@ -369,7 +359,7 @@ namespace thirdperson
 			: weapon_position_fraction >= 0.999f
 				? reticle_state::ads
 				: reticle_state::transition;
-		log_reticle_state(state, weapon_position_fraction, &solution, virtual_x, virtual_y);
+		log_reticle_state(local_client_num, state, weapon_position_fraction, &solution, virtual_x, virtual_y);
 
 		// Stock CG_DrawCrosshair owns hip-fire and fades its spread reticle as ADS progresses.
 		// Fade this compact reticle in with the engine's weapon-position fraction.
@@ -432,10 +422,9 @@ namespace thirdperson
 				console::info("[IWZ][Camera] registered cg_thirdPerson enabled=%d saved=1 angle=%.1f range=%.1f\n",
 					dvars::cg_thirdPerson->current.enabled, dvars::cg_thirdPersonAngle->current.value,
 					dvars::cg_thirdPersonRange->current.value);
-				console::info("[IWZ][Camera] configured third-person reticle convergence hip=stock ADS=custom "
-					"anchor=projected-player-aim traceWorld=detail-client traceMask=0x%X "
-					"traceDistance=%.0f uiGate=keyCatchers respectCgDrawCrosshair=1\n",
-					bullet_trace_mask, aim_trace_distance);
+				console::info("[IWZ][Camera] configured third-person reticle hip=stock ADS=custom "
+					"anchor=stock-camera-ray shoulderOffset=%.0f convergence=stock extraTraces=0 "
+					"hipPositionReset=bypassed uiGate=keyCatchers respectCgDrawCrosshair=1\n", shoulder_offset);
 				sync_stock_third_person(dvars::cg_thirdPerson->current.enabled, "initialization", true);
 			}, scheduler::main);
 
@@ -458,8 +447,14 @@ namespace thirdperson
 
 			utils::hook::jump(0x14027205D, cg_offset_chase_cam_view_stub(), true);
 			utils::hook::jump(0x14027458A, cg_offset_third_person_view_stub(), true);
+			utils::hook::call(0x14027B1EA, third_person_view_trace_stub);
 			cg_calc_crosshair_position_hook.create(game::CG_CalcCrosshairPosition,
 				cg_calc_crosshair_position_stub);
+			// CG_DrawCrosshair normally discards the calculated hip position when
+			// its dynamic-crosshair setting is off. Preserve our camera anchor
+			// without changing that setting or replacing the weapon's spread UI.
+			utils::hook::nop(0x14079092B, 13);
+			utils::hook::jump(0x14079092B, preserve_hip_crosshair_position_stub());
 		}
 	};
 }

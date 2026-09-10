@@ -14,7 +14,15 @@ main()
     end_detonate_bomb = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "end_detonate_bomb");
     delay_enable_interaction = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "delay_enable_interaction");
 
-    if (!isdefined(can_use_interaction) || !isdefined(set_chemical) ||
+    if (isdefined(can_use_interaction))
+    {
+        replacefunc(can_use_interaction, ::can_use_interaction_with_airborne_fuses);
+        attack_fix_log("installed airborne Alien Fuse interaction exception target=pap_fusebox");
+    }
+    else
+        attack_fix_log("Alien Fuse hook unavailable: can_use_interaction lookup failed");
+
+    if (!isdefined(set_chemical) ||
         !isdefined(nuke_fx) || !isdefined(ray_gun_terminal) ||
         !isdefined(exit_ray_gun_terminal) ||
         !isdefined(enter_detonate_bomb_sequence) ||
@@ -31,7 +39,6 @@ main()
     level.iwz_attack_enter_bomb_code_internal = enter_bomb_code_internal;
     level.iwz_attack_end_detonate_bomb = end_detonate_bomb;
     level.iwz_attack_delay_enable_interaction = delay_enable_interaction;
-    replacefunc(can_use_interaction, ::can_use_interaction_stub);
     replacefunc(nuke_fx, ::nuke_fx_stub);
     replacefunc(ray_gun_terminal, ::ray_gun_terminal_with_targeting_protection);
     replacefunc(exit_ray_gun_terminal, ::exit_ray_gun_terminal_with_targeting_restore);
@@ -43,6 +50,7 @@ post_load()
     if (getdvar("ui_mapname") != "cp_town")
         return;
 
+    install_alien_fuse_interaction_focus();
     level thread configure_attack_interaction_geometry();
     level thread listen_for_petn_command();
     level thread listen_for_attack_computer_test_command();
@@ -114,7 +122,7 @@ disable_attack_terminal_targeting_protection(reason)
         self scripts\cp\utility::isignoremeenabled());
 }
 
-can_use_interaction_stub(interaction)
+can_use_interaction_with_airborne_fuses(interaction)
 {
     if (!isdefined(interaction))
         return 0;
@@ -131,7 +139,8 @@ can_use_interaction_stub(interaction)
 
     // Preserve the stock grounded requirement everywhere except the elevated
     // Alien Fuses, where jumping is the natural way to reach the authored prop.
-    if (!self isonground() && interaction.script_noteworthy != "pap_fusebox")
+    airborne = !self isonground();
+    if (airborne && interaction.script_noteworthy != "pap_fusebox")
         return 0;
 
     if (interaction.script_noteworthy == "game_race" &&
@@ -142,7 +151,43 @@ can_use_interaction_stub(interaction)
         scripts\engine\utility::is_true(self.rave_mode))
         return 0;
 
+    if (airborne && !isdefined(self.iwz_attack_airborne_fuse_logged))
+    {
+        self.iwz_attack_airborne_fuse_logged = 1;
+        attack_fix_log("airborne Alien Fuse interaction allowed player=" +
+            (self getentitynumber()) + " origin=" + self.origin +
+            " interactionOrigin=" + interaction.origin);
+    }
     return 1;
+}
+
+install_alien_fuse_interaction_focus()
+{
+    if (!isdefined(level.interaction_trigger_properties_func))
+    {
+        attack_fix_log("Alien Fuse focus hook unavailable: map interaction properties missing");
+        return;
+    }
+
+    level.iwz_attack_stock_interaction_trigger_properties = level.interaction_trigger_properties_func;
+    level.interaction_trigger_properties_func = ::interaction_trigger_properties_with_accessible_fuses;
+    attack_fix_log("installed Alien Fuse focus callback source=level.interaction_trigger_properties_func " +
+        "selector=stock searchRange=stock triggerHeight=stock requireLookAt=0 useFov=360");
+}
+
+interaction_trigger_properties_with_accessible_fuses(trigger, interaction, offset)
+{
+    [[level.iwz_attack_stock_interaction_trigger_properties]](trigger, interaction, offset);
+    if (!isdefined(interaction) || !isdefined(interaction.script_noteworthy) ||
+        interaction.script_noteworthy != "pap_fusebox")
+        return;
+
+    // Match Beast's fuse trigger: the stock selector stays near the player's
+    // feet, and set_interaction_point places the use trigger at eye height.
+    // Aiming up at the wall box must not lose that trigger. Configure it here,
+    // before it becomes usable, instead of moving it from a background loop.
+    trigger usetriggerrequirelookat(0);
+    trigger setusefov(360);
 }
 
 configure_attack_interaction_geometry()
@@ -156,59 +201,9 @@ configure_attack_interaction_geometry()
     // our model-aligned corrections after the same pass has settled.
     wait(10.25);
 
-    configure_alien_fuse_interactions();
     configure_bomb_part_interactions();
-    level thread monitor_alien_fuse_trigger_focus();
     level thread monitor_car_mirror_interaction();
     level thread monitor_elvira_mirror_interaction();
-}
-
-configure_alien_fuse_interactions()
-{
-    fuse_interactions = scripts\engine\utility::getstructarray("pap_fusebox", "script_noteworthy");
-    fuse_models = getentarray("pap_fuses", "targetname");
-
-    if (fuse_interactions.size == 0 || fuse_models.size == 0)
-    {
-        attack_fix_log("Alien Fuse geometry unavailable interactions=" + fuse_interactions.size +
-            " models=" + fuse_models.size);
-        return;
-    }
-
-    adjusted = 0;
-    foreach (interaction in fuse_interactions)
-    {
-        closest_fuses = scripts\engine\utility::get_array_of_closest(interaction.origin, fuse_models, undefined, 2);
-        if (closest_fuses.size == 0)
-            continue;
-
-        old_origin = interaction.origin;
-        fuse_origin = closest_fuses[0].origin;
-        if (closest_fuses.size > 1)
-            fuse_origin = (closest_fuses[0].origin + closest_fuses[1].origin) * 0.5;
-
-        // The stock floor-normalization pass moves this selector roughly 100
-        // units below the visible fuses. Align it with the models, then move it
-        // horizontally through the cabinet opening so both the proximity search
-        // and the look-at trigger resolve against the prop the player can see.
-        outward = (old_origin[0] - fuse_origin[0], old_origin[1] - fuse_origin[1], 0);
-        if (distancesquared((0, 0, 0), outward) > 0.01)
-            outward = vectornormalize(outward) * 24;
-        else
-            outward = (0, 24, 0);
-
-        interaction.origin = (fuse_origin[0] + outward[0],
-            fuse_origin[1] + outward[1], fuse_origin[2]);
-        interaction.custom_search_dist = 192;
-        adjusted++;
-
-        attack_fix_log("relocated Alien Fuse interaction old=" + old_origin +
-            " modelCenter=" + fuse_origin + " new=" + interaction.origin +
-            " searchDist=" + interaction.custom_search_dist);
-    }
-
-    attack_fix_log("Alien Fuse geometry configured interactions=" + adjusted +
-        " models=" + fuse_models.size);
 }
 
 configure_bomb_part_interactions()
@@ -294,46 +289,6 @@ take_bomb_part_stub(interaction, player)
 
     attack_fix_log("collected bomb part target=" + interaction.target +
         " model=" + part_model + " player=" + player getentitynumber());
-}
-
-monitor_alien_fuse_trigger_focus()
-{
-    level endon("game_ended");
-
-    for (;;)
-    {
-        foreach (player in level.players)
-        {
-            if (!isdefined(player) || !isdefined(player.interaction_trigger) ||
-                !isdefined(player.last_interaction_point))
-                continue;
-
-            interaction = player.last_interaction_point;
-            if (!isdefined(interaction.script_noteworthy) ||
-                interaction.script_noteworthy != "pap_fusebox")
-                continue;
-
-            // set_interaction_point substitutes the player's eye Z for the
-            // selector's Z. That points the close-range look cone below the
-            // elevated prop. Keep this one trigger focused on the corrected,
-            // cabinet-front selector while the player jumps into use range.
-            trigger_origin = interaction.origin;
-            if (distancesquared(player.interaction_trigger.origin, trigger_origin) > 0.01)
-            {
-                player.interaction_trigger dontinterpolate();
-                player.interaction_trigger.origin = trigger_origin;
-            }
-
-            if (!scripts\engine\utility::is_true(player.iwz_tracking_fuse_trigger))
-            {
-                player.iwz_tracking_fuse_trigger = 1;
-                attack_fix_log("focused Alien Fuse trigger on visible prop player=" +
-                    player getentitynumber() + " trigger=" + trigger_origin);
-            }
-        }
-
-        wait(0.05);
-    }
 }
 
 monitor_car_mirror_interaction()

@@ -341,7 +341,7 @@ namespace game
 	WEAK symbol<void* (jmp_buf* Buf, int Value)> longjmp{ 0x1412C0758 };
 	WEAK symbol<int(jmp_buf* Buf)> _setjmp{ 0x141423110 };
 
-	WEAK symbol<void(float* angles, float* forward, float* right, float* up)> AngleVectors{ 0x140CE6080 };
+	WEAK symbol<void(const float* angles, float* forward, float* right, float* up)> AngleVectors{ 0x140CE6080 };
 	
 	WEAK symbol<char*(char* dest, const char* src, int dest_size)> I_strncpyz{0x1412C3560};
 	
