@@ -6,11 +6,11 @@ main()
     precacheitem("iw7_udm45_zm");
     precacheitem("iw7_cutie_zm+cutiecrank+cutiegrip+cutieplunger");
     precachemodel("tag_origin_portal");
-    precachemodel("town_magic_wheel");
+    precachemodel("iwz_playerclip_town_magic_wheel");
     precachemodel("town_magic_wheel_on");
     precachemodel("zmb_magic_wheel_spinner");
-    precachemodel("cp_rave_woodboard_01");
-    precachemodel("cp_disco_street_barricade");
+    precachemodel("iwz_solid_cp_rave_woodboard_01");
+    precachemodel("iwz_solid_cp_disco_street_barricade");
     custom_scripts\cp\survival_perks::precache_perk_wall("p7_cafe_wall_menu_01");
     replacefunc(scripts\cp\zombies\zombies_spawning::_id_7CE3,
         ::get_survival_volume_spawners);
@@ -364,14 +364,14 @@ setup_beach_boss_barriers()
     {
         barrier = spawn("script_model", point.origin);
         barrier.angles = point.angles;
-        barrier setmodel("cp_disco_street_barricade");
+        barrier setmodel("iwz_solid_cp_disco_street_barricade");
         barrier setnonstick(1);
         barrier solid();
         previous_contents = barrier setcontents(8321);
         level.iwz_beach_boss_barriers[level.iwz_beach_boss_barriers.size] = barrier;
         survival_log("boss barrier ready origin=" + barrier.origin + " angles=" + barrier.angles +
             " model=" + barrier.model + " contents=" + previous_contents +
-            "->8321 collision=entity-and-physics-worlds purchasable=0");
+            "->8321 collision=server-and-client-model-profile purchasable=0");
     }
     survival_log("boss barrier pair enabled requested=" + requested +
         " count=2 source=death_wall_door_model bossFight=inactive");
@@ -545,12 +545,13 @@ configure_beach_wheel()
     // Authored scriptable controllers report an empty .model. Like Rave,
     // explicitly create a new cabinet using the map's actual XModel asset.
     // cp_town.csv entries 26081/26083 identify these two cabinet models.
-    visual setmodel("town_magic_wheel");
+    visual setmodel("iwz_playerclip_town_magic_wheel");
     visual setnonstick(1);
     visual solid();
     // Keep the stock model mask and add PLAYERCLIP, not SOLID: the separate
     // visible cabinet must block players without occluding Use traces to
-    // the hidden wheel controller. Both physics worlds receive this mask.
+    // the hidden wheel controller. The model profile also supplies the mask
+    // to client prediction; setcontents keeps the server entity in agreement.
     wheel_contents = 8320 | physics_createcontents(["physicscontents_playerclip"]);
     previous_contents = visual setcontents(wheel_contents);
     spinner = spawn("script_model", transform_wheel_point(wheel._id_10A03.origin,
@@ -593,7 +594,7 @@ configure_beach_wheel()
     survival_log("new wheel assembly ready controllerSource=" + source_origin + " target=" + target +
         " angles=" + target_angles + " model=" + visual.model +
         " spinnerOrigin=" + spinner.origin + " contents=" + previous_contents +
-        "->" + wheel_contents + " collision=playerclip useTrace=unobstructed " +
+        "->" + wheel_contents + " collision=predicted-playerclip useTrace=unobstructed " +
         "cost=950 fireSale=10 relocation=disabled");
 }
 
@@ -668,7 +669,7 @@ setup_freestanding_perks()
         stake = spawn("script_model", ground - normal * 3 + right * (side * 8) +
             (0,0,46 + 27.869 - 1 - 90.9765));
         stake.angles = (90,yaw,0);
-        stake setmodel("cp_rave_woodboard_01");
+        stake setmodel("iwz_solid_cp_rave_woodboard_01");
         stake setnonstick(1);
         stake solid();
         stake setcontents(8321);

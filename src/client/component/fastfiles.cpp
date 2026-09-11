@@ -2,6 +2,7 @@
 #include "loader/component_loader.hpp"
 #include "fastfiles.hpp"
 #include "pap_timer.hpp"
+#include "model_collision.hpp"
 
 #include "game/game.hpp"
 
@@ -137,7 +138,10 @@ namespace fastfiles
 
 		game::XAssetHeader db_find_xasset_header_stub(game::XAssetType type, const char* name, const int allow_create_default)
 		{
-			auto result = db_find_xasset_header_hook.invoke<game::XAssetHeader>(type, name, allow_create_default);
+			const auto* source = type == game::ASSET_TYPE_XMODEL ? model_collision::source_name(name) : name;
+			auto result = db_find_xasset_header_hook.invoke<game::XAssetHeader>(type, source, allow_create_default);
+			if (source != name)
+				result.model = model_collision::resolve(name, result.model);
 			if (!result.data && type != game::ASSET_TYPE_LOCALIZE_ENTRY)
 			{
 				console::error("Error: Could not find %s \"%s\"\n",
@@ -191,6 +195,8 @@ namespace fastfiles
 			}
 
 			auto result = db_add_xasset_hook.invoke<game::XAssetHeader>(type, header_ptr);
+			if (type == game::ASSET_TYPE_XMODEL)
+				model_collision::on_model_loaded(result.model);
 
 			if (type == game::ASSET_TYPE_MATERIAL && result.material)
 			{

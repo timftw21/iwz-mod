@@ -16,7 +16,7 @@ double keys; enabling both keeps the bonus at 2x.
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 0.9 brings weapon prestige to Zombies, including a sixth attachment slot, and improves loadout and bounty menus. It also speeds up title-screen startup, corrects third-person aiming, allows airborne alien-fuse pickups on Attack of the Radioactive Thing and The Beast from Beyond, and adds feedback when lethal equipment is empty. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 0.95 adds spinning battery drops on Attack of the Radioactive Thing, keeps challenge popups in sync with the adjusted requirements, and prevents Cargo Chaos's Venom-Z from being downgraded by Pack-a-Punch. It also fixes Spaceland clown animations, Beach Bloodbath prop collision, and Attack's nuke effects. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -60,6 +60,7 @@ General
  - The match summary now displays cards for weapon levels and unlocked calling cards
  - Calling cards now display within in-game challenge notifications to indicate that you've completed the highest tier for a challenge
  - Certain calling card challenge requirements have been eased (some of them were clearly meant to pad the game's lifecycle)
+ - In-game challenge popups use the active requirements for the completed tier
  - XP rewards for completed challenges are now more generous
  - Custom lobby music is now supported; drag supported files into iw7-mod\custom_music to bring them in-game
  - Red-screen visual is less intrusive
@@ -69,6 +70,7 @@ Zombies in Spaceland
  - The SETICOM now takes 15 hits instead of 10 hits
  - Alien fuses now persist after first installation
  - Zombies now ignore the player while playing arcade games
+ - Clowns no longer repeatedly restart their sprint animation while moving
 
 Rave in the Redwoods
  - Boat speed to PaP island is now much faster (you're welcome)
@@ -86,6 +88,9 @@ Attack of the Radioactive Thing
  - Certain objects are now easier to interact with
  - Alien fuses can be picked up while jumping
  - Beach Bloodbath's opening screen shows the map's clock above the survival objective
+ - Battery drop models rotate while waiting to be collected
+ - Nuke effects follow the player's view and reliably show their flash
+ - Beach Bloodbath's wheel, perk-board supports, and barriers use consistent player collision
  - Other miscellaneous tweaks and fixes
 
 The Beast from Beyond
@@ -93,6 +98,7 @@ The Beast from Beyond
  - The OSA assault rifle now has more starting ammo
  - Certain objects are now easier to interact with
  - Alien fuses can be picked up while jumping
+ - Cargo Chaos's Magic Wheel correctly records Venom-Z as fully upgraded, preventing PaP downgrades
  - Other miscellaneous tweaks and fixes
 
 # IW7-Mod

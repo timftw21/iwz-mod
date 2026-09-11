@@ -8,7 +8,9 @@ main()
     // weapon ranks together, so record AAR weapon levels without polling.
     replacefunc(scripts\cp\cp_weaponrank::give_player_weapon_xp,
         ::give_player_weapon_xp_with_match_summary);
-    challenge_log("installed tier award and weapon-level AAR hooks popup=stock_zom_xp");
+    replacefunc(scripts\cp\cp_hud_message::showchallengesplash,
+        ::show_challenge_splash_with_active_requirement);
+    challenge_log("installed tier award and weapon-level AAR hooks popup=stock_zom_xp challengeDescription=active_requirement");
 }
 
 post_load()
@@ -22,6 +24,32 @@ post_load()
 challenge_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("Challenges", message);
+}
+
+show_challenge_splash_with_active_requirement(merit_ref, tier_index)
+{
+    if (!isdefined(tier_index))
+        tier_index = scripts\cp\cp_hud_util::mt_getstate(merit_ref) - 1;
+
+    // Stock showchallengesplash reads mt_gettarget, which looks up the original
+    // CSV. Use the same live target as cp_merits::process instead, before the
+    // popup is queued, so later tier completions cannot change its description.
+    merit = level.meritinfo[merit_ref];
+    display_value = merit["displayParam"];
+    if (!isdefined(display_value))
+    {
+        display_value = int(merit["targetval"][tier_index]);
+        if (display_value == 0)
+            display_value = 1;
+
+        if (isdefined(merit["paramScale"]))
+            display_value = int(display_value / merit["paramScale"]);
+    }
+
+    challenge_log("challenge popup requirement merit=" + merit_ref +
+        " tier=" + (tier_index + 1) + " target=" +
+        merit["targetval"][tier_index] + " display=" + display_value);
+    thread scripts\cp\cp_hud_message::showsplash(merit_ref, display_value);
 }
 
 reset_match_calling_card_rewards_on_connect()

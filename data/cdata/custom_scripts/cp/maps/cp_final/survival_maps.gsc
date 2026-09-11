@@ -119,6 +119,7 @@ cp_final_onplayerspawned()
     self scripts\cp\maps\cp_final\cp_final::cp_final_onplayerspawned();
     if (getdvarint("scr_gameended", 0))
         return;
+    self thread track_cargo_venom_upgrade_level();
     if (distance(self.origin, (1615.91,3415.9,16.998)) > 2)
     {
         point = cargo_spawnpoint(self);
@@ -129,6 +130,57 @@ cp_final_onplayerspawned()
     self.currentlocation = "facility";
     survival_log("player spawned player=" + (self getentitynumber()) +
         " origin=" + self.origin + " angles=" + self.angles + " scene=" + level.wave_num);
+}
+
+track_cargo_venom_upgrade_level()
+{
+    self notify("iwz_cargo_venom_tracker");
+    self endon("iwz_cargo_venom_tracker");
+    self endon("disconnect");
+    self endon("death");
+    level endon("game_ended");
+
+    foreach (weapon in self getweaponslistprimaries())
+        self sync_cargo_venom_upgrade_level(weapon);
+
+    // Magic Wheel::_id_B16A records ordinary rolls as level 1, even when
+    // Cargo selected an already-upgraded Venom. This stock pickup event runs
+    // after that assignment; correct the record before the next interaction.
+    survival_log("Venom pickup tracking installed player=" + self getentitynumber());
+    for (;;)
+    {
+        self waittill("wor_item_pickup", weapon);
+        self sync_cargo_venom_upgrade_level(weapon);
+    }
+}
+
+sync_cargo_venom_upgrade_level(weapon)
+{
+    if (!isdefined(weapon) || !self hasweapon(weapon))
+        return;
+
+    switch (getweaponbasename(weapon))
+    {
+        case "iw7_venomx_zm_pap2":
+            weapon_level = 3;
+            break;
+        case "iw7_venomx_zm_pap1":
+            weapon_level = 2;
+            break;
+        default:
+            return;
+    }
+
+    previous_level = self scripts\cp\cp_weapon::get_weapon_level(weapon);
+    if (previous_level == weapon_level)
+        return;
+
+    if (!isdefined(self.pap["venomx"]))
+        self.pap["venomx"] = spawnstruct();
+    self.pap["venomx"].lvl = weapon_level;
+    self notify("weapon_level_changed");
+    survival_log("Venom pickup upgrade level corrected player=" + self getentitynumber() +
+        " weapon=" + weapon + " level=" + previous_level + "->" + weapon_level);
 }
 
 configure_cargo_spawning()

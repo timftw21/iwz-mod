@@ -7,6 +7,7 @@ main()
     can_use_interaction = getfunction("scripts/cp/cp_interaction", "can_use_interaction");
     set_chemical = getfunction("scripts/cp/maps/cp_town/cp_town_chemistry", "set_chemical_carried_by_player");
     nuke_fx = getfunction("scripts/cp/loot", "nuke_fx");
+    nuke_fx_points = getfunction("scripts/cp/loot", "get_fx_points");
     ray_gun_terminal = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "ray_gun_terminal");
     exit_ray_gun_terminal = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "exit_enter_bomb_code");
     enter_detonate_bomb_sequence = getfunction("scripts/cp/maps/cp_town/cp_town_mpq", "enter_detonate_bomb_sequence");
@@ -23,7 +24,7 @@ main()
         attack_fix_log("Alien Fuse hook unavailable: can_use_interaction lookup failed");
 
     if (!isdefined(set_chemical) ||
-        !isdefined(nuke_fx) || !isdefined(ray_gun_terminal) ||
+        !isdefined(nuke_fx) || !isdefined(nuke_fx_points) || !isdefined(ray_gun_terminal) ||
         !isdefined(exit_ray_gun_terminal) ||
         !isdefined(enter_detonate_bomb_sequence) ||
         !isdefined(enter_bomb_code_internal) ||
@@ -40,9 +41,10 @@ main()
     level.iwz_attack_end_detonate_bomb = end_detonate_bomb;
     level.iwz_attack_delay_enable_interaction = delay_enable_interaction;
     replacefunc(nuke_fx, ::nuke_fx_stub);
+    replacefunc(nuke_fx_points, ::get_attack_nuke_fx_points);
     replacefunc(ray_gun_terminal, ::ray_gun_terminal_with_targeting_protection);
     replacefunc(exit_ray_gun_terminal, ::exit_ray_gun_terminal_with_targeting_restore);
-    attack_fix_log("installed scoped Attack interaction-use, missing-anchor nuke VFX, and ray-gun terminal targeting patches; stock battery state preserved for UI filtering");
+    attack_fix_log("installed scoped Attack interaction-use, view-linked nuke VFX with stock preparation timing, and ray-gun terminal targeting patches; stock battery state preserved for UI filtering");
 }
 
 post_load()
@@ -336,97 +338,124 @@ monitor_car_mirror_interaction()
     attack_fix_log("removed collected car-mirror selector from the active interaction list");
 }
 
-nuke_fx_stub(powerup, authored_anchors)
+get_attack_nuke_fx_points(powerup, key, field, max_points, range)
 {
-    if (!isdefined(authored_anchors))
-        authored_anchors = [];
-
-    local_anchors = [];
-    valid_players = 0;
-    effect_locations = scripts\engine\utility::getstructarray("effect_loc", "targetname");
-
-    // loot::get_fx_points includes the pickup itself, even when the map has
-    // no authored effect_loc structs. Attack has zero; Spaceland has 119 and
-    // Rave has 139. A nearby pickup is not equivalent to that visual coverage.
-    // Keep the stock world blasts, then supply the missing player coverage.
-    foreach (anchor in authored_anchors)
+    // Preserve loot::get_fx_points' world selection. Its only stock caller is
+    // kill_closest_enemies, which then waits one second before nuke_fx. Prepare
+    // the view sources here too, so clients receive their models before FX.
+    anchors = [];
+    points = scripts\engine\utility::getstructarray(key, field);
+    points[points.size] = powerup;
+    foreach (point in points)
     {
-        if (!isdefined(anchor))
+        nearby = scripts\engine\utility::get_array_of_closest(
+            point.origin, level.players, undefined, 1, range, 1);
+        if (!nearby.size)
             continue;
-
-        foreach (player in level.players)
-        {
-            if (!player scripts\cp\utility::is_valid_player() ||
-                scripts\engine\utility::is_true(player.in_afterlife_arcade) ||
-                scripts\engine\utility::is_true(player.is_off_grid))
-                continue;
-
-            playfxontagforclients(level._effect["big_explo"], anchor, "tag_origin", player);
-        }
-
-        scripts\engine\utility::waitframe();
+        if (!isdefined(point.angles))
+            point.angles = (0,0,0);
+        anchor = scripts\engine\utility::spawn_tag_origin(point.origin, point.angles);
+        anchor show();
+        anchors[anchors.size] = anchor;
+        if (isdefined(max_points) && anchors.size >= max_points)
+            break;
     }
-
+    anchors = sortbydistance(anchors, powerup.origin);
+    world_count = anchors.size;
+    effect_locations = scripts\engine\utility::getstructarray("effect_loc", "targetname");
     foreach (player in level.players)
     {
         if (!player scripts\cp\utility::is_valid_player() ||
             scripts\engine\utility::is_true(player.in_afterlife_arcade))
             continue;
-
-        valid_players++;
-        // These locations are missing throughout both normal Attack and Beach.
-        // An off-grid room also cannot see the main map's authored effects.
-        if (effect_locations.size > 0 &&
-            !scripts\engine\utility::is_true(player.is_off_grid))
+        if (effect_locations.size && !scripts\engine\utility::is_true(player.is_off_grid))
             continue;
+        if (!scripts\cp\utility::has_tag(player.model, "tag_eye"))
+        {
+            attack_fix_log("nuke view source unavailable player=" +
+                (player getentitynumber()) + " reason=missing-tag_eye");
+            continue;
+        }
 
-        view_angles = player getplayerangles();
-        forward = anglestoforward(view_angles);
-        eye = player geteye();
-        trace = bullettrace(eye, eye + forward * 64, 0, player);
-        local_origin = trace["position"] - forward * 8;
-        local_angles = (0, view_angles[1], 0);
-        local_anchor = scripts\engine\utility::spawn_tag_origin(local_origin, local_angles);
-        local_anchor show();
-        local_anchor.iwz_nuke_player = player;
-        local_anchors[local_anchors.size] = local_anchor;
-        playfxontagforclients(level._effect["big_explo"], local_anchor, "tag_origin", player);
-        attack_fix_log("nuke player blast player=" + player getentitynumber() +
-            " origin=" + local_origin + " traceFraction=" + trace["fraction"]);
+        // The old point was left 56 units in front of the player at detonation.
+        // Moving/turning left it behind; the mist starts 1-2 seconds later.
+        // Native bone linking follows movement and view
+        // rotation on each client, without a server-side position polling loop.
+        anchor = scripts\engine\utility::spawn_tag_origin(player geteye(), player getplayerangles());
+        anchor linkto(player, "tag_eye", (56,0,0), (0,0,0));
+        anchor show();
+        anchor.iwz_nuke_view_source = 1;
+        anchor.iwz_nuke_player = player;
+        anchors[anchors.size] = anchor;
     }
+    attack_fix_log("nuke sources prepared world=" + world_count +
+        " viewLinked=" + (anchors.size - world_count) +
+        " mapEffectLocations=" + effect_locations.size + " leadIn=stock-1s");
+    return anchors;
+}
 
-    attack_fix_log("nuke VFX dispatched stockAnchors=" + authored_anchors.size +
-        " mapEffectLocations=" + effect_locations.size + " validPlayers=" + valid_players +
-        " playerBlasts=" + local_anchors.size);
-
-    wait(5);
-
-    foreach (anchor in authored_anchors)
+nuke_fx_stub(powerup, anchors)
+{
+    if (!isdefined(anchors))
+        anchors = [];
+    world_count = 0;
+    view_count = 0;
+    foreach (anchor in anchors)
     {
         if (!isdefined(anchor))
             continue;
-
-        foreach (player in level.players)
+        if (isdefined(anchor.iwz_nuke_view_source))
         {
-            if (isdefined(player))
-                stopfxontagforclients(level._effect["big_explo"], anchor, "tag_origin", player);
+            player = anchor.iwz_nuke_player;
+            if (!isdefined(player) || !player scripts\cp\utility::is_valid_player() ||
+                scripts\engine\utility::is_true(player.in_afterlife_arcade))
+                continue;
+            playfxontagforclients(level._effect["big_explo"], anchor, "tag_origin", player);
+            view_count++;
+            attack_fix_log("nuke view blast player=" + (player getentitynumber()) +
+                " anchor=" + (anchor getentitynumber()) + " origin=" + anchor.origin +
+                " eye=" + (player geteye()) + " velocity=" + (player getvelocity()) +
+                " source=linked-tag_eye offset=56");
         }
-
+        else
+        {
+            foreach (player in level.players)
+            {
+                if (!player scripts\cp\utility::is_valid_player() ||
+                    scripts\engine\utility::is_true(player.in_afterlife_arcade) ||
+                    scripts\engine\utility::is_true(player.is_off_grid))
+                    continue;
+                playfxontagforclients(level._effect["big_explo"], anchor, "tag_origin", player);
+            }
+            world_count++;
+            scripts\engine\utility::waitframe();
+        }
+    }
+    attack_fix_log("nuke VFX dispatched world=" + world_count +
+        " viewLinked=" + view_count + " lifetime=5s");
+    wait(5);
+    foreach (anchor in anchors)
+    {
+        if (!isdefined(anchor))
+            continue;
+        if (isdefined(anchor.iwz_nuke_view_source))
+        {
+            if (isdefined(anchor.iwz_nuke_player))
+                stopfxontagforclients(level._effect["big_explo"], anchor,
+                    "tag_origin", anchor.iwz_nuke_player);
+        }
+        else
+        {
+            foreach (player in level.players)
+            {
+                if (isdefined(player))
+                    stopfxontagforclients(level._effect["big_explo"], anchor, "tag_origin", player);
+            }
+        }
         anchor delete();
         scripts\engine\utility::waitframe();
     }
-
-    foreach (local_anchor in local_anchors)
-    {
-        if (!isdefined(local_anchor))
-            continue;
-
-        if (isdefined(local_anchor.iwz_nuke_player))
-            stopfxontagforclients(level._effect["big_explo"], local_anchor,
-                "tag_origin", local_anchor.iwz_nuke_player);
-
-        local_anchor delete();
-    }
+    attack_fix_log("nuke VFX sources cleaned count=" + anchors.size);
 }
 
 monitor_elvira_mirror_interaction()

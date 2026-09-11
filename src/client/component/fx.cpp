@@ -259,6 +259,51 @@ namespace fx
 			return false;
 		}
 
+		void configure_attack_nuke_flash(const bool attack)
+		{
+			constexpr auto name = "vfx/iw7/_requests/coop/vfx_nuke_explosion_01";
+			if (!game::DB_XAssetExists(game::ASSET_TYPE_VFX, name))
+			{
+				if (attack)
+					console::warn("[IWZ][AttackNuke] nuke effect unavailable; flash counts unchanged\n");
+				return;
+			}
+			auto* effect = game::DB_FindXAssetHeader(game::ASSET_TYPE_VFX, name, false).vfx;
+			if (!effect || !effect->name || std::strcmp(effect->name, name) != 0 ||
+				!effect->emitterDefs || effect->numEmitters != 11)
+			{
+				console::warn("[IWZ][AttackNuke] unexpected nuke effect layout; flash counts unchanged\n");
+				return;
+			}
+
+			// The two flare emitters in the shipped effect allow a zero-particle
+			// burst. Attack has no authored effect_loc coverage to provide the
+			// redundant blasts used by Spaceland/Rave. Keep each flare's original
+			// maximum, lifetime and art, but always emit its one flash on Attack.
+			for (auto index = 1; index <= 2; ++index)
+			{
+				const auto& emitter = effect->emitterDefs[index];
+				const auto life = index == 1 ? 1.2f : 0.5f;
+				if (emitter.flags != game::PARTICLE_EMITTER_DEF_FLAG_USE_BURST_MODE ||
+					emitter.particleCountMax != 1 || emitter.particleBurstCount.max != 1 ||
+					(emitter.particleBurstCount.min != 0 && emitter.particleBurstCount.min != 1) ||
+					!nearly_equal(emitter.particleLife.min, life) || !nearly_equal(emitter.particleLife.max, life))
+				{
+					console::warn("[IWZ][AttackNuke] unexpected flash emitter=%d; flash counts unchanged\n", index);
+					return;
+				}
+			}
+			const auto minimum = attack ? 1 : 0;
+			const auto first = effect->emitterDefs[1].particleBurstCount.min;
+			const auto second = effect->emitterDefs[2].particleBurstCount.min;
+			effect->emitterDefs[1].particleBurstCount.min = minimum;
+			effect->emitterDefs[2].particleBurstCount.min = minimum;
+			// Restore stock counts if a shared asset survives a map transition.
+			if (attack || first != minimum || second != minimum)
+				console::info("[IWZ][AttackNuke] attack=%d flashEmitters=1,2 burstMin=%d,%d->%d,%d burstMax=1,1\n",
+					attack, first, second, minimum, minimum);
+		}
+
 		void load_world_stub(const char* name)
 		{
 			// R_LoadWorld acquires the GfxWorld here, after the server's GSC main
@@ -266,6 +311,7 @@ namespace fx
 			// builds its world caches; no waiting or arbitrary delay is needed.
 			utils::hook::invoke<void>(0x140DD1950, name);
 			const auto* world = *game::g_world;
+			configure_attack_nuke_flash(world && world->name && std::strcmp(world->name, "maps/cp/cp_town.d3dbsp") == 0);
 			if (world && world->name && std::strcmp(world->name, "maps/cp/cp_final.d3dbsp") == 0)
 			{
 				console::info("[IWZ][BeastGlare] Beast render world acquired; applying floor correction\n");
