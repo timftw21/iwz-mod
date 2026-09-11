@@ -455,6 +455,15 @@ namespace party
 			}
 
 			preloaded_map = map_is_preloaded;
+			const auto* noir_enabled = game::Dvar_FindVar("iwz_noir_foundation");
+			if (map && !strcmp(map, "mp_prime") && noir_enabled && noir_enabled->current.enabled &&
+				game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_MP)
+			{
+				// Lobby preloading covers the stock map only. A normal map start releases
+				// lobby assets before loading the additional zombie combat assets.
+				preloaded_map = map_is_preloaded = false;
+				console::info("[IWZ][Noir] starting full map load; zombie assets deferred until after frontend shutdown\n");
+			}
 			sv_start_map_for_party_hook.invoke<void>(map, game_type, client_count, agent_count, hardcore, map_is_preloaded, migrate);
 		}
 

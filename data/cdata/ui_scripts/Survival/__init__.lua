@@ -46,10 +46,15 @@ if MenuBuilder.m_types["CPMaps"] == nil then
 	require("frontEnd.cp.CPMaps")
 end
 
+if MenuBuilder.m_types["MPMainMenu"] == nil then
+	require("frontEnd.mp.MPMainMenu")
+end
+
 local originalCPPrivateMatchButtons = MenuBuilder.m_types["CPPrivateMatchButtons"]
 local originalCPMatchDetails = MenuBuilder.m_types["CPMatchDetails"]
 local originalMapButton = MenuBuilder.m_types["MapButton"]
 local originalCPMaps = MenuBuilder.m_types["CPMaps"]
+local originalMPMainMenu = MenuBuilder.m_types["MPMainMenu"]
 local loggedDisabledSurvivalFilms = {}
 
 local function getControllerIndex(controller)
@@ -216,6 +221,39 @@ MenuBuilder.m_types["CPMaps"] = function(menu, controller)
 	local self = originalCPMaps(menu, controller)
 	if Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
 		self.CPMenuTitle.MenuTitle:setText("SURVIVAL FILMS", 0)
+		-- Keep this out of the stock CP map data source: hovering a stock row
+		-- preloads a CP map. The prototype must change runtime before map loading.
+		local prototype = MenuBuilder.BuildRegisteredType("MenuButton", {
+			controllerIndex = getControllerIndex(controller)
+		})
+		prototype.id = "NoirPrototype"
+		prototype.Text:setText("UNTITLED - NOIR PROTOTYPE", 0)
+		prototype.buttonDescription = "Launch the solo FTL / Eraser placement and combat test. Uses the Multiplayer foundation while the Zombies conversion is in progress."
+		prototype:SetAnchorsAndPosition(0, 1, 0, 1, _1080p * 130, _1080p * 630, _1080p * 500, _1080p * 530)
+		local selected = false
+		prototype:addEventHandler("button_action", function(_, event)
+			if selected then
+				return
+			end
+			selected = true
+			prototype:SetButtonDisabled(true)
+			local controllerIndex = event.controller or getControllerIndex(controller)
+			clearArcadeMode()
+			resetBossMode()
+			clearSurvivalMode("launching Noir foundation prototype", true)
+			-- Follow the stock private-lobby / mode-menu cleanup before replacing
+			-- the CP stack. Leaving the CP fence requests StopGameMode (NONE).
+			SetIsAliensSolo(false)
+			Lobby.LeaveCustomGameLobby()
+			Engine.ExecNow("xstopprivateparty 0", controllerIndex)
+			Engine.SetDvarBool("onlinegame", false)
+			Engine.SetDvarBool("splitscreen", false)
+			log("prototype selected controller=" .. controllerIndex .. " transition=CP->NONE->MP title=TBA")
+			Engine.ExecNow("iwz_noir_play", controllerIndex)
+			LUI.FlowManager.RequestAddMenu("MPMainMenu", false, controllerIndex, false, false)
+		end)
+		self:addElement(prototype)
+		self.NoirPrototype = prototype
 	end
 
 	self:addEventHandler("menu_close", function()
@@ -227,6 +265,14 @@ MenuBuilder.m_types["CPMaps"] = function(menu, controller)
 		end
 	end)
 
+	return self
+end
+
+MenuBuilder.m_types["MPMainMenu"] = function(menu, controller)
+	local self = originalMPMainMenu(menu, controller)
+	-- The native launcher only accepts this acknowledgement for a pending Noir
+	-- launch. Wait until stock MP setup has finished changing lobby dvars.
+	Engine.Exec("iwz_noir_menu_ready", getControllerIndex(controller))
 	return self
 end
 

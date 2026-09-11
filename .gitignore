@@ -5,6 +5,7 @@ build/
 !/docs/key-earning.md
 !/docs/laser-animation-visibility.md
 !/docs/cargo-chaos.md
+!/docs/noir-zombies.md
 /reports/
 /.tmp/
 /minidumps/

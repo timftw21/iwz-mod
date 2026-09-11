@@ -296,10 +296,11 @@ namespace gsc
 			if (!header.starts_with(prefix))
 				return true;
 			const auto scope = header.substr(prefix.size());
-			if (scope == "survival-only" || scope == "gns-arcade-only")
+			if (scope == "survival-only" || scope == "gns-arcade-only" || scope.starts_with("dvar="))
 			{
-				const auto* mode = game::Dvar_FindVar(scope == "survival-only" ?
-					"iwz_survival_mode" : "iwz_gns_arcade");
+				const auto dvar_name = scope.starts_with("dvar=") ? std::string(scope.substr(5)) :
+					std::string(scope == "survival-only" ? "iwz_survival_mode" : "iwz_gns_arcade");
+				const auto* mode = game::Dvar_FindVar(dvar_name.data());
 				// UI-created console dvars are strings until explicitly registered.
 				const auto enabled = mode && ((mode->type == game::DVAR_TYPE_BOOL && mode->current.enabled) ||
 					(mode->type == game::DVAR_TYPE_INT && mode->current.integer != 0) ||

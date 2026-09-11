@@ -82,6 +82,8 @@ namespace fastfiles
 		utils::hook::detour db_init_load_x_file_hook;
 		utils::hook::detour db_load_x_zone_hook;
 		utils::hook::detour db_load_x_assets_hook;
+		utils::hook::detour db_load_level_x_assets_hook;
+		utils::hook::detour db_load_level_x_assets_async_hook;
 		utils::hook::detour db_find_xasset_header_hook;
 		utils::hook::detour db_add_xasset_hook;
 		utils::hook::detour sys_createfile_hook;
@@ -90,6 +92,7 @@ namespace fastfiles
 		constexpr auto zombies_camos_zone = "iwz_zombies_camos";
 		constexpr auto directors_death_zone = "iwz_directors_death";
 		constexpr auto cargo_chaos_zone = "iwz_cargo_chaos";
+		constexpr auto noir_zombie_zone = "iwz_noir_zombies";
 
 		bool db_try_load_x_file_internal_stub(const char* zone_name, const unsigned int zone_flags,
 			const bool is_base_map, const bool was_paused, const int failure_mode)
@@ -284,6 +287,55 @@ namespace fastfiles
 			{
 				target->push_back(entry);
 			}
+		}
+
+		void load_noir_gameplay_assets(const char* map_name)
+		{
+			const auto* enabled = game::Dvar_FindVar("iwz_noir_foundation");
+			if (!enabled || !enabled->current.enabled || !map_name || strcmp(map_name, "mp_prime") ||
+				game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_MP || game::Com_FrontEnd_IsInFrontEnd())
+				return;
+
+			// The lobby's map preload does not include this gameplay dependency. Load it
+			// after the front end has shut down, before scripts and network tables start.
+			// Do not inherit the map's 0x400 (already preloaded) flag for a new fastfile.
+			if (utils::hook::invoke<int>(0x1403BC3A0, noir_zombie_zone) != 0xFFFF)
+				return;
+			if (!fastfiles::exists(noir_zombie_zone))
+			{
+				game::Com_Error(game::ERR_DROP, "Missing Noir zombie bundle: %s.ff", noir_zombie_zone);
+				return;
+			}
+
+			console::info("[IWZ][Noir] loading gameplay dependency zone=%s stage=map-start flags=0x%X\n",
+				noir_zombie_zone, game::DB_ZONE_GAME | game::DB_ZONE_CUSTOM);
+			game::XZoneInfo zone{noir_zombie_zone, game::DB_ZONE_GAME | game::DB_ZONE_CUSTOM, 0};
+			game::DB_LoadXAssets(&zone, 1, game::DB_LOAD_SYNC);
+
+			// Count the free list only after the synchronous database load has finished.
+			const auto capacity = game::g_poolSize[game::ASSET_TYPE_IMAGE];
+			const auto* pool = static_cast<const char*>(game::g_assetPool[game::ASSET_TYPE_IMAGE]);
+			const auto* next = *reinterpret_cast<const char* const*>(pool);
+			int available = 0;
+			while (next && available < capacity)
+			{
+				++available;
+				next = *reinterpret_cast<const char* const*>(next);
+			}
+			console::info("[IWZ][Noir] gameplay dependency loaded images=%d/%d free=%d\n",
+				capacity - available, capacity, available);
+		}
+
+		void db_load_level_x_assets_stub(const char* map_name, const int flags)
+		{
+			db_load_level_x_assets_hook.invoke<void>(map_name, flags);
+			load_noir_gameplay_assets(map_name);
+		}
+
+		void db_load_level_x_assets_async_stub(const char* map_name)
+		{
+			db_load_level_x_assets_async_hook.invoke<void>(map_name);
+			load_noir_gameplay_assets(map_name);
 		}
 
 		void db_load_x_assets_stub(game::XZoneInfo* zone_info, const unsigned int zone_count, const char sync_mode)
@@ -648,6 +700,8 @@ namespace fastfiles
 			db_find_xasset_header_hook.create(game::DB_FindXAssetHeader, db_find_xasset_header_stub);
 			db_add_xasset_hook.create(0x140A76520, db_add_xasset_stub);
 			db_load_x_assets_hook.create(game::DB_LoadXAssets, db_load_x_assets_stub);
+			db_load_level_x_assets_hook.create(0x1403B9C90, db_load_level_x_assets_stub);
+			db_load_level_x_assets_async_hook.create(0x1403B9F10, db_load_level_x_assets_async_stub);
 
 			g_dump_scripts = game::Dvar_RegisterBool("g_dumpScripts", false, game::DVAR_FLAG_NONE, "Dump GSC scripts");
 

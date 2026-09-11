@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Untitled · Noir placement</title><link rel="stylesheet" href="/style.css">
+  <script type="importmap">{"imports":{"three":"/vendor/build/three.module.js","three/addons/":"/vendor/examples/jsm/"}}</script>
+</head>
+<body>
+<header><div><span class="eyebrow">IWZ / MAP WORKSHOP</span><h1>Untitled <span>Noir foundation</span></h1></div><button id="save" disabled>Save & install</button></header>
+<main>
+  <aside>
+    <h2>Place on geometry</h2><p>Choose a symbol, then click a visible surface. Drag to orbit; right-drag to pan; scroll to zoom.</p>
+    <label for="preset">New marker</label><select id="preset"><option value="">Select / inspect</option></select>
+    <div class="row"><button id="fit">Fit map</button><button id="top">Top view</button><button id="focus">Focus</button></div>
+    <label for="ceiling">Hide geometry above game Z <output id="ceiling-value"></output></label><input id="ceiling" type="range" step="1">
+    <h2>Layout <span id="count">0 / 32</span></h2><select id="markers" size="7" aria-label="Saved markers"></select>
+    <form id="properties" hidden>
+      <label>ID<input id="identity" maxlength="40" pattern="[a-z][a-z0-9_]{0,39}" required></label>
+      <div class="row"><label>X<input id="x" type="number" step="any" required></label><label>Y<input id="y" type="number" step="any" required></label><label>Z<input id="z" type="number" step="any" required></label></div>
+      <label>Facing (game yaw °)<input id="yaw" type="number" step="any" required></label>
+      <div class="row"><button type="submit">Apply values</button><button id="move" type="button">Move on surface</button></div>
+      <div class="row"><button id="duplicate" type="button">Duplicate</button><button id="delete" type="button">Delete</button></div>
+    </form>
+    <div class="row"><button id="undo">Undo</button><button id="export">Export JSON</button><button id="import">Import</button></div><input id="file" type="file" accept="application/json,.json" hidden>
+    <p class="note">Quick Revive and other systems are placement markers for now. EMC is the first working purchase: 500 points, ammo 250.</p>
+  </aside>
+  <section id="viewport" aria-label="Interactive map geometry"><div id="loading">Loading Noir geometry…</div><div id="coordinates">Game coordinates · X / Y / Z</div><div id="legend">● Surface anchor &nbsp; ─ Facing &nbsp; ◯ EMC use radius<br>Original game units. No scaling or recentering.</div></section>
+</main>
+<footer><span id="status" role="status">Connecting…</span><span id="coverage">Static world geometry</span></footer>
+<script type="module" src="/app.js"></script>
+</body></html>

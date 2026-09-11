@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "baseMap": "mp_prime",
+  "geometry": {
+    "sha256": "91c2fef81a928b89f2853e3753b86fec5589223ca434f1cee7ceeae2272d9c09",
+    "worldChecksum": 2304615129
+  },
+  "markers": [
+    {
+      "id": "ref_south",
+      "preset": "calibration",
+      "position": [
+        832,
+        -2264,
+        8
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 0
+    },
+    {
+      "id": "ref_north",
+      "preset": "calibration",
+      "position": [
+        498,
+        3816,
+        136
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 90
+    },
+    {
+      "id": "ref_lower",
+      "preset": "calibration",
+      "position": [
+        2199.95,
+        63.6226,
+        -132
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 180
+    },
+    {
+      "id": "ref_west",
+      "preset": "calibration",
+      "position": [
+        -501.602,
+        1022.5,
+        -5.631794
+      ],
+      "normal": [
+        0.079744,
+        -3e-06,
+        0.996815
+      ],
+      "yaw": 270
+    },
+    {
+      "id": "revive_south",
+      "preset": "quick_revive",
+      "position": [
+        960,
+        -2264,
+        4
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 90
+    },
+    {
+      "id": "emc_south",
+      "preset": "wall_buy",
+      "position": [
+        704,
+        -2264,
+        8
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 90
+    },
+    {
+      "id": "magic_wheel_1",
+      "preset": "magic_wheel",
+      "position": [
+        550.05364,
+        -1928.362524,
+        8
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 0
+    },
+    {
+      "id": "zombie_spawn_1",
+      "preset": "zombie_spawn",
+      "position": [
+        687.618152,
+        -1665.075595,
+        4
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 0
+    },
+    {
+      "id": "zombie_spawn_2",
+      "preset": "zombie_spawn",
+      "position": [
+        865.707071,
+        -1676.3021,
+        4
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 0
+    },
+    {
+      "id": "zombie_spawn_3",
+      "preset": "zombie_spawn",
+      "position": [
+        1023.872187,
+        -1679.405537,
+        4
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 0
+    },
+    {
+      "id": "power_1",
+      "preset": "power",
+      "position": [
+        1181.156853,
+        -2071.612246,
+        4
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 270
+    },
+    {
+      "id": "barricade_1",
+      "preset": "barricade",
+      "position": [
+        1117.284422,
+        -1847.992399,
+        4
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 0
+    },
+    {
+      "id": "player_spawn_south",
+      "preset": "player_spawn",
+      "position": [
+        832,
+        -2264,
+        8
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "yaw": 90
+    }
+  ]
+}
