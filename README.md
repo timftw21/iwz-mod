@@ -8,7 +8,7 @@
 
 # IWZ-MOD
 
-Match keys now use a [documented approximation](docs/key-earning.md): Zombies
+Match keys use an approximation: Zombies
 awards 0.8 keys per completed Scene (125-key cap); multiplayer awards one key per
 five minutes, plus a 25% win bonus. Fractional keys persist between matches.
 Double-key events double these rewards. The Zombies Double XP toggle also enables
