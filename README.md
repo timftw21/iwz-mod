@@ -8,12 +8,6 @@
 
 # IWZ-MOD
 
-Match keys use an approximation: Zombies
-awards 0.8 keys per completed Scene (125-key cap); multiplayer awards one key per
-five minutes, plus a 25% win bonus. Fractional keys persist between matches.
-Double-key events double these rewards. The Zombies Double XP toggle also enables
-double keys; enabling both keeps the bonus at 2x.
-
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
 IWZ-MOD 0.95 adds spinning battery drops on Attack of the Radioactive Thing, keeps challenge popups in sync with the adjusted requirements, and prevents Cargo Chaos's Venom-Z from being downgraded by Pack-a-Punch. It also fixes Spaceland clown animations, Beach Bloodbath prop collision, and Attack's nuke effects. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
