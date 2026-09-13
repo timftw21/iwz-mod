@@ -15,10 +15,8 @@ IWZ-MOD 0.95 adds spinning battery drops on Attack of the Radioactive Thing, kee
 # IWZ-MOD To-Do
 
  - Fate and Fortune machine still needs to be implemented into survival maps
- - Allow custom music to be queued by the DJ in Zombies in Spaceland
- - Certain tweaks to how custom music behaves in the pre-game lobby
  - Certain vanilla hintstrings should be tweaked
- - Zombies camos (framework is working)
+ - Zombies camos (framework is working; test camo called Neon Rot on M1)
  - More map-specific fixes and tweaks
 
 # IWZ-MOD Changes
