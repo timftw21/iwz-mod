@@ -13,7 +13,7 @@ main()
 
     level.iwz_shaolin_stock_wall_buy_setup = stock_setup;
     replacefunc(stock_setup, ::wall_buy_setup_with_banshee_preload);
-    banshee_wall_buy_log("installed pre-spawn world-model streaming hook");
+    banshee_wall_buy_log("installed world-model preload and bench placement correction");
 }
 
 banshee_wall_buy_log(message)
@@ -46,18 +46,16 @@ wall_buy_setup_with_banshee_preload()
     if (!areworldweaponsloaded([banshee_weapon]))
     {
         banshee_wall_buy_log("preload timed out weapon=" + banshee_weapon + "; continuing stock setup");
-        [[stock_setup]]();
-        return;
     }
-
-    banshee_wall_buy_log("world models resident before stock setup weapon=" + banshee_weapon +
-        " streamMs=" + (gettime() - stream_started));
+    else
+        banshee_wall_buy_log("world models resident before stock setup weapon=" + banshee_weapon +
+            " streamMs=" + (gettime() - stream_started));
 
     [[stock_setup]]();
-    log_spawned_banshee_display(banshee_weapon);
+    place_banshee_display(banshee_weapon);
 }
 
-log_spawned_banshee_display(banshee_weapon)
+place_banshee_display(banshee_weapon)
 {
     interactions = scripts\engine\utility::getstructarray("interaction", "targetname");
     foreach (interaction in interactions)
@@ -71,9 +69,30 @@ log_spawned_banshee_display(banshee_weapon)
             return;
         }
 
-        banshee_wall_buy_log("stock display spawned after streaming ent=" + (interaction.trigger getentitynumber()) +
-            " weapon=" + banshee_weapon + " origin=" + interaction.trigger.origin +
-            " angles=" + interaction.trigger.angles);
+        display = interaction.trigger;
+        original_origin = display.origin;
+        // Streaming does not correct the authored origin. Find the seat under
+        // that origin, then keep the rolled model's lower bound above it.
+        // Ignore the display itself and players when tracing the bench.
+        trace = bullettrace(original_origin + (0, 0, 32), original_origin - (0, 0, 32), 0, display);
+        model = getweaponmodel(banshee_weapon);
+        forward = anglestoforward(display.angles);
+        right = anglestoright(display.angles);
+        up = anglestoup(display.angles);
+        bottom = iwzgetmodelbottomoffset(model, (forward[2], -right[2], up[2]));
+        if (!isdefined(bottom) || trace["fraction"] == 1 || trace["normal"][2] < 0.9)
+        {
+            banshee_wall_buy_log("placement skipped: no valid model bounds or bench surface model=" + model +
+                " origin=" + original_origin + " trace=" + trace["position"]);
+            return;
+        }
+        lift = trace["position"][2] + 0.1 - (original_origin[2] + bottom);
+        if (lift > 0)
+            display.origin = original_origin + (0, 0, lift);
+        banshee_wall_buy_log("bench placement ent=" + (display getentitynumber()) +
+            " model=" + model + " original=" + original_origin + " origin=" + display.origin +
+            " angles=" + display.angles + " surface=" + trace["position"] +
+            " bottomOffset=" + bottom + " requiredLift=" + lift);
         return;
     }
 

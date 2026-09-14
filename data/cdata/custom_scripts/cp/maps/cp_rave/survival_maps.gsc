@@ -36,8 +36,8 @@ main()
         ::survival_disable_skeleton_eye_monitor);
     replacefunc(scripts\cp\zombies\zombies_pillage::_id_6690,
         ::survival_disable_skeleton_pillage);
-    replacefunc(scripts\cp\zombies\directors_cut::allow_directors_cut,
-        ::survival_disallow_directors_cut);
+    replacefunc(scripts\cp\zombies\directors_cut::start_directors_cut,
+        custom_scripts\cp\survival_perks::start_survival_directors_cut);
     replacefunc(scripts\cp\maps\cp_rave\cp_rave_weapon_upgrade::
         wait_for_player_to_take_weapon,
         ::survival_wait_for_player_to_take_upgraded_weapon);
@@ -46,7 +46,7 @@ main()
         "spawn=island_dropoff_player " +
         "wheel=scriptable-controller-plus-solid-visual-and-playerclip " +
         "perkSource=spaceland-boss-battle-board " +
-        "zombieModel=fullbody_zmb_skeleton directorsCut=disabled " +
+        "zombieModel=fullbody_zmb_skeleton directorsCut=player-benefits " +
         "papPickupMetadata=guarded");
 }
 
@@ -119,11 +119,6 @@ post_load()
 survival_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("Survival", message);
-}
-
-survival_disallow_directors_cut()
-{
-    return 0;
 }
 
 survival_char_intro_gesture()
@@ -514,7 +509,7 @@ configure_survival_weapon_wheel()
     }
 
     // Rave's Director's Cut implementation identifies these as the four map
-    // wonder weapons. Survival exposes them without enabling Director's Cut.
+    // wonder weapons. Survival exposes them regardless of the player's DC setting.
     level.magic_weapons["acidrain"] = "iw7_harpoon1_zm";
     level.magic_weapons["benfranklin"] = "iw7_harpoon2_zm";
     level.magic_weapons["trapomatic"] = "iw7_harpoon3_zm+akimbo";

@@ -35,6 +35,13 @@ give <weapon|ammo|allammo|health [amount]|all>
     Give and switch to a weapon, refill current/all weapon ammo, restore or add
     health, or give every loaded weapon.
 
+giveTickets <amount>
+    Add the exact number of tickets to the current player's balance in a match
+    with tickets enabled (Spaceland). Uses the normal ticket HUD, sound and
+    bookkeeping. Double Money does not multiply this console grant. Requires
+    sv_cheats 1. Amounts must be positive whole numbers; the resulting balance
+    cannot exceed the game's limit of 1000000000. Example: giveTickets 500.
+
 dropweapon
     Drop the current weapon.
 
@@ -58,6 +65,13 @@ testAttackComputer
 testSkullbusterPlatforms
     Toggle a stable 12-platform Skullbuster sky-step test path. Available only
     on cp_disco; run it again to remove the test platforms.
+
+testSkullhopRetry
+    In a fresh solo Standard Film on cp_town, enter Skullhop and automatically
+    trigger its real failure sequence. After returning to the machine, receive
+    an assembled M.A.D. Charge it fully, shoot the machine, then hold interact
+    to retry. Run again while playing Skullhop to test another failed attempt.
+    Wait until the opening intro ends before running this command.
 
 spawnBeastFloppy
     Spawn the real Phantom floppy-disk scriptable near the player with its new
@@ -83,6 +97,21 @@ testAlienKill
     using the same runtime agent-definition XP value as a real kill. Available
     only on cp_zmb; currently expected to award 5000 XP.
 
+testSkull5
+    Complete Spaceland's first four Ghosts N Skulls steps and insert their
+    skulls into the machine, leaving Easter egg progress unchanged. Gives a
+    base Shredder and equips 3D glasses. After preparation, the floating fifth
+    skull appears above Pack-a-Punch within 5-9 seconds. Shoot the five sign
+    nodes and time the laser to hit it; the machine receives the fifth skull
+    and the quest advances normally. Reuses an active fifth step. Start a new
+    match to repeat after completing it. Requires a regular Spaceland match.
+
+testVladCabinet
+    Prepare Rave's Vlad cabinet for its normal lock-breaking interaction without
+    completing the deer-head quest. Interact with the locks in the spawn cabin.
+    Run again to restore the chains and repeat the same interaction/effect test.
+    Available only on cp_rave in a solo or hosted match.
+
 spawnAlienFuses
     Spawn Spaceland's real Alien-fuse pickup pair at its stock drop point. Pick
     it up and insert it into Pack-a-Punch to test the permanent double-PaP
@@ -92,7 +121,9 @@ spawnAlienFuses
 spawnSoulKey
     Spawn the current Zombies film's Soul Key pickup in front of the player.
     Picking it up grants that film's native Soul Key progression to every
-    player. Available on all five standard Zombies films.
+    player. Attack and Beast grant their keys directly, matching their native
+    reward behavior.
+    Available on all five standard Zombies films.
 
 scene <number>
     Skip forward to the requested standard Zombies Scene. The target must be a
@@ -110,6 +141,18 @@ custommusicplay <index>
 
 custommusicstop
     Stop the active custom-music track.
+
+djcustommusic [1|0]
+    1 (or no argument): restrict Spaceland's DJ to your custom_music playlist.
+    0: restore mixed stock/custom DJ rotation. Resumes on the next DJ selection.
+    Works in solo and matches you host; custom audio plays on your computer.
+    Uses Spaceland's native PA speakers, mixer, effects, pause and volume controls.
+    The normal DJ banner shows the file name and artist "Custom Playlist".
+    Tracks are prepared in the background; unusually long tracks exceeding
+    the 256 MiB decoded source limit are skipped with a log message.
+    Can be set before loading Spaceland. In a match, requests the next song.
+    Quest songs and DJ/Seti-Com interruptions retain their normal priority.
+    This test setting resets when the client closes; the lobby selection is preserved.
 
 
 MAPS, CONNECTIONS, BOTS, AND HOST ADMINISTRATION

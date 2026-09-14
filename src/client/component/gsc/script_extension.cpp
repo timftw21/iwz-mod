@@ -15,6 +15,7 @@
 
 #include <utils/hook.hpp>
 #include <utils/info_string.hpp>
+#include <utils/string.hpp>
 
 namespace gsc
 {
@@ -37,16 +38,51 @@ namespace gsc
 		std::atomic_uint32_t model_contents_log_count{0};
 		std::atomic_bool logged_shaolin_decade_fix{false};
 		std::unordered_set<std::string> logged_missing_localized_hint_assets;
+		std::unordered_set<std::string> logged_pap_failure_hints;
+		std::unordered_set<std::string> logged_hud_binding_colors;
 
-		void replace_argument_with_string(const unsigned int index, const std::string& value)
+		void replace_argument_with_string(const unsigned int index, const std::string& value,
+			const game::VariableType type = game::VAR_STRING)
 		{
 			auto* argument = game::scr_VmPub->top - index;
 			const auto previous = *argument;
 			const auto string_value = game::SL_GetString(value.data(), 0);
 
 			game::RemoveRefToValue(previous.type, previous.u);
-			argument->type = game::VAR_STRING;
+			argument->type = type;
 			argument->u.stringValue = string_value;
+		}
+
+		void colorize_hud_text_arguments(const function_args& args)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP) return;
+			for (unsigned int i = 0; i < args.size(); ++i)
+			{
+				const auto argument = args[i].get_raw();
+				if (argument.type != game::VAR_STRING && argument.type != game::VAR_ISTRING) continue;
+				const auto* value = game::SL_ConvertToString(argument.u.stringValue);
+				if (!value) continue;
+				const bool localized = argument.type == game::VAR_ISTRING;
+				const std::string reference = localized ? value : "<literal>";
+				const auto* text = localized ? localized_strings::lookup(value) : value;
+				if (!text) continue;
+				const auto colored = localized_strings::colorize_key_bindings(text);
+				if (!colored) continue;
+				// Native script HUD reads LocalizeEntry directly. Update that asset
+				// before bindings become glyphs; preserve localized text/parameters.
+				if (localized)
+				{
+					if (!localized_strings::override_asset(reference, *colored))
+					{
+						if (logged_hud_binding_colors.emplace("missing:" + reference).second)
+							console::warn("[IWZ][HUDText] binding colors unavailable for missing asset='%s'\n", reference.c_str());
+						continue;
+					}
+				}
+				else replace_argument_with_string(i, *colored);
+				if (logged_hud_binding_colors.emplace(reference).second)
+					console::info("[IWZ][HUDText] colored settext bindings reference='%s' argument=%u\n", reference.c_str(), i);
+			}
 		}
 
 		void correct_shaolin_intro_text_argument(const function_args& args)
@@ -87,6 +123,7 @@ namespace gsc
 			const auto argument = args[0].get_raw();
 			const char* hint_text = nullptr;
 			const char* reference = "<literal>";
+			std::string routed_reference;
 			bool is_localized = false;
 
 			if (argument.type == game::VAR_STRING)
@@ -101,8 +138,40 @@ namespace gsc
 				{
 					return;
 				}
+				const auto canonical_reference = utils::string::to_upper(reference);
+				auto resident = localized_strings::apply_registered_override_asset(reference);
+				if (!resident && canonical_reference.ends_with("UPGRADE_WEAPON_FAIL"))
+				{
+					// Some DLC rejection scripts still reference Spaceland's unloaded
+					// asset. Reuse the current map's normal PaP hint, including its index.
+					const auto* map = game::Dvar_FindVar("mapname");
+					constexpr std::pair<std::string_view, const char*> failures[]{
+						{"cp_zmb", "CP_ZMB_INTERACTIONS_UPGRADE_WEAPON_FAIL"},
+						{"cp_rave", "CP_RAVE_UPGRADE_WEAPON_FAIL"},
+						{"cp_disco", "CP_DISCO_UPGRADE_WEAPON_FAIL"},
+						{"cp_town", "CP_TOWN_UPGRADE_WEAPON_FAIL"},
+						{"cp_final", "CP_FINAL_INTERACTIONS_UPGRADE_WEAPON_FAIL"},
+					};
+					for (const auto& [map_name, key] : failures)
+					{
+						if (map && map->current.string && map_name == map->current.string &&
+							localized_strings::apply_registered_override_asset(key))
+						{
+							routed_reference = key;
+							replace_argument_with_string(0, routed_reference, game::VAR_ISTRING);
+							reference = routed_reference.c_str();
+							resident = true;
+							break;
+						}
+					}
+				}
 				hint_text = localized_strings::lookup(reference);
-				localized_strings::apply_registered_override_asset(reference);
+				if (canonical_reference.ends_with("UPGRADE_WEAPON_FAIL") &&
+					logged_pap_failure_hints.emplace(canonical_reference).second)
+				{
+					console::info("[IWZ][ZombieHints] PaP failure requested='%s' resolved='%s' text='%s' resident=%d\n",
+						canonical_reference.c_str(), reference, hint_text ? hint_text : "<missing>", resident);
+				}
 			}
 
 			if (hint_text == nullptr)
@@ -439,6 +508,8 @@ namespace gsc
 				{
 					vm_execute_hooks.clear();
 					logged_missing_localized_hint_assets.clear();
+					logged_pap_failure_hints.clear();
+					logged_hud_binding_colors.clear();
 					colorized_hint_log_count = 0;
 				}
 			});
@@ -578,6 +649,29 @@ namespace gsc
 				return scripting::script_value{};
 			});
 
+			function::add("iwzgetmodelbottomoffset", [](const function_args& args) -> scripting::script_value
+			{
+				const auto name = args[0].as<std::string>();
+				// World up expressed in model coordinates, including the display's roll.
+				const auto up = args[1].as<scripting::vector>();
+				if (!game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, name.c_str()))
+					return {};
+				const auto* model = game::DB_FindXAssetHeader(game::ASSET_TYPE_XMODEL, name.c_str(), false).model;
+				if (!model) return {};
+				float bottom = 0.0f;
+				for (size_t axis = 0; axis < 3; ++axis)
+				{
+					const auto mid = model->bounds.midPoint[axis];
+					const auto half = model->bounds.halfSize[axis];
+					if (!std::isfinite(up[axis]) || !std::isfinite(mid) || !std::isfinite(half) || half < 0.0f)
+						return {};
+					bottom += up[axis] * mid - std::abs(up[axis]) * half;
+				}
+				console::info("[IWZ][ModelPlacement] model=%s bottomOffset=%g localUp=(%g,%g,%g)\n",
+					name.c_str(), bottom, up[0], up[1], up[2]);
+				return bottom;
+			});
+
 			method::add("iwzgetcollisionhalfsize", [](const game::scr_entref_t ent, const function_args&)
 			{
 				if (ent.classnum != 0)
@@ -653,6 +747,7 @@ namespace gsc
 			method::add("settext", [](const game::scr_entref_t ent, const function_args& args)
 			{
 				correct_shaolin_intro_text_argument(args);
+				colorize_hud_text_arguments(args);
 
 				constexpr auto method_id = 0x834D;
 				const auto original = meth_table[method_id - 0x8000];

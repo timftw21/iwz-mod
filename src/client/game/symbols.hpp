@@ -458,6 +458,7 @@ namespace game
 	WEAK symbol<int> s_frontEndScene_state{ 0x144BFF608 };
 
 	WEAK symbol<WeaponDef*> bg_weaponDefs{ 0x145210120 };
+	WEAK symbol<WeaponCompleteDef*> bg_weaponCompleteDefs{ 0x14520F310 };
 
 	WEAK symbol<const char*> g_HitLocNames{ 0x14196AAF0 };
 

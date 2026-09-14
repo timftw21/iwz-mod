@@ -277,6 +277,8 @@ namespace scripting
 	public:
 		void post_unpack() override
 		{
+			console::info("[IWZ][GSC] script variable pools objects=56320 childBanks=4 childPoolOffset=0x%zX\n",
+				offsetof(game::scrVarGlob_t, childVariableValue));
 			vm_notify_hook.create(0x140C10460, vm_notify_stub);
 			console::info("[IWZ][GSC] VM notify diagnostics installed without unused event materialization\n");
 

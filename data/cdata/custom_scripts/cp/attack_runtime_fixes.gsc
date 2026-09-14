@@ -4,6 +4,14 @@ main()
     if (getdvar("ui_mapname") != "cp_town")
         return;
 
+    precacheitem("iw7_cutie_zm+cutiecrank+cutiegrip+cutieplunger");
+    replacefunc(scripts\cp\maps\cp_town\cp_town::show_soul_key_progress,
+        ::show_soul_key_progress);
+    attack_fix_log("installed evenly spaced Soul Key symbol arc and independent key ownership checks");
+    replacefunc(scripts\cp\maps\cp_town\cp_town_ghost_activation::reactivate_skullbuster_cabinet,
+        ::reactivate_skullhop_cabinet);
+    attack_fix_log("installed Skullhop retry eligibility fix: active cabinet sentinel -1 retains M.A.D. reactivation");
+
     can_use_interaction = getfunction("scripts/cp/cp_interaction", "can_use_interaction");
     set_chemical = getfunction("scripts/cp/maps/cp_town/cp_town_chemistry", "set_chemical_carried_by_player");
     nuke_fx = getfunction("scripts/cp/loot", "nuke_fx");
@@ -56,12 +64,152 @@ post_load()
     level thread configure_attack_interaction_geometry();
     level thread listen_for_petn_command();
     level thread listen_for_attack_computer_test_command();
+    level thread listen_for_skullhop_retry_test_command();
     attack_fix_log("started interaction-geometry, givePetn, and testAttackComputer command listeners");
 }
 
 attack_fix_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("AttackFixes", message);
+}
+
+show_soul_key_progress(player)
+{
+    player endon("disconnect");
+    player waittill("spawned_player");
+
+    // Keep the authored wall plane and use a compact arc around the jar,
+    // with equal 45-degree spacing on the left half of the five-key semicircle.
+    center = (-10250, 932, -1581);
+    radius = 18;
+    effects = ["soul_jar_d", "soul_jar_e", "soul_jar_a"];
+    angles = (0, 0, 90);
+    for (index = 0; index < effects.size; index++)
+    {
+        key = "soul_key_" + (index + 1);
+        if (!player getrankedplayerdata("cp", "haveSoulKeys", key))
+            continue;
+        angle = 180 - index * 45;
+        origin = center + (cos(angle) * radius, 0, sin(angle) * radius);
+        playfx(level._effect[effects[index]], origin,
+            anglestoforward(angles), anglestoup(angles), player);
+        attack_fix_log("Soul Key symbol player=" + (player getentitynumber()) +
+            " key=" + key + " effect=" + effects[index] + " origin=" + origin + " radius=" + radius);
+    }
+}
+
+reactivate_skullhop_cabinet()
+{
+    skulls = getomnvar("zm_num_ghost_n_skull_coin");
+    if (!scripts\cp\zombies\zombie_quest::quest_line_exist("reactivateghost"))
+    {
+        // Native quest entry sets -1 while the game is in progress. It is not
+        // an unfinished quest. Skull Hacker entry retains the actual 0-5 count.
+        if (isdefined(skulls) && skulls < 5 && skulls != -1)
+        {
+            attack_fix_log("Skullhop retry not earned skulls=" + skulls);
+            return;
+        }
+
+        scripts\cp\zombies\zombie_quest::register_quest_step("reactivateghost", 0,
+            scripts\cp\maps\cp_zmb\cp_zmb_ghost_wave::reactivate_cabinet,
+            scripts\cp\maps\cp_town\cp_town_ghost_activation::shoot_the_machine,
+            scripts\cp\maps\cp_town\cp_town_ghost_activation::complete_shoot_the_machine,
+            scripts\cp\maps\cp_town\cp_town_ghost_activation::debug_shoot_the_machine);
+        scripts\cp\zombies\zombie_quest::register_quest_step("reactivateghost", 1,
+            scripts\cp\maps\cp_town\cp_town_ghost_activation::blank,
+            scripts\cp\maps\cp_town\cp_town_ghost_activation::wait_for_player_activation,
+            scripts\cp\maps\cp_town\cp_town_ghost_activation::complete_clean_arcade_cabinet,
+            scripts\cp\maps\cp_town\cp_town_ghost_activation::debug_wait_for_player_activation);
+    }
+
+    attack_fix_log("Skullhop retry armed previousSkulls=" + skulls + " players=" + level.players.size);
+    level thread scripts\cp\zombies\zombie_quest::start_quest_line("reactivateghost");
+}
+
+listen_for_skullhop_retry_test_command()
+{
+    level endon("game_ended");
+    for (;;)
+    {
+        level waittill("iwz_test_skullhop_retry", player);
+        if (isdefined(player) && isplayer(player))
+            test_skullhop_retry(player);
+    }
+}
+
+test_skullhop_retry(player)
+{
+    if (getdvarint("iwz_gns_arcade", 0) || getdvarint("iwz_survival_mode", 0) ||
+        scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight() ||
+        level.players.size != 1 || !player scripts\cp\utility::is_valid_player() ||
+        !scripts\engine\utility::flag("introscreen_over"))
+    {
+        attack_fix_log("testSkullhopRetry rejected: requires a living player in a solo standard match after the intro");
+        player iprintlnbold("Use this test in a solo Standard Film after the intro");
+        return;
+    }
+
+    if (scripts\engine\utility::is_true(level.entered_thru_card) ||
+        player scripts\cp\utility::is_consumable_active("activate_gns_machine") ||
+        scripts\engine\utility::is_true(level.iwz_gns_win_pending) ||
+        (scripts\engine\utility::is_true(level.gns_active) &&
+            scripts\engine\utility::is_true(level.processing_ghost_wave_failing)))
+    {
+        attack_fix_log("testSkullhopRetry rejected: card entry or game already ending");
+        player iprintlnbold("Skullhop is already ending or Skull Hacker is active");
+        return;
+    }
+
+    if (!scripts\engine\utility::is_true(level.gns_active))
+    {
+        if (getomnvar("zm_num_ghost_n_skull_coin") != 0 ||
+            scripts\cp\zombies\zombie_quest::quest_line_exist("reactivateghost"))
+        {
+            player iprintlnbold("Enter Skullhop first, or use a fresh match to stage the test");
+            attack_fix_log("testSkullhopRetry rejected: cabinet quest or retry already in progress");
+            return;
+        }
+
+        // Enter through the real final quest callback, including its native
+        // -1 cabinet state. Do not manually arm or repair the retry in this test.
+        attack_fix_log("testSkullhopRetry staging native quest entry; failure follows automatically");
+        scripts\cp\maps\cp_town\cp_town_ghost_activation::complete_clean_arcade_cabinet();
+        wait(1);
+    }
+
+    attack_fix_log("testSkullhopRetry forcing native three-strike failure skulls=" +
+        getomnvar("zm_num_ghost_n_skull_coin"));
+    level.num_moving_target_escaped = 3;
+    scripts\cp\maps\cp_zmb\cp_zmb_ghost_wave::determine_game_fail();
+
+    deadline = gettime() + 30000;
+    while (scripts\engine\utility::is_true(level.gns_active) ||
+        (isdefined(player) && scripts\engine\utility::is_true(player.playing_ghosts_n_skulls)))
+    {
+        if (gettime() >= deadline)
+        {
+            attack_fix_log("testSkullhopRetry timed out waiting for native player restoration");
+            return;
+        }
+        wait(0.05);
+    }
+
+    if (!isdefined(player))
+        return;
+
+    mad = "iw7_cutie_zm+cutiecrank+cutiegrip+cutieplunger";
+    if (!player hasweapon(mad))
+    {
+        if (scripts\cp\zombies\interaction_weapon_upgrade::should_take_players_current_weapon(player))
+            player takeweapon(player getcurrentweapon());
+        player scripts\cp\utility::_giveweapon(mad);
+    }
+    player givemaxammo(mad);
+    player switchtoweapon(mad);
+    attack_fix_log("testSkullhopRetry cleanup complete skulls=" + getomnvar("zm_num_ghost_n_skull_coin") +
+        " retryRegistered=" + scripts\cp\zombies\zombie_quest::quest_line_exist("reactivateghost") + " assembledMAD=1");
+    player iprintlnbold("Charge the M.A.D., shoot Skullhop, then hold interact to retry");
 }
 
 ray_gun_terminal_with_targeting_protection(interaction, player)

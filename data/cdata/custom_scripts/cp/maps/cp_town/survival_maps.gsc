@@ -37,8 +37,8 @@ main()
         ::select_beach_wheel);
     replacefunc(scripts\cp\zombies\interaction_magicwheel::_id_BC3F,
         ::hold_beach_wheel);
-    replacefunc(scripts\cp\zombies\directors_cut::allow_directors_cut,
-        ::disallow_directors_cut);
+    replacefunc(scripts\cp\zombies\directors_cut::start_directors_cut,
+        custom_scripts\cp\survival_perks::start_survival_directors_cut);
     replacefunc(scripts\cp\maps\cp_town\cp_town::watchforpowerontriggers,
         ::configure_full_color);
     replacefunc(scripts\cp\maps\cp_town\cp_town::colorize_sound_state_change,
@@ -46,7 +46,7 @@ main()
     replacefunc(scripts\cp\maps\cp_town\cp_town_elvira::init_elvira_beach,
         ::setup_survival_elvira);
     survival_log("pre-load hooks installed map=cp_town portal=permanent-beach " +
-        "papReturn=beach directorsCut=disabled color=full elvira=beach-pedestal " +
+        "papReturn=beach directorsCut=player-benefits color=full elvira=beach-pedestal " +
         "specialRounds=stock-without-tent-gate crogLandings=inside-barriers " +
         "bruteSpawns=inside-barriers-grounded batteries=disabled");
 }
@@ -83,11 +83,6 @@ post_load()
 survival_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("BeachBloodbath", message);
-}
-
-disallow_directors_cut()
-{
-    return 0;
 }
 
 ignore_fuse_switch(interaction, player)

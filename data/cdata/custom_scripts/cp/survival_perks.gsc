@@ -1,4 +1,25 @@
 // IWZ-LOAD: referenced-only
+start_survival_directors_cut()
+{
+    level endon("game_ended");
+    if (!scripts\cp\zombies\directors_cut::allow_directors_cut())
+        return;
+
+    // Use the stock connection/spawn timing and player benefits without
+    // starting full-map soul-jar quests or replacing Survival's wheel setup.
+    survival_log("Director's Cut player benefits enabled map=" + level.script);
+    for (;;)
+    {
+        level waittill("connected", player);
+        if (scripts\cp\zombies\directors_cut::directors_cut_activated_for(player))
+        {
+            player thread scripts\cp\zombies\directors_cut::give_directors_cut_benefits_to(player);
+            survival_log("Director's Cut benefits scheduled player=" + player getentitynumber() +
+                " perks=stock-permanent spawnTiming=stock");
+        }
+    }
+}
+
 // Shared Survival perk transactions and self-revive behavior. No automatic entry points.
 
 precache_perk_wall(board_model)

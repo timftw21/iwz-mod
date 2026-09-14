@@ -1432,11 +1432,17 @@ namespace game
 
 		struct scrVarGlob_t
 		{
-			ObjectVariableValue objectVariableValue[40960];
-			ObjectVariableChildren objectVariableChildren[40960];
+			ObjectVariableValue objectVariableValue[56320];
+			ObjectVariableChildren objectVariableChildren[56320];
 			unsigned __int16 childVariableBucket[65536];
-			ChildVariableValue childVariableValue[384000];
+			ChildVariableValue childVariableValue[4 * 40960];
 		};
+		// IW7's native FindVariable/GetVariable use these pool offsets. The
+		// smaller IW6/H1 object pool places every C++ child-field read too early.
+		static_assert(sizeof(ChildVariableValue) == 24);
+		static_assert(offsetof(scrVarGlob_t, objectVariableChildren) == 0x6E000);
+		static_assert(offsetof(scrVarGlob_t, childVariableBucket) == 0xA5000);
+		static_assert(offsetof(scrVarGlob_t, childVariableValue) == 0xC5000);
 	}
 	using namespace scripting;
 

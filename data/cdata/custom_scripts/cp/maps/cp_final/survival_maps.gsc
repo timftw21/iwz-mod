@@ -9,7 +9,7 @@ main()
     precacheitem("iw7_venomx_zm_pap2+camo34");
     // Cargo supplies the rare Venom roll directly; do not let the later stock
     // quest-gated branch replace it with an unupgraded Venom-X.
-    replacefunc(scripts\cp\zombies\interaction_magicwheel::can_have_venomx, ::disallow_directors_cut);
+    replacefunc(scripts\cp\zombies\interaction_magicwheel::can_have_venomx, ::disallow_venomx);
     // The small cargo zone supplies Subway Shuffle's complete PaP image FX
     // and model, referencing materials and geometry already present in Beast.
     // The ordinary portal points at the theater and must not own these visuals.
@@ -30,9 +30,10 @@ main()
     // handlers own the head model, console state, power flags and area events.
     replacefunc(scripts\cp\maps\cp_final\cp_final_mpq::retrieveneilshead, ::retrieveneilshead);
     replacefunc(scripts\cp\maps\cp_final\cp_final_mpq::placeneilshead, ::placeneilshead);
-    replacefunc(scripts\cp\zombies\directors_cut::allow_directors_cut, ::disallow_directors_cut);
+    replacefunc(scripts\cp\zombies\directors_cut::start_directors_cut,
+        custom_scripts\cp\survival_perks::start_survival_directors_cut);
     survival_log("hooks installed map=cp_final wheel=cargo portal=PaP return=cargo " +
-        "power=stock-neil-sequence firstScene=generic-zombies directorsCut=disabled");
+        "power=stock-neil-sequence firstScene=generic-zombies directorsCut=player-benefits");
 }
 
 post_load()
@@ -77,7 +78,7 @@ survival_log(message)
     custom_scripts\cp\gsc_diagnostics::emit("CargoChaos", message);
 }
 
-disallow_directors_cut()
+disallow_venomx()
 {
     return 0;
 }

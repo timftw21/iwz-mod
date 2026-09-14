@@ -65,6 +65,14 @@ if MenuBuilder.m_types["inventoryNagWidget"] ~= nil then
 		self.id = "inventoryNagWidget"
 		self._animationSets = {}
 		self._sequences = {}
+		if Engine.GetDvarBool("iwz_survival_mode") then
+			-- Arcade Attack uses this same map/HUD, but has no inventory nag.
+			if not loggedInventoryNagLayout then
+				print("[IWZ][SpacelandFixes] suppressed inventory nag for Arcade Attack")
+				loggedInventoryNagLayout = true
+			end
+			return self
+		end
 		local controllerIndex = controller and controller.controllerIndex
 
 		if not controllerIndex and not Engine.InFrontend() then
@@ -219,12 +227,21 @@ if type(originalArcadeHelper) == "function" then
 	MenuBuilder.m_types["arcadeHelper"] = function(menu, controller)
 		-- The recovered stock constructor already owns the animation sequences,
 		-- data-source subscription, and localization refresh. Preserve all of it
-		-- and only enlarge the one-line 884..902 box that receives a three-line
-		-- localized cycle-mode string.
+		-- and keep the cycle hint within the existing arcade helper layout.
 		local self = originalArcadeHelper(menu, controller)
 		local hintModes = self and self.hintModes
 
 		if hintModes then
+			local controllerIndex = controller and controller.controllerIndex or self:getRootController()
+			local originalSetText = hintModes.setText
+			hintModes.setText = function(element, text, ...)
+				-- The native API's third argument limits output to the first bound
+				-- key. Keep rebinding/device changes working without splitting names.
+				local firstBinding = Engine.GetKeyBindingLocalizedString(controllerIndex, "+weapnext", true)
+				return originalSetText(element, "^3" .. firstBinding .. "^7 " ..
+					Engine.Localize("COOP_INTERACTIONS_ARCADE_HELPER_CYCLE_MODE"), ...)
+			end
+			hintModes:setText(nil, 0)
 			-- UIText scales glyphs to its vertical control height. Keep the control
 			-- at 16 pixels and move it upward; a 48-pixel control makes every line
 			-- 48 pixels tall instead of reserving room for three 16-pixel lines.
@@ -233,7 +250,7 @@ if type(originalArcadeHelper) == "function" then
 				_1080p * 1325.2, _1080p * 1474.7, _1080p * 864, _1080p * 880)
 
 			if not loggedArcadeHelperLayout then
-				print("[IWZ][SpacelandFixes] patched stock Activision HUD cycle hint font=16 controlHeight=16 bounds=1325.2..1474.7,864..880")
+				print("[IWZ][SpacelandFixes] patched stock Activision HUD cycle hint firstBindingOnly=1 action='Cycle modes' refresh=stock font=16 controlHeight=16 bounds=1325.2..1474.7,864..880")
 				loggedArcadeHelperLayout = true
 			end
 		elseif not loggedArcadeHelperMissing then

@@ -12,6 +12,9 @@ namespace custom_music
 	bool play(int index);
 	bool resume();
 	bool is_playing();
+	struct dj_track_info { int sequence; std::string title; };
+	dj_track_info get_dj_track();
+	void fade_out();
 	bool claim(const std::string& reason);
 	void release(const std::string& reason);
 	bool is_claimed();

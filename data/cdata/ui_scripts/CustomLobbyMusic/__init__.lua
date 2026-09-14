@@ -24,12 +24,14 @@ if MenuBuilder.m_types["CPPrivateMatchMenu"] == nil then
 end
 
 local customSelectionSource = LUI.DataSourceInGlobalModel.new(
-	LOBBY_MUSIC_SELECTION_MODEL .. ".customSelected",
-	custommusic.selectedname() ~= "" and 1 or 0
+	LOBBY_MUSIC_SELECTION_MODEL .. ".revision", 0
 )
 
 local function publishCustomSelection(controllerIndex, selected, reason)
-	DataModel.SetModelValue(customSelectionSource:GetModel(controllerIndex), selected and 1 or 0)
+	-- A boolean does not notify when changing between two stock songs (or when
+	-- the native player resumed a saved custom song without publishing here).
+	local revision = customSelectionSource:GetValue(controllerIndex) or 0
+	DataModel.SetModelValue(customSelectionSource:GetModel(controllerIndex), revision + 1)
 	log("lobby selection model updated customSelected=" .. tostring(selected) .. " reason=" .. reason)
 end
 
@@ -60,12 +62,20 @@ end
 -- Some frontend menus start music through the LUI API instead of
 -- SND_SetMusicState. Keep a single owner throughout the lobby session, including
 -- its film, Barracks, and Loadout sections. Only zm_main ends that session.
+local originalStopMusic = Engine.StopMusic
+local musicStopGeneration = 0
+Engine.StopMusic = function(...)
+	musicStopGeneration = musicStopGeneration + 1
+	custommusic.fadeout()
+	return originalStopMusic(...)
+end
+
 local originalPlayMusic = Engine.PlayMusic
 Engine.PlayMusic = function(...)
 	if custommusic.isclaimed() then
 		if custommusic.islobbysession() then
 			log("suppressed stock Engine.PlayMusic request while custom player owns the Zombies lobby session")
-			Engine.StopMusic()
+			originalStopMusic()
 			return
 		end
 
@@ -97,9 +107,14 @@ local function stopStockMusicThen(callback)
 
 	log("custom ownership claimed notification=music_changed value=0")
 	Engine.NotifyServer("music_changed", 0)
-	Engine.StopMusic()
+	local stopGeneration = musicStopGeneration
+	originalStopMusic()
 	scheduler.once(function()
-		Engine.StopMusic()
+		if stopGeneration ~= musicStopGeneration or not custommusic.isclaimed() then
+			log("pending custom playback cancelled by stock music stop")
+			return
+		end
+		originalStopMusic()
 		log("stock shuffle stopped; transferring ownership to custom player")
 		callback()
 	end, 100)
@@ -160,6 +175,7 @@ local function setSelectedTrackLabels(tracks, selectedIndex, controllerIndex)
 end
 
 local function populateTracks(menu, controllerIndex, focusFirst)
+	menu.PlayRequestToken = menu.PlayRequestToken + 1
 	WipeGlobalModelsAtPath(CUSTOM_MUSIC_MODEL)
 	local trackCount = custommusic.rescan()
 	local selectedName = custommusic.selectedname()
@@ -518,17 +534,9 @@ local stockSongLocalizationKeys = {
 }
 
 local function getStockLobbyMusicIndex(controllerIndex)
-	local selectedIndex = DataSources.frontEnd.CP.songs.lobbyMusicIndex:GetValue(controllerIndex)
-	if selectedIndex == nil then
-		selectedIndex = Engine.GetPlayerDataEx(
-			controllerIndex,
-			CoD.StatsGroup.Coop,
-			"zombiePlayerLoadout",
-			"lobbySong"
-		)
-	end
-
-	return tonumber(selectedIndex)
+	-- SetZombiesLobbyMusic writes player data, not the cached songs model.
+	return tonumber(Engine.GetPlayerDataEx(controllerIndex, CoD.StatsGroup.Coop,
+		"zombiePlayerLoadout", "lobbySong"))
 end
 
 local function updateLobbyMusicSelectionLabels(songButtons, controllerIndex)
@@ -607,14 +615,14 @@ MenuBuilder.m_types["CPLobbyMusicMenu"] = function(menu, controller)
 end
 
 local originalSetZombiesLobbyMusic = ACTIONS.SetZombiesLobbyMusic
-ACTIONS.SetZombiesLobbyMusic = function(...)
+ACTIONS.SetZombiesLobbyMusic = function(element, songIndex, controllerIndex)
 	if custommusic.isplaying() or custommusic.selectedname() ~= "" then
 		custommusic.clear()
 		log("stock lobby music selected; custom playback stopped and selection cleared")
 	end
 
-	local result = originalSetZombiesLobbyMusic(...)
-	publishCustomSelection(Engine.GetFirstActiveController(), false, "stock lobby music selected")
+	local result = originalSetZombiesLobbyMusic(element, songIndex, controllerIndex)
+	publishCustomSelection(controllerIndex, false, "stock lobby music selected index=" .. tostring(songIndex))
 	return result
 end
 
@@ -630,14 +638,15 @@ MenuBuilder.m_types["CPPrivateMatchMenu"] = function(menu, controller)
 	local resumeToken = lobbyResumeToken
 
 	self:addEventHandler("menu_create", function()
+		local stopGeneration = musicStopGeneration
 		custommusic.setscene("zm_lobby")
 		if custommusic.isplaying() then
 			-- Rebuilding the lobby can recreate a stock voice without issuing a new
 			-- music-state call. Enforce custom ownership on the restored surface.
-			Engine.StopMusic()
+			originalStopMusic()
 			scheduler.once(function()
 				if custommusic.isplaying() and custommusic.islobbysession() then
-					Engine.StopMusic()
+					originalStopMusic()
 					log("pre-game lobby stock playback silenced after delayed surface restore")
 				end
 			end, 100)
@@ -652,7 +661,8 @@ MenuBuilder.m_types["CPPrivateMatchMenu"] = function(menu, controller)
 		end
 
 		scheduler.once(function()
-			if resumeToken ~= lobbyResumeToken or custommusic.isplaying() or custommusic.selectedname() == "" then
+			if resumeToken ~= lobbyResumeToken or stopGeneration ~= musicStopGeneration or
+				custommusic.isplaying() or custommusic.selectedname() == "" then
 				return
 			end
 
@@ -665,6 +675,7 @@ MenuBuilder.m_types["CPPrivateMatchMenu"] = function(menu, controller)
 				end
 
 				if custommusic.resume() then
+					publishCustomSelection(controllerIndex, true, "persisted custom track resumed")
 					log("persisted custom selection resumed in pre-game lobby name=" .. custommusic.selectedname())
 				else
 					restoreStockMusic("persisted custom track failed to resume")

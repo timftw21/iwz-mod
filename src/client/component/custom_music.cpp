@@ -1,5 +1,24 @@
 #include <std_include.hpp>
 
+#include "loader/component_loader.hpp"
+
+#include "custom_music.hpp"
+#include "custom_music_pa.hpp"
+#include "command.hpp"
+#include "console/console.hpp"
+#include "scheduler.hpp"
+#include "scripting.hpp"
+#include "gsc/script_extension.hpp"
+
+#include "game/game.hpp"
+
+#include <utils/hook.hpp>
+#include <utils/nt.hpp>
+
+#include <charconv>
+#include <cwctype>
+
+// Keep implementation-only decoder macros out of the project's headers.
 #pragma warning(disable: 4701) // stb_vorbis false positive emitted during LTCG.
 #pragma warning(push, 0)
 #define STB_VORBIS_HEADER_ONLY
@@ -10,21 +29,6 @@
 #include <extras/decoders/libopus/miniaudio_libopus.h>
 #include <stb_vorbis.c>
 #pragma warning(pop)
-
-#include "loader/component_loader.hpp"
-
-#include "custom_music.hpp"
-#include "command.hpp"
-#include "console/console.hpp"
-#include "scheduler.hpp"
-
-#include "game/game.hpp"
-
-#include <utils/hook.hpp>
-#include <utils/nt.hpp>
-
-#include <charconv>
-#include <cwctype>
 
 namespace custom_music
 {
@@ -53,12 +57,25 @@ namespace custom_music
 		bool engine_initialized{};
 		bool sound_initialized{};
 		bool decoder_initialized{};
+		bool fade_out_pending{};
+		bool dj_playback{};
+		bool dj_native_available{};
+		std::shared_ptr<pa::track> dj_audio;
+		std::vector<int> dj_queue;
+		std::unordered_set<std::string> dj_failed_files;
+		std::string last_dj_file;
+		std::string dj_title;
+		int dj_sequence{};
+		std::mt19937 dj_random{std::random_device{}()};
+		game::dvar_t* dj_custom_only_dvar{};
+		game::dvar_t* dj_request_dvar{};
 		game::dvar_t* selected_track_dvar{};
 		game::dvar_t* custom_volume_dvar{};
 		game::dvar_t* ownership_dvar{};
 		game::dvar_t* lobby_session_dvar{};
 		game::dvar_t* frontend_monitor_dvar{};
 		game::dvar_t* master_volume_dvar{};
+		game::dvar_t* music_volume_dvar{};
 		game::dvar_t* playlist_volume_dvar{};
 		bool volume_sources_logged{};
 		float applied_volume{-1.0f};
@@ -164,6 +181,8 @@ namespace custom_music
 		{
 			ensure_folder_exists();
 			tracks.clear();
+			dj_queue.clear();
+			dj_failed_files.clear();
 
 			const auto folder = get_folder_path();
 			std::error_code error;
@@ -275,7 +294,11 @@ namespace custom_music
 
 		void stop_locked(const char* reason)
 		{
-			const auto had_playback_state = sound_initialized || decoder_initialized;
+			const auto had_playback_state = dj_audio || sound_initialized || decoder_initialized;
+			if (dj_audio) pa::retire(std::move(dj_audio));
+			fade_out_pending = false;
+			dj_playback = false;
+			dj_title.clear();
 			if (sound_initialized)
 			{
 				ma_sound_stop(&sound);
@@ -305,6 +328,10 @@ namespace custom_music
 			}
 
 			std::lock_guard lock(mutex);
+			if (dj_playback)
+			{
+				return;
+			}
 			if (!sound_initialized && !decoder_initialized)
 			{
 				return;
@@ -339,6 +366,56 @@ namespace custom_music
 		}
 
 		void update_volume();
+
+		bool prepare_dj_locked(const track& item)
+		{
+			stop_locked("DJ track changed");
+			if (!dj_native_available) return false;
+			dj_audio = std::make_shared<pa::track>();
+			dj_playback = true;
+			dj_title = item.display_name;
+			const auto audio = dj_audio;
+			scheduler::once([audio, item]
+			{
+				// Decode on the background scheduler, in small blocks. The native
+				// PA player accepts FLAC frames; lobby playback keeps its own decoder.
+				ma_decoder source{};
+				ma_decoding_backend_vtable* backends[]{ma_decoding_backend_libopus};
+				auto config = ma_decoder_config_init(ma_format_s16, 2, 48000);
+				config.ppCustomBackendVTables = backends;
+				config.customBackendCount = 1;
+				bool opened{};
+				try
+				{
+					if (audio->cancelled) return;
+					const auto result = ma_decoder_init_vfs_w(nullptr, item.path.c_str(), &config, &source);
+					if (result != MA_SUCCESS) throw std::runtime_error(ma_result_description(result));
+					opened = true;
+					std::array<std::int16_t, 2048> samples{};
+					while (!audio->cancelled)
+					{
+						ma_uint64 count{};
+						const auto read = ma_decoder_read_pcm_frames(&source, samples.data(), 1024, &count);
+						if (read != MA_SUCCESS && read != MA_AT_END)
+							throw std::runtime_error(ma_result_description(read));
+						if (count) pa::append_pcm(*audio, samples.data(), static_cast<unsigned int>(count));
+						if (count < 1024 || read == MA_AT_END) break;
+					}
+					if (!audio->cancelled && !audio->frame_count) throw std::runtime_error("empty audio file");
+				}
+				catch (const std::exception& error)
+				{
+					audio->failed = true;
+					console::error("[IWZ][CustomMusicDJ] native source preparation failed file='%s' error='%s'\n",
+						item.file_name.data(), error.what());
+				}
+				if (opened) ma_decoder_uninit(&source);
+				audio->ready = true;
+			}, scheduler::async);
+			set_claimed_locked(false, "Spaceland native PA playback");
+			console::info("[IWZ][CustomMusicDJ] preparing native PA source file='%s'\n", item.file_name.data());
+			return true;
+		}
 
 		bool play_locked(const track& item, const bool persist_selection)
 		{
@@ -391,7 +468,8 @@ namespace custom_music
 				return false;
 			}
 
-			set_claimed_locked(true, persist_selection ? "custom track selected" : "persisted custom track resumed");
+			set_claimed_locked(true,
+				persist_selection ? "custom track selected" : "persisted custom track resumed");
 
 			// cp_frontend.gsc stores the selected stock lobby song as a persistent
 			// sound state. Engine.StopMusic() only stops its current voice, allowing
@@ -405,34 +483,78 @@ namespace custom_music
 				set_selected_track_locked(item.file_name);
 			}
 
-			console::info("[IWZ][CustomMusic] playback started file='%s' format='%s' codec='%s' looping=1 persisted=%d\n",
+			console::info("[IWZ][CustomMusic] playback started file='%s' format='%s' codec='%s' context=lobby looping=1 persisted=%d\n",
 				item.file_name.data(), item.extension.data(), codec.data(), persist_selection ? 1 : 0);
 			return true;
+		}
+
+		bool is_spaceland_host()
+		{
+			const auto* map = game::Dvar_FindVar("mapname");
+			return !game::environment::is_dedi() && !game::Com_FrontEnd_IsInFrontEnd() &&
+				game::SV_Loaded() && game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_CP &&
+				map && map->current.string && !_stricmp(map->current.string, "cp_zmb");
+		}
+
+		void stop_dj(const char* reason)
+		{
+			std::lock_guard lock(mutex);
+			if (dj_playback)
+			{
+				stop_locked(reason);
+			}
+		}
+
+		std::string play_next_dj_track()
+		{
+			std::lock_guard lock(mutex);
+			if (!initialized || shutdown_started || !is_spaceland_host() || tracks.empty())
+			{
+				return {};
+			}
+
+			if (dj_queue.empty())
+			{
+				dj_queue.resize(tracks.size());
+				std::iota(dj_queue.begin(), dj_queue.end(), 0);
+				std::shuffle(dj_queue.begin(), dj_queue.end(), dj_random);
+				if (dj_queue.size() > 1 && tracks[dj_queue.back()].file_name == last_dj_file)
+				{
+					std::swap(dj_queue.front(), dj_queue.back());
+				}
+			}
+
+			while (!dj_queue.empty())
+			{
+				const auto index = dj_queue.back();
+				dj_queue.pop_back();
+				if (dj_failed_files.contains(tracks[index].file_name)) continue;
+				if (prepare_dj_locked(tracks[index]))
+				{
+					last_dj_file = tracks[index].file_name;
+					dj_title = tracks[index].display_name;
+					console::info("[IWZ][CustomMusicDJ] selected file='%s' remaining=%zu customOnly=%d\n",
+						last_dj_file.data(), dj_queue.size(), dj_custom_only_dvar->current.enabled);
+					return tracks[index].display_name;
+				}
+			}
+
+			console::warn("[IWZ][CustomMusicDJ] no playable tracks remain; returning to stock rotation\n");
+			game::Dvar_SetBool(dj_custom_only_dvar, false);
+			return {};
 		}
 
 		float normalized_dvar_value(const game::dvar_t* dvar)
 		{
 			if (!dvar)
 			{
-				return 1.0f;
+				return 0.0f;
 			}
 
-			float value = 1.0f;
-			if (dvar->type == game::DVAR_TYPE_FLOAT)
-			{
-				value = dvar->current.value;
-			}
-			else if (dvar->type == game::DVAR_TYPE_INT)
-			{
-				value = static_cast<float>(dvar->current.integer);
-			}
-
-			if (value > 1.0f)
-			{
-				value /= 100.0f;
-			}
-
-			return std::clamp(value, 0.0f, 1.0f);
+			// These sound dvars are floats registered with a 0..1 range. Guessing
+			// percentage units made values just above 1 unexpectedly almost silent.
+			return dvar->type == game::DVAR_TYPE_FLOAT && std::isfinite(dvar->current.value)
+				? std::clamp(dvar->current.value, 0.0f, 1.0f) : 0.0f;
 		}
 
 		void update_volume()
@@ -445,46 +567,91 @@ namespace custom_music
 
 			if (!master_volume_dvar)
 			{
-				master_volume_dvar = game::Dvar_FindVar("profileMenuOption_volume");
+				master_volume_dvar = game::Dvar_FindVar("snd_volume");
+			}
+			if (!music_volume_dvar)
+			{
+				music_volume_dvar = game::Dvar_FindVar("snd_music_volume");
 			}
 			if (!playlist_volume_dvar)
 			{
-				playlist_volume_dvar = game::Dvar_FindVar("profileMenuOption_licensedMusicVolume");
+				playlist_volume_dvar = game::Dvar_FindVar("snd_licensed_content_volume");
 			}
 
 			if (!volume_sources_logged)
 			{
-				console::info("[IWZ][CustomMusic] volume integration masterDvar=%s playlistDvar=%s customDvar=%s\n",
-					master_volume_dvar ? "found" : "missing", playlist_volume_dvar ? "found" : "missing",
+				console::info("[IWZ][CustomMusic] volume integration source=engine-sound-dvars masterDvar=%s "
+					"musicDvar=%s playlistDvar=%s customDvar=%s missingSourcePolicy=mute\n",
+					master_volume_dvar ? "found" : "missing", music_volume_dvar ? "found" : "missing",
+					playlist_volume_dvar ? "found" : "missing",
 					custom_volume_dvar ? "found" : "missing");
 				volume_sources_logged = true;
 			}
 
 			const auto master_volume = normalized_dvar_value(master_volume_dvar);
+			const auto music_volume = normalized_dvar_value(music_volume_dvar);
 			const auto playlist_volume = normalized_dvar_value(playlist_volume_dvar);
 			const auto custom_volume = normalized_dvar_value(custom_volume_dvar);
-			const auto volume = master_volume * playlist_volume * custom_volume;
-			if (std::abs(volume - applied_volume) < 0.001f)
+			// SND's licensed-music branch (0x140C8EB86) multiplies Music and
+			// Licensed Content; master volume is applied separately by the mixer.
+			const auto volume = master_volume * music_volume * playlist_volume * custom_volume;
+			if (volume == applied_volume)
 			{
 				return;
 			}
 
 			ma_engine_set_volume(&engine, volume);
 			applied_volume = volume;
-			console::info("[IWZ][CustomMusic] volume applied value=%.3f master=%.3f playlist=%.3f custom=%.3f\n",
-				volume, master_volume, playlist_volume, custom_volume);
+			console::info("[IWZ][CustomMusic] volume applied value=%.6f master=%.3f music=%.3f playlist=%.3f custom=%.3f\n",
+				volume, master_volume, music_volume, playlist_volume, custom_volume);
 		}
 
-		void frontend_watcher()
+		void playback_watcher()
 		{
+			// GSC starts DJ tracks on the server thread. Keep the context check
+			// and frontend cleanup atomic so cleanup cannot stop a new DJ track.
+			std::lock_guard lock(mutex);
+			pa::collect();
 			if (shutdown_started)
 			{
 				return;
 			}
 
+			{
+				if (dj_playback)
+				{
+					if (!is_spaceland_host())
+					{
+						stop_locked("left hosted Spaceland match");
+					}
+					else
+					{
+						if (dj_audio && dj_audio->ready)
+						{
+							const auto volume = normalized_dvar_value(custom_volume_dvar);
+							if (!dj_audio->playback_id)
+							{
+								if (dj_audio->failed || !pa::play(*dj_audio, volume))
+								{
+									console::warn("[IWZ][CustomMusicDJ] native playback unavailable; trying next track\n");
+									dj_failed_files.insert(last_dj_file);
+									stop_locked("native DJ source failed");
+									if (!dj_queue.empty()) play_next_dj_track();
+									else game::Dvar_SetBool(dj_custom_only_dvar, false);
+									return;
+								}
+								dj_sequence = dj_sequence == INT_MAX ? 1 : dj_sequence + 1;
+							}
+							if (!pa::is_playing(*dj_audio)) stop_locked("native DJ track ended");
+							else pa::set_volume(*dj_audio, volume);
+						}
+						return;
+					}
+				}
+			}
+
 			if (!game::Com_FrontEnd_IsInFrontEnd())
 			{
-				std::lock_guard lock(mutex);
 				stop_locked("left frontend");
 				set_claimed_locked(false, "left frontend");
 				if (lobby_session_dvar)
@@ -500,7 +667,11 @@ namespace custom_music
 			}
 
 			{
-				std::lock_guard lock(mutex);
+				if (fade_out_pending && sound_initialized && !ma_sound_is_playing(&sound))
+				{
+					stop_locked("stock music fade completed");
+					set_claimed_locked(false, "stock music fade completed");
+				}
 				const auto monitor_ready = frontend_monitor_dvar && frontend_monitor_dvar->current.enabled;
 				const auto lobby_session_active = is_lobby_session_active_locked();
 				if (!lifecycle_snapshot_initialized || monitor_ready != last_monitor_ready ||
@@ -538,6 +709,7 @@ namespace custom_music
 			shutdown_started = true;
 			bootstrap_log("shutdown entered");
 			stop_locked("client shutdown");
+			pa::collect();
 			if (ownership_dvar)
 			{
 				game::Dvar_SetBool(ownership_dvar, false);
@@ -576,6 +748,10 @@ namespace custom_music
 			game::Dvar_SetBool(lobby_session_dvar, false);
 			game::Dvar_SetBool(frontend_monitor_dvar, false);
 			bootstrap_log("frontend lifecycle dvars registered");
+			dj_custom_only_dvar = game::Dvar_RegisterBool("iwz_dj_custom_only", false, game::DVAR_FLAG_NONE,
+				"Restrict the Spaceland DJ to the host's custom music for this client session");
+			dj_request_dvar = game::Dvar_RegisterInt("iwz_dj_request", 0, 0, INT_MAX, game::DVAR_FLAG_NONE,
+				"Spaceland DJ playlist refresh request");
 
 			ensure_folder_exists();
 			scan_locked();
@@ -620,7 +796,29 @@ namespace custom_music
 				stop(true, "console command");
 			});
 
-			scheduler::loop(frontend_watcher, scheduler::main, 250ms);
+			command::add("djcustommusic", [](const command::params& params)
+			{
+				if (params.size() > 2 || (params.size() == 2 && std::strcmp(params[1], "0") && std::strcmp(params[1], "1")))
+				{
+					console::info("usage: djcustommusic [1=custom only, 0=mixed stock/custom]\n");
+					return;
+				}
+				const auto custom_only = params.size() == 1 || !std::strcmp(params[1], "1");
+				std::lock_guard lock(mutex);
+				if (custom_only && scan_locked() == 0)
+				{
+					console::warn("[IWZ][CustomMusicDJ] no tracks found in iw7-mod/custom_music; mode unchanged\n");
+					return;
+				}
+				game::Dvar_SetBool(dj_custom_only_dvar, custom_only);
+				game::Dvar_SetInt(dj_request_dvar, dj_request_dvar->current.integer == INT_MAX ? 0 :
+					dj_request_dvar->current.integer + 1);
+				console::info("[IWZ][CustomMusicDJ] mode=%s tracks=%zu %s\n",
+					custom_only ? "custom-only" : "mixed", tracks.size(),
+					is_spaceland_host() ? "requesting next DJ song" : "takes effect in your next hosted Spaceland match");
+			});
+
+			scheduler::loop(playback_watcher, scheduler::main, 50ms);
 			initialized = true;
 			bootstrap_log("deferred initialization completed");
 		}
@@ -698,6 +896,11 @@ namespace custom_music
 	bool play(const int index)
 	{
 		std::lock_guard lock(mutex);
+		if (!game::Com_FrontEnd_IsInFrontEnd())
+		{
+			console::warn("[IWZ][CustomMusic] lobby play rejected outside frontend; use djcustommusic in Spaceland\n");
+			return false;
+		}
 		if (index < 0 || static_cast<std::size_t>(index) >= tracks.size())
 		{
 			console::error("[IWZ][CustomMusic] play rejected index=%d count=%zu\n", index, tracks.size());
@@ -735,6 +938,36 @@ namespace custom_music
 	{
 		std::lock_guard lock(mutex);
 		return sound_initialized && ma_sound_is_playing(&sound) == MA_TRUE;
+	}
+
+	dj_track_info get_dj_track()
+	{
+		std::lock_guard lock(mutex);
+		return dj_playback && dj_audio && dj_audio->playback_id
+			? dj_track_info{dj_sequence, dj_title} : dj_track_info{};
+	}
+
+	void fade_out()
+	{
+		std::lock_guard lock(mutex);
+		if (shutdown_started || fade_out_pending)
+		{
+			return;
+		}
+		if (!sound_initialized)
+		{
+			set_claimed_locked(false, "stock music stop cancelled pending playback");
+			return;
+		}
+
+		// AliensPlayIntroVideo stops music before the overlay's 1000 ms fade
+		// to black. Schedule on the audio clock so loading cannot delay silence.
+		constexpr ma_uint64 fade_ms = 1000;
+		ma_sound_set_stop_time_with_fade_in_milliseconds(&sound,
+			ma_engine_get_time_in_milliseconds(&engine) + fade_ms, fade_ms);
+		fade_out_pending = true;
+		console::info("[IWZ][CustomMusic] fade started reason='stock Engine.StopMusic' durationMs=%llu "
+			"selectionPreserved=1\n", static_cast<unsigned long long>(fade_ms));
 	}
 
 	bool claim(const std::string& reason)
@@ -844,11 +1077,41 @@ namespace custom_music
 	public:
 		void post_unpack() override
 		{
+			gsc::function::add("iwz_dj_rescan", [](const gsc::function_args&)
+			{
+				return game::environment::is_dedi() ? 0 : rescan();
+			});
+			gsc::function::add("iwz_dj_count", [](const gsc::function_args&)
+			{
+				std::lock_guard lock(mutex);
+				return dj_native_available && is_spaceland_host()
+					? static_cast<int>(std::count_if(tracks.begin(), tracks.end(), [](const track& item)
+						{ return !dj_failed_files.contains(item.file_name); })) : 0;
+			});
+			gsc::function::add("iwz_dj_play", [](const gsc::function_args&)
+			{
+				return play_next_dj_track();
+			});
+			gsc::function::add("iwz_dj_playing", [](const gsc::function_args&)
+			{
+				std::lock_guard lock(mutex);
+				return dj_playback;
+			});
+			gsc::function::add("iwz_dj_stop", [](const gsc::function_args&)
+			{
+				stop_dj("DJ song ended or interrupted");
+				return scripting::script_value{};
+			});
+			scripting::on_shutdown([](bool, const bool post_shutdown)
+			{
+				if (!post_shutdown) stop_dj("server shutdown");
+			});
 			if (game::environment::is_dedi())
 			{
 				return;
 			}
 
+			dj_native_available = pa::initialize();
 			snd_set_music_state_hook.create(game::SND_SetMusicState, snd_set_music_state_stub);
 			bootstrap_log("stock music lifecycle hook installed");
 			bootstrap_log("post_unpack entered; deferring engine registration");

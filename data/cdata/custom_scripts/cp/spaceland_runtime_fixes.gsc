@@ -19,6 +19,12 @@ main()
 
     if (getdvar("ui_mapname") == "cp_zmb")
     {
+        replacefunc(scripts\cp\zombies\interaction_racing::_id_DBB6,
+            ::zombie_zoom_player_gets_too_far_away);
+        replacefunc(scripts\cp\zombies\interaction_racing::_id_E219,
+            ::zombie_zoom_exit);
+        spaceland_log("installed Zombie Zoom exit fix distanceGrace=0.5s callbackDelay=0s stock=1s+3s");
+
         seticom_damage_monitor = getfunction(
             "scripts/cp/maps/cp_zmb/cp_zmb_dj", "damage_monitor");
         seticom_unlock_monitor = getfunction(
@@ -55,6 +61,55 @@ post_load()
 spaceland_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("Spaceland", message);
+}
+
+zombie_zoom_exit(machine, player)
+{
+    player setclientomnvar("zombie_arcade_game_time", -1);
+    player setclientomnvar("zombie_zz_widget", 0);
+    // Stock _id_E219 waits three seconds here. Its callers cannot restore the
+    // player's weapon or finish cancellation until this callback returns.
+    if (!player scripts\cp\utility::areinteractionsenabled())
+        player scripts\cp\utility::allow_player_interactions(1);
+}
+
+zombie_zoom_player_gets_too_far_away(player, machine, game_weapon, exit_callback, unused)
+{
+    player endon("arcade_game_over_for_player");
+    player endon("last_stand");
+    player endon("disconnect");
+    player endon("spawned");
+    level endon("game_ended");
+    distance_squared = 576;
+
+    for (;;)
+    {
+        wait(0.1);
+        if (distancesquared(player.origin, machine.origin) <= distance_squared)
+            continue;
+
+        player playlocalsound("purchase_deny");
+        // Match arcade_game_utility's grace period, retaining Zombie Zoom's
+        // own exit distance and race-wide machine/reward lifecycle.
+        wait(0.5);
+        if (distancesquared(player.origin, machine.origin) <= distance_squared)
+            continue;
+
+        restore_started = gettime();
+        if (isdefined(game_weapon))
+            player takeweapon(game_weapon);
+        [[ exit_callback ]](machine, player);
+        machine.active_player = undefined;
+        player scripts\engine\utility::allow_weapon_switch(1);
+        if (!player scripts\engine\utility::isusabilityallowed())
+            player scripts\engine\utility::allow_usability(1);
+        player scripts\cp\zombies\arcade_game_utility::give_player_back_weapon(player);
+        player scripts\cp\zombies\arcade_game_utility::restore_player_grenades_post_game();
+        spaceland_log("Zombie Zoom walk-away weapon restore requested player=" +
+            player getentitynumber() + " cleanupMs=" + (gettime() - restore_started));
+        player notify("too_far_from_game");
+        player notify("arcade_game_over_for_player");
+    }
 }
 
 seticom_damage_monitor_stub(seticom, damage_clip)
@@ -475,9 +530,11 @@ save_player_pre_arcade_weapon_stub(player)
     return player getcurrentweapon();
 }
 
-enable_arcade_targeting_protection(source)
+enable_arcade_targeting_protection(source, rave_knife_game)
 {
-    if (!isdefined(level.script) || level.script != "cp_zmb" ||
+    if (!isdefined(level.script) ||
+        (level.script != "cp_zmb" && !(level.script == "cp_rave" &&
+            scripts\engine\utility::is_true(rave_knife_game))) ||
         !isdefined(self) || !isplayer(self) ||
         scripts\engine\utility::is_true(self.in_afterlife_arcade))
     {

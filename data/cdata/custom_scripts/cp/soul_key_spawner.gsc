@@ -46,6 +46,19 @@ spawn_film_soul_key(player, requested_key_index, model_name, vertical_lift)
         return;
     }
 
+    // Attack and Beast's delay_give_rewards grant keys 4/5 without a pickup.
+    // Match that progression path without needing an absent model or running
+    // the unrelated boss-completion sequence.
+    if (film_key_index == 4 || film_key_index == 5)
+    {
+        scripts\cp\zombies\directors_cut::give_dc_player_extra_xp_for_carrying_newb();
+        award_film_soul_key(film_key_index);
+        soul_key_log("spawnSoulKey completed mode=direct-award key=" + film_key_index +
+            " player=" + player getentitynumber() + " recipients=" + level.players.size);
+        player iprintlnbold(get_film_name(film_key_index) + " Soul Key collected");
+        return;
+    }
+
     if (!isdefined(model_name) || model_name == "")
     {
         soul_key_log("spawnSoulKey rejected player=" +

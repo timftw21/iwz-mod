@@ -541,6 +541,26 @@ namespace command
 				return;
 			}
 
+			// Attack and Beast award their keys directly, without pickup models.
+			if (definition->key_index == 4 || definition->key_index == 5)
+			{
+				try
+				{
+					const scripting::entity player{{static_cast<uint16_t>(client_num), 0}};
+					const scripting::entity level{*game::levelEntityId};
+					scripting::notify(level, "iwz_spawn_soul_key", {player, definition->key_index});
+					console::info("[IWZ][SoulKey] spawnSoulKey dispatched client=%d map=%s key=%d mode=direct-award\n",
+						client_num, definition->map, definition->key_index);
+				}
+				catch (const std::exception& e)
+				{
+					console::error("[IWZ][SoulKey] award dispatch failed client=%d map=%s key=%d error=%s\n",
+						client_num, definition->map, definition->key_index, e.what());
+					game::shared::client_println(client_num, "Unable to grant this film's Soul Key");
+				}
+				return;
+			}
+
 			const auto base_exists = game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, "zmb_soul_key_base");
 			const auto single_exists = game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, "zmb_soul_key_single");
 			const auto tag_exists = game::DB_XAssetExists(game::ASSET_TYPE_XMODEL, "tag_origin_soul_key");
@@ -1104,6 +1124,76 @@ namespace command
 				cmd_give(client_num, params.get_all());
 			});
 
+			add_sv("giveTickets", [](const int client_num, const params_sv& params)
+			{
+				if (!game::shared::cheats_ok(client_num, true)) return;
+				const auto reject = [client_num](const std::string& reason)
+				{
+					console::warn("[IWZ][Tickets] giveTickets rejected client=%d reason=%s\n", client_num, reason.c_str());
+					game::shared::client_println(client_num, reason);
+				};
+				if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP || game::Com_FrontEnd_IsInFrontEnd())
+				{
+					reject("Use giveTickets in a Zombies match");
+					return;
+				}
+				if (params.size() != 2)
+				{
+					reject("Usage: giveTickets <amount>");
+					return;
+				}
+				// Both ticket HUD omnvars are bounded to one billion in cp/omnvars.csv.
+				constexpr int max_tickets = 1000000000;
+				const std::string_view text{params[1]};
+				int amount = 0;
+				const auto parsed = std::from_chars(text.data(), text.data() + text.size(), amount);
+				if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || amount < 1 || amount > max_tickets)
+				{
+					reject("Ticket amount must be a whole number from 1 to 1000000000");
+					return;
+				}
+				try
+				{
+					const scripting::entity player{game::scr_entref_t{static_cast<uint16_t>(client_num), 0}};
+					const scripting::entity level{*game::levelEntityId};
+					const auto balance = player.get("num_tickets");
+					console::info("[IWZ][Tickets] giveTickets request client=%d amount=%d balanceType=%s\n",
+						client_num, amount, balance.type_name().c_str());
+					if (level.get("no_ticket_machine").get_raw().type != game::VAR_UNDEFINED ||
+						balance.get_raw().type == game::VAR_UNDEFINED)
+					{
+						reject("Tickets are not available for this player in the current match");
+						return;
+					}
+					const auto before = balance.as<int>();
+					if (before < 0 || before > max_tickets - amount)
+					{
+						reject("The ticket balance cannot exceed 1000000000");
+						return;
+					}
+					{
+						// The stock award function does not yield. Suppress its Double
+						// Money multiplier for this exact grant, then restore the powerup.
+						const auto double_money = player.get("double_money");
+						const auto restore = gsl::finally([&] { player.set("double_money", double_money); });
+						player.set("double_money", 0);
+						scripting::call_script_function(player, "scripts/cp/zombies/arcade_game_utility",
+							"give_player_tickets", {player, amount});
+					}
+					const auto after = player.get<int>("num_tickets");
+					console::info("[IWZ][Tickets] giveTickets client=%d requested=%d before=%d after=%d\n",
+						client_num, amount, before, after);
+					if (after != before + amount)
+						throw std::runtime_error("The ticket award did not produce the requested balance");
+					game::shared::client_println(client_num, std::format("Added {} tickets (total: {})", amount, after));
+				}
+				catch (const std::exception& error)
+				{
+					console::error("[IWZ][Tickets] giveTickets failed client=%d error=%s\n", client_num, error.what());
+					game::shared::client_println(client_num, "Unable to give tickets; see console log");
+				}
+			});
+
 			add_sv("maxweaponlevel", [](const int client_num, const params_sv&)
 			{
 				if (!game::shared::cheats_ok(client_num, true))
@@ -1269,6 +1359,82 @@ namespace command
 				}
 
 				cmd_test_alien_kill(client_num);
+			});
+
+			add_sv("testSkull5", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+					return;
+				const auto* map = game::Dvar_FindVar("ui_mapname");
+				if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP ||
+					!map || !map->current.string || _stricmp(map->current.string, "cp_zmb") != 0)
+				{
+					console::warn("[IWZ][SpacelandSkull5] testSkull5 rejected: not in Spaceland\n");
+					game::shared::client_println(client_num, "This command is only available on Zombies in Spaceland");
+					return;
+				}
+				try
+				{
+					const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+					const scripting::entity level{*game::levelEntityId};
+					scripting::notify(level, "iwz_test_skull5", {player});
+					console::info("[IWZ][SpacelandSkull5] testSkull5 dispatched client=%d\n", client_num);
+				}
+				catch (const std::exception& e)
+				{
+					console::error("[IWZ][SpacelandSkull5] testSkull5 failed: %s\n", e.what());
+					game::shared::client_println(client_num, "Unable to prepare the fifth skull; see console log");
+				}
+			});
+
+			add_sv("testSkullhopRetry", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+					return;
+				const auto* map = game::Dvar_FindVar("ui_mapname");
+				if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP ||
+					!map || !map->current.string || _stricmp(map->current.string, "cp_town") != 0)
+				{
+					game::shared::client_println(client_num, "This command is only available on Attack of the Radioactive Thing");
+					return;
+				}
+				try
+				{
+					const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+					const scripting::entity level{*game::levelEntityId};
+					scripting::notify(level, "iwz_test_skullhop_retry", {player});
+					console::info("[IWZ][AttackFixes] testSkullhopRetry dispatched client=%d\n", client_num);
+				}
+				catch (const std::exception& e)
+				{
+					console::error("[IWZ][AttackFixes] testSkullhopRetry failed: %s\n", e.what());
+					game::shared::client_println(client_num, "Unable to prepare Skullhop; see console log");
+				}
+			});
+
+			add_sv("testVladCabinet", [](const int client_num, const params_sv&)
+			{
+				if (!game::shared::cheats_ok(client_num, true))
+					return;
+				const auto* map = game::Dvar_FindVar("ui_mapname");
+				if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP ||
+					!map || !map->current.string || _stricmp(map->current.string, "cp_rave") != 0)
+				{
+					game::shared::client_println(client_num, "This command is only available on Rave in the Redwoods");
+					return;
+				}
+				try
+				{
+					const auto player = scripting::entity({static_cast<uint16_t>(client_num), 0});
+					const scripting::entity level{*game::levelEntityId};
+					scripting::notify(level, "iwz_test_vlad_cabinet", {player});
+					console::info("[IWZ][RaveFixes] testVladCabinet dispatched client=%d\n", client_num);
+				}
+				catch (const std::exception& e)
+				{
+					console::error("[IWZ][RaveFixes] testVladCabinet failed: %s\n", e.what());
+					game::shared::client_println(client_num, "Unable to prepare the cabinet; see console log");
+				}
 			});
 
 			add_sv("spawnAlienFuses", [](const int client_num, const params_sv&)

@@ -44,7 +44,7 @@ patchBuilder("LevelInfo", function(self)
 	log("weapon level dial uses RankProgression geometry rings=130/120/144; border crops removed")
 end)
 
-local function addTitleStrip(self)
+local function addTitleStrip(self, controller)
 	-- WeaponDetails owns the loadout's CPStrip; CACItemHeader has no CP strip.
 	local header = self.CACItemHeader
 	local stripe = LUI.UIImage.new()
@@ -53,12 +53,22 @@ local function addTitleStrip(self)
 	stripe:SetAnchorsAndPosition(0, 1, 0, 1, 0, _1080p * 11, 0, _1080p * 100)
 	header:addElement(stripe)
 	header.CPStrip = stripe
-	log(self.id .. " title strip restored; matches WeaponDetails size")
+	-- Selection menus pass the highlighted item's data to this stock callback.
+	-- Its MP-only strip update never reaches our restored Zombies strip.
+	local updateRarity = header.UpdateRarityInfo
+	header.UpdateRarityInfo = function(element, item)
+		updateRarity(element, item)
+		local quality = item.quality:GetValue(controller) or Cac.LowestQuality
+		local color = Cac.GetLootQualityColor(quality)
+		stripe:SetRGBFromInt(color, 0)
+		element.Background:SetRGBFromInt(color, 0)
+	end
+	log(self.id .. " title strip restored; matches WeaponDetails size and selected item rarity")
 	return stripe
 end
 
 patchBuilder("PersonalizeWeapon", function(self, controller)
-	local stripe = addTitleStrip(self)
+	local stripe = addTitleStrip(self, controller)
 	stripe:SubscribeToModelThroughElement(self, "qualityColor", function()
 		local color = self:GetDataSource().qualityColor:GetValue(controller)
 		if color ~= nil then stripe:SetRGBFromInt(color, 0) end
@@ -76,15 +86,21 @@ patchBuilder("ShowcaseLock", function(self)
 end)
 
 local tileLockLogged = false
-patchBuilder("PersonalizeItem", function(self)
+patchBuilder("PersonalizeItem", function(self, controller)
 	self.LockImage:setImage(RegisterMaterial("icon_slot_locked"), 0)
 	local stripe = LUI.UIImage.new()
 	stripe.id = "IWZTitleStripe"
 	stripe:SetAlpha(0.65, 0)
 	stripe:SetAnchorsAndPosition(0, 1, 0, 1, 0, _1080p * 6, 0, _1080p * 24)
 	self:addElement(stripe)
+	stripe:SubscribeToModelThroughElement(self, "quality", function()
+		local item = self:GetDataSource()
+		if not item then return end
+		local quality = item.quality:GetValue(controller) or Cac.LowestQuality
+		stripe:SetRGBFromInt(Cac.GetLootQualityColor(quality), 0)
+	end)
 	if not tileLockLogged then
-		log("personalization tile lock uses icon_slot_locked")
+		log("personalization tile lock uses icon_slot_locked; title stripes follow item rarity")
 		tileLockLogged = true
 	end
 end)
@@ -101,8 +117,8 @@ local function hideDescriptionNub(self)
 end
 
 for _, name in ipairs({"CamoSelect", "CosmeticAttachmentSelect", "ReticleSelect"}) do
-	patchBuilder(name, function(self)
-		addTitleStrip(self)
+	patchBuilder(name, function(self, controller)
+		addTitleStrip(self, controller)
 		hideDescriptionNub(self)
 	end)
 end

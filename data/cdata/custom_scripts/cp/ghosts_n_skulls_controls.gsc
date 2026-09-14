@@ -1,3 +1,19 @@
+main()
+{
+    replacefunc(scripts\cp\maps\cp_zmb\cp_zmb_ghost_wave::give_gns_base_reward,
+        ::give_gns_base_reward);
+    arcade_log("installed completion reward baseXP=5000 coverage=all-five-machines");
+}
+
+give_gns_base_reward(player)
+{
+    player scripts\cp\cp_persistence::give_player_xp(5000, 1);
+    player.have_permanent_perks = 1;
+    player.have_gns_perk = 1;
+    player thread scripts\cp\maps\cp_zmb\cp_zmb_ghost_wave::earn_all_perks(player);
+    arcade_log("completion reward player=" + player getentitynumber() + " map=" + level.script + " baseXP=5000");
+}
+
 post_load()
 {
     // The listener is available for both the IWZ arcade launch and a Ghosts N

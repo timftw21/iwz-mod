@@ -44,13 +44,13 @@ main()
         ::survival_select_arcade_wheel);
     replacefunc(scripts\cp\maps\cp_zmb\cp_zmb::cp_zmb_introscreen_text,
         ::survival_introscreen_text);
-    replacefunc(scripts\cp\zombies\directors_cut::allow_directors_cut,
-        ::survival_disallow_directors_cut);
+    replacefunc(scripts\cp\zombies\directors_cut::start_directors_cut,
+        custom_scripts\cp\survival_perks::start_survival_directors_cut);
 
     survival_log("pre-load hooks installed map=cp_zmb portal=arcade-to-pap " +
         "portalVisual=pap-active-rnr papExit=arcade objective=survival " +
         "wheel=authored-main-arcade-entity " +
-        "perkSource=spaceland-boss-battle-board directorsCut=disabled");
+        "perkSource=spaceland-boss-battle-board directorsCut=player-benefits");
 }
 
 post_load()
@@ -93,11 +93,6 @@ post_load()
 survival_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("Survival", message);
-}
-
-survival_disallow_directors_cut()
-{
-    return 0;
 }
 
 install_survival_quick_revive_hooks()

@@ -140,6 +140,76 @@ local originalChallengeInfo = MenuBuilder.m_types["ChallengeInfo"]
 local originalChallengeInfoBigProgress = MenuBuilder.m_types["ChallengeInfoBigProgress"]
 local originalChallengesMenu = MenuBuilder.m_types["ChallengesMenu"]
 
+if MenuBuilder.m_types["ChallengesTiers"] == nil then
+	require("frontEnd.mp.ChallengesTiers")
+end
+
+local originalChallengesTiers = MenuBuilder.m_types["ChallengesTiers"]
+MenuBuilder.m_types["ChallengesTiers"] = function(menu, controller)
+	local self = originalChallengesTiers(menu, controller)
+	if not CONDITIONS.IsThirdGameMode(self) then
+		return self
+	end
+	local controllerIndex = controller and controller.controllerIndex or self:getRootController()
+	-- PostLoadFunc's visibility subscription sets every visible number's alpha
+	-- to 1. LUI refreshes data links with pairs(), so it can run after our color
+	-- renderer on hover. Unlink the stock model callbacks permanently; merely
+	-- unsubscribing their current models would reconnect them on the next hover.
+	local removedLinks = 0
+	for link in pairs(LUI.ShallowCopy(self._dataLinksAsTarget or {})) do
+		local path = link._relativeDataSourcePath
+		if link._source == self and link._type == DataLink.TYPES.model and
+			path and #path == 1 and (path[1] == "tierCount" or path[1] == "currentTier") then
+			self:UnsubscribeFromModelThroughElement(link)
+			removedLinks = removedLinks + 1
+		end
+	end
+	print("[IWZ][ChallengeFixes] tier renderer owns model updates; removed stock links=" .. removedLinks)
+	local function refreshTiers()
+		local source = self:GetDataSource()
+		if not source or not source.currentTier or not source.tierCount or not source.isCompleted then
+			return
+		end
+		local currentTier = tonumber(source.currentTier:GetValue(controllerIndex))
+		local tierCount = tonumber(source.tierCount:GetValue(controllerIndex))
+		local isCompleted = source.isCompleted:GetValue(controllerIndex)
+		if currentTier == nil or tierCount == nil or isCompleted == nil then
+			return
+		end
+		local completed = isCompleted == true or isCompleted == 1
+		for tier = 1, 5 do
+			local visible = tier <= tierCount
+			local earned = completed or tier <= currentTier
+			local active = visible and not completed and tier == currentTier + 1
+			self["box" .. tier]:SetAlpha(visible and 1 or 0, 0)
+			if earned then
+				self["box" .. tier]:SetRGBFromInt(16777215, 0)
+			else
+				self["box" .. tier]:SetRGBFromTable(SWATCHES.genericButton.border, 0)
+			end
+			self["highlight" .. tier]:SetAlpha(active and 1 or 0, 0)
+			self["number" .. tier]:SetRGBFromInt(active and 0 or 16777215, 0)
+			self["number" .. tier]:SetAlpha(visible and ((earned or active) and 1 or 0.37) or 0, 0)
+		end
+		local state = currentTier .. "/" .. tierCount .. "/" .. tostring(completed)
+		if self.IWZTierState ~= state then
+			self.IWZTierState = state
+			print("[IWZ][ChallengeFixes] tier display refreshed current/count/completed=" .. state)
+		end
+	end
+
+	-- Stock sequences dim every non-current tier and ignore completion. Keep
+	-- their layout and event entry points, but render from all three models.
+	for tier = 1, 5 do
+		self._sequences["Tier" .. tier] = refreshTiers
+		self._sequences["ClearTier" .. tier] = refreshTiers
+	end
+	for _, field in ipairs({"currentTier", "tierCount", "isCompleted"}) do
+		self:SubscribeToModelThroughElement(self, field, refreshTiers)
+	end
+	return self
+end
+
 local loggedPercentageFix = false
 local loggedMissingPercentage = false
 local loggedNonZombiesMenu = false

@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 0.95 adds spinning battery drops on Attack of the Radioactive Thing, keeps challenge popups in sync with the adjusted requirements, and prevents Cargo Chaos's Venom-Z from being downgraded by Pack-a-Punch. It also fixes Spaceland clown animations, Beach Bloodbath prop collision, and Attack's nuke effects. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 0.98 adds custom DJ music in Spaceland and lets you complete its fifth Ghosts N Skulls step before the main Easter egg. It also improves Rave quest interactions, Forge Freeze, survival perks, challenge tier highlighting, lobby music selection, Soul Key commands, and map-specific placement and hint text. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -57,6 +57,7 @@ General
  - Red-screen visual is less intrusive
 
 Zombies in Spaceland
+ - The DJ mixes your custom_music files into his rotation in solo and hosted matches, using Spaceland's native PA speakers and a song banner labeled "Custom Playlist" (local playback); use `djcustommusic 1` for custom-only testing or `djcustommusic 0` for mixed rotation
  - Small tweaks and fixes to the HUD
  - The SETICOM now takes 15 hits instead of 10 hits
  - Alien fuses now persist after first installation

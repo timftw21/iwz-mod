@@ -26,11 +26,11 @@ main()
         ::return_to_subway);
     replacefunc(scripts\cp\maps\cp_disco\cp_disco::subway_trains,
         ::survival_subway_trains);
-    replacefunc(scripts\cp\zombies\directors_cut::allow_directors_cut,
-        ::disallow_directors_cut);
+    replacefunc(scripts\cp\zombies\directors_cut::start_directors_cut,
+        custom_scripts\cp\survival_perks::start_survival_directors_cut);
 
     survival_log("pre-load hooks installed map=cp_disco portal=disco-subway-to-pap " +
-        "papExit=subway wheel=authored-subway train=power-independent directorsCut=disabled");
+        "papExit=subway wheel=authored-subway train=power-independent directorsCut=player-benefits");
 }
 
 post_load()
@@ -67,11 +67,6 @@ post_load()
 survival_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("SubwayShuffle", message);
-}
-
-disallow_directors_cut()
-{
-    return 0;
 }
 
 subway_spawnpoint(player)

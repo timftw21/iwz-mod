@@ -1,6 +1,7 @@
 #include <std_include.hpp>
 #include "loader/component_loader.hpp"
 #include "localized_strings.hpp"
+#include "zombies_hintstrings.hpp"
 
 #include "component/console/console.hpp"
 #include "component/fastfiles.hpp"
@@ -16,6 +17,57 @@ namespace localized_strings
 	namespace
 	{
 		utils::hook::detour seh_string_ed_get_string_hook;
+		thread_local bool center_multiline_hud = false;
+		std::atomic_bool logged_multiline_hud_fix{false};
+
+		void draw_hud_text(const int client, const char* text, const void* element, void* draw_state)
+		{
+			// CG's alignOrg packs horizontal alignment into bits 2-3. Its text
+			// renderer anchors the whole block but otherwise left-aligns each line.
+			const auto* fields = static_cast<const std::byte*>(element);
+			const auto alignment = *reinterpret_cast<const unsigned int*>(fields + 0x38);
+			const auto text_fx_time = *reinterpret_cast<const int*>(fields + 0xA0);
+			const auto previous = center_multiline_hud;
+			center_multiline_hud = ((alignment >> 2) & 3) == 1 && text_fx_time == 0 &&
+				game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_CP && text && std::strchr(text, '\n');
+			utils::hook::invoke<void>(0x1407E2980, client, text, element, draw_state);
+			center_multiline_hud = previous;
+		}
+
+		void draw_hud_text_lines(const char* text, const int max_chars, game::GfxFont* font,
+			const float x, float y, const float x_scale, const float y_scale, const float* color, const int style)
+		{
+			if (!center_multiline_hud)
+			{
+				utils::hook::invoke<void>(0x140313C80, text, max_chars, font, x, y, x_scale, y_scale, color, style);
+				return;
+			}
+			const auto block_width = game::R_TextWidth(text, max_chars, font);
+			const auto line_height = static_cast<float>(game::R_GetFontHeight(font)) * y_scale;
+			std::string_view remaining{text};
+			std::string active_color;
+			for (;;)
+			{
+				const auto end = remaining.find('\n');
+				auto line_text = remaining.substr(0, end);
+				if (line_text.ends_with('\r')) line_text.remove_suffix(1);
+				const std::string line = active_color + std::string{line_text};
+				const auto line_width = game::R_TextWidth(line.c_str(), max_chars, font);
+				const auto line_x = x + (block_width - line_width) * x_scale * 0.5f;
+				utils::hook::invoke<void>(0x140313C80, line.c_str(), max_chars, font,
+					line_x, y, x_scale, y_scale, color, style);
+				for (size_t i = 0; i + 1 < line_text.size(); ++i)
+				{
+					if (line_text[i] == '^' && line_text[i + 1] >= '0' && line_text[i + 1] <= ';')
+						active_color = line_text.substr(i++, 2);
+				}
+				if (end == std::string_view::npos) break;
+				remaining.remove_prefix(end + 1);
+				y += line_height;
+			}
+			if (!logged_multiline_hud_fix.exchange(true))
+				console::info("[IWZ][ZombieHints] centered multiline HUD text using native font widths and binding glyphs\n");
+		}
 
 		using localized_map = std::unordered_map<std::string, std::string>;
 		utils::concurrency::container<localized_map> localized_overrides;
@@ -84,24 +136,24 @@ namespace localized_strings
 		// ZOMBIE/COOP keys below. Keep the authored binding and weapon placeholders.
 		constexpr localization_override pickup_hint_overrides[]
 		{
-			{"ZOMBIE_PILLAGE_PICKUP_TICKETS", "Hold [{+activate}] to pick up Tickets"},
-			{"ZOMBIE_PILLAGE_PICKUP_CONCUSSION_GRENADE", "Hold [{+activate}] to pick up Concussion Grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_TICKETS", "Hold [{+activate}] to pick up tickets"},
+			{"ZOMBIE_PILLAGE_PICKUP_CONCUSSION_GRENADE", "Hold [{+activate}] to pick up concussion grenades"},
 			{"ZOMBIE_PILLAGE_PICKUP_BETTY", "Hold [{+activate}] to pick up a Bouncing Betty"},
-			{"ZOMBIE_PILLAGE_PICKUP_POINTS", "Hold [{+activate}] to pick up Cash"},
-			{"ZOMBIE_PILLAGE_PICKUP_FRAG_GRENADE", "Hold [{+activate}] to pick up Frag Grenades"},
-			{"ZOMBIE_PILLAGE_PICKUP_PLASMA_GRENADE", "Hold [{+activate}] to pick up Plasma Grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_POINTS", "Hold [{+activate}] to pick up cash"},
+			{"ZOMBIE_PILLAGE_PICKUP_FRAG_GRENADE", "Hold [{+activate}] to pick up frag grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_PLASMA_GRENADE", "Hold [{+activate}] to pick up plasma grenades"},
 			{"ZOMBIE_PILLAGE_PICKUP_C4", "Hold [{+activate}] to pick up C4"},
-			{"ZOMBIE_PILLAGE_PICKUP_SEMTEX", "Hold [{+activate}] to pick up Semtex Grenades"},
+			{"ZOMBIE_PILLAGE_PICKUP_SEMTEX", "Hold [{+activate}] to pick up Semtex grenades"},
 			{"ZOMBIE_PILLAGE_PICKUP_BOLA_BARRAGE", "Hold [{+activate}] to pick up Bola Barrage"},
-			{"COOP_PILLAGE_PICKUP_CLUSTER_GRENADE", "Hold [{+activate}] to pick up Cluster Grenades"},
-			{"COOP_PILLAGE_PICKUP_GAS_GRENADE", "Hold [{+activate}] to pick up Gas Grenades"},
+			{"COOP_PILLAGE_PICKUP_CLUSTER_GRENADE", "Hold [{+activate}] to pick up cluster grenades"},
+			{"COOP_PILLAGE_PICKUP_GAS_GRENADE", "Hold [{+activate}] to pick up gas grenades"},
 			{"PLATFORM_PICKUPNEWWEAPONGAMEPAD", "Hold &&1 to pick up &&2"},
 			{"PLATFORM_PICKUPNEWWEAPONGAMEPADHEAVY", "Hold &&1 to pick up heavy weapon &&2"},
 			{"PLATFORM_SWAPWEAPONSGAMEPAD", "Hold &&1 for &&2"},
 			{"PLATFORM_SWAPWEAPONSGAMEPADHEAVY", "Hold &&1 for heavy weapon &&2"},
-			{"WEAPON_CLAYMORE_PICKUP", "Hold^3 &&1 ^7to pickup Claymore Mines"},
-			{"WEAPON_PROXIMITY_EXPLOSIVE_PICKUP", "Hold^3 &&1 ^7to pickup I.E.D."},
-			{"WEAPON_PICKUP_AXE", "Hold^3 &&1 ^7for Axe"},
+			{"WEAPON_CLAYMORE_PICKUP", "Hold^3 &&1 ^7to pick up Claymore mines"},
+			{"WEAPON_PROXIMITY_EXPLOSIVE_PICKUP", "Hold^3 &&1 ^7to pick up an I.E.D."},
+			{"WEAPON_PICKUP_AXE", "Hold^3 &&1 ^7for an axe"},
 		};
 
 		constexpr localization_override chi_primary_binding_overrides[]
@@ -130,10 +182,10 @@ namespace localized_strings
 
 		std::string normalize_key(const std::string_view key)
 		{
-			return std::string{key.starts_with('@') ? key.substr(1) : key};
+			return utils::string::to_upper(std::string{key.starts_with('@') ? key.substr(1) : key});
 		}
 
-		std::optional<std::pair<std::string, std::string>> normalize_pickup_hint(
+		std::optional<std::pair<std::string, std::string>> normalize_hint_text(
 			const char* key, const char* value)
 		{
 			if (!key || !value)
@@ -144,23 +196,25 @@ namespace localized_strings
 			// All five maps share zombies_pillage::_id_7A06, but native equipment
 			// pickups also use MP_PICKUP_* strings. Normalize the loaded wording
 			// instead of guessing every item's name from incomplete string dumps.
-			if (!family_key.starts_with("ZOMBIE_PILLAGE_PICKUP_") &&
-				!family_key.starts_with("COOP_PILLAGE_PICKUP_") &&
-				!family_key.starts_with("MP_PICKUP_") &&
-				!family_key.starts_with("PLATFORM_PICKUPNEWWEAPON") &&
-				!family_key.starts_with("PLATFORM_SWAPWEAPONS") &&
-				!(family_key.starts_with("WEAPON_") && family_key.find("PICKUP") != std::string::npos) &&
-				family_key != "CP_TOWN_PILLAGE_BATTERY" && family_key != "CP_QUEST_WOR_PART")
+			const auto pickup_family = family_key.starts_with("ZOMBIE_PILLAGE_PICKUP_") ||
+				family_key.starts_with("COOP_PILLAGE_PICKUP_") || family_key.starts_with("MP_PICKUP_") ||
+				family_key.starts_with("PLATFORM_PICKUPNEWWEAPON") || family_key.starts_with("PLATFORM_SWAPWEAPONS") ||
+				(family_key.starts_with("WEAPON_") && family_key.find("PICKUP") != std::string::npos) ||
+				family_key == "CP_TOWN_PILLAGE_BATTERY" || family_key == "CP_QUEST_WOR_PART";
+			auto normalized = zombies_hintstrings::normalize(family_key, value);
+			if (!pickup_family && !normalized)
 				return std::nullopt;
-
-			std::string result{value};
-			constexpr std::string_view hold_prefix = "Press and hold";
-			if (result.starts_with(hold_prefix))
-				result.replace(0, hold_prefix.size(), "Hold");
-			constexpr std::string_view some_phrase = "pick up some ";
-			const auto some = result.find(some_phrase);
-			if (some != std::string::npos)
-				result.replace(some, some_phrase.size(), "pick up ");
+			std::string result = normalized ? std::move(*normalized) : std::string{value};
+			if (pickup_family)
+			{
+				constexpr std::string_view hold_prefix = "Press and hold";
+				if (result.starts_with(hold_prefix))
+					result.replace(0, hold_prefix.size(), "Hold");
+				constexpr std::string_view some_phrase = "pick up some ";
+				const auto some = result.find(some_phrase);
+				if (some != std::string::npos)
+					result.replace(some, some_phrase.size(), "pick up ");
+			}
 			if (result == value)
 				return std::nullopt;
 			return std::pair{lookup_key, std::move(result)};
@@ -215,22 +269,13 @@ namespace localized_strings
 				return std::nullopt;
 			}
 
-			const auto* lookup_key = key[0] == '@' ? key + 1 : key;
+			const auto lookup_key = normalize_key(key);
 			return localized_overrides.access<std::optional<std::pair<std::string, std::string>>>(
 				[&](const localized_map& map)
 				{
-					for (const auto& [registered_key, value] : map)
-					{
-						if (_stricmp(registered_key.data(), lookup_key) == 0)
-						{
-							if (!registered_override_is_enabled(registered_key))
-							{
-								return std::optional<std::pair<std::string, std::string>>{};
-							}
-
-							return std::optional{std::pair{registered_key, value}};
-						}
-					}
+					const auto entry = map.find(lookup_key);
+					if (entry != map.end() && registered_override_is_enabled(entry->first))
+						return std::optional{std::pair{entry->first, entry->second}};
 					return std::optional<std::pair<std::string, std::string>>{};
 				});
 		}
@@ -243,9 +288,11 @@ namespace localized_strings
 			}
 
 			auto registered_override = find_registered_override(asset->name);
-			const auto pickup_wording = !registered_override.has_value();
-			if (pickup_wording)
-				registered_override = normalize_pickup_hint(asset->name, asset->value);
+			const auto hint_wording = !registered_override.has_value();
+			if (hint_wording)
+				registered_override = normalize_hint_text(asset->name, asset->value);
+			else if (const auto normalized = normalize_hint_text(asset->name, registered_override->second.c_str()))
+				registered_override = normalized;
 			if (!registered_override.has_value())
 			{
 				return false;
@@ -264,7 +311,7 @@ namespace localized_strings
 			if (first_application)
 			{
 				console::info("[IWZ][Localization] materialized %s key='%s' source=%s\n",
-					pickup_wording ? "pickup wording" : "registered override", lookup_key.data(), source);
+					hint_wording ? "hint wording" : "registered override", lookup_key.data(), source);
 				if ((_stricmp(lookup_key.data(), "CP_ZMB_INTRO_LINE_4") == 0 ||
 					_stricmp(lookup_key.data(), "CP_RAVE_INTRO_LINE_4") == 0 ||
 					_stricmp(lookup_key.data(), "CP_DISCO_INTRO_LINE_4") == 0 ||
@@ -298,7 +345,10 @@ namespace localized_strings
 				if (active_color == '7' && value[i] == '[' && i + 1 < value.size() && value[i + 1] == '{')
 				{
 					const auto end = value.find("}]", i + 2);
-					if (end != std::string_view::npos)
+					// Parameterized HUD substitutions (FAKE_INTRO_SECONDS:11)
+					// share the binding delimiters, but are not input commands.
+					if (end != std::string_view::npos && end > i + 2 &&
+						value.substr(i + 2, end - i - 2).find(':') == std::string_view::npos)
 					{
 						result.append("^3");
 						result.append(value.substr(i, end + 2 - i));
@@ -370,8 +420,7 @@ namespace localized_strings
 			}
 			const auto* value = localized_overrides.access<const char*>([&](const localized_map& map)
 			{
-				const auto* lookup_reference = reference != nullptr && reference[0] == '@' ? reference + 1 : reference;
-				const auto entry = lookup_reference == nullptr ? map.end() : map.find(lookup_reference);
+				const auto entry = reference == nullptr ? map.end() : map.find(normalize_key(reference));
 				if (entry != map.end() && registered_override_is_enabled(entry->first))
 				{
 					return entry->second.data();
@@ -384,15 +433,15 @@ namespace localized_strings
 			}
 			// Cover resident/native prompts too, including assets loaded before
 			// callbacks were registered. Keep stable storage and binding tokens.
-			if (const auto pickup = normalize_pickup_hint(reference, value))
+			if (const auto hint = normalize_hint_text(reference, value))
 			{
-				value = cache_asset_override(pickup->first, pickup->second);
+				value = cache_asset_override(hint->first, hint->second);
 				const auto first = applied_registered_asset_keys.access<bool>([&](auto& keys)
 				{
-					return keys.emplace(pickup->first).second;
+					return keys.emplace(hint->first).second;
 				});
 				if (first)
-					console::info("[IWZ][Localization] materialized pickup wording key='%s' source=lookup\n", pickup->first.c_str());
+					console::info("[IWZ][Localization] materialized hint wording key='%s' source=lookup\n", hint->first.c_str());
 			}
 			return value;
 		}
@@ -450,15 +499,9 @@ namespace localized_strings
 			return false;
 		}
 
-		const auto already_applied = applied_registered_asset_keys.access<bool>([&](const auto& keys)
-		{
-			return keys.contains(lookup_key);
-		});
-		if (already_applied)
-		{
-			return true;
-		}
-
+		// Log deduplication is not residency: map changes can replace/unload an
+		// asset, and lookup-only replacements never update its native value.
+		// Revalidate the current asset even for hints without button bindings.
 		bool found = false;
 		game::DB_EnumXAssets(game::ASSET_TYPE_LOCALIZE_ENTRY, [&](const game::XAssetHeader header)
 		{
@@ -508,18 +551,21 @@ namespace localized_strings
 	public:
 		void post_unpack() override
 		{
+			// Body text only: keep HUD labels and animated text effects on their
+			// original path. The shared lower message (including Forge Freeze)
+			// retains its stock lifetime, position, alpha and font size.
+			utils::hook::call(0x1407E3CCE, draw_hud_text);
+			utils::hook::call(0x1407E3B56, draw_hud_text_lines);
 			override("MENU_MASTER_VOLUME", "MASTER VOLUME");
-			override("COOP_INTERACTIONS_NEED_MONEY", "^1NEED MORE MONEY!^7");
-			override("COOP_INTERACTIONS_REQUIRES_POWER", "^1NEEDS POWER!^7");
-			override("CP_ZMB_INTERACTIONS_NEED_TICKETS", "^1NEED MORE TICKETS!^7");
+			override("CP_ZMB_INTERACTIONS_NEED_TICKETS", "^1Not enough tickets^7");
 			override("CP_ZMB_GHOST_TRACKING", "Tracking...");
 			override("CP_ZMB_GHOST_OBJECTIVE", "Destroy all skulls before they escape!");
-			override("IWZ_GNS_ARCADE_START_SPACELAND", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS");
-			override("IWZ_GNS_ARCADE_START_RAVE", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS 2");
-			override("IWZ_GNS_ARCADE_START_SHAOLIN", "Hold [{+usereload,+activate}] to start SKULLBUSTER");
-			override("IWZ_GNS_ARCADE_START_ATTACK", "Hold [{+usereload,+activate}] to start SKULLHOP");
-			override("IWZ_GNS_ARCADE_START_BEAST", "Hold [{+usereload,+activate}] to start SKULLBREAKER");
-			override("IWZ_GNS_ARCADE_START_GENERIC", "Hold [{+usereload,+activate}] to start GHOSTS N SKULLS ARCADE");
+			override("IWZ_GNS_ARCADE_START_SPACELAND", "Hold [{+usereload,+activate}] to start Ghosts N Skulls");
+			override("IWZ_GNS_ARCADE_START_RAVE", "Hold [{+usereload,+activate}] to start Ghosts N Skulls 2");
+			override("IWZ_GNS_ARCADE_START_SHAOLIN", "Hold [{+usereload,+activate}] to start Skullbuster");
+			override("IWZ_GNS_ARCADE_START_ATTACK", "Hold [{+usereload,+activate}] to start Skullhop");
+			override("IWZ_GNS_ARCADE_START_BEAST", "Hold [{+usereload,+activate}] to start Skullbreaker");
+			override("IWZ_GNS_ARCADE_START_GENERIC", "Hold [{+usereload,+activate}] to start Ghosts N Skulls arcade");
 			override("IWZ_CAMO_NEON_ROT", "Neon Rot");
 			override("IWZ_CAMO_NEON_ROT_UNLOCK", "Get 5 headshots with the M1 in Zombies.");
 			override("IWZ_WEAPON_CAMO_EARNED", "WEAPON CAMO EARNED");
@@ -542,12 +588,10 @@ namespace localized_strings
 			override("CP_RAVE_ENTER_THIS_AREA", "enter this area");
 			override("CP_DISCO_INTERACTIONS_ENTER_THIS_AREA", "Enter this area");
 			override("CP_TOWN_INTERACTIONS_ENTER_THIS_AREA", "enter this area");
-			override("CP_TOWN_INTERACTIONS_HIDDEN_LEAVE", "Hold [{+usereload,+activate}] to return to the film");
-			override("CP_TOWN_INTERACTIONS_HIDDEN_TELEPORT", "Hold [{+usereload,+activate}] to access the Projection Room");
 			override("COOP_PILLAGE_FOUND_BIO_SPIKE", "Found Bio Spikes");
 			override("COOP_PILLAGE_FOUND_GAS_GRENADE", "Found Gas Grenades");
 			override("LUA_MENU_ZM_SELECT_SHOW_CAPS", "STANDARD FILMS");
-			override("COOP_PILLAGE_FOUND_CLUSTER_GRENADE", "Found Cluster Grenades");
+			override("COOP_PILLAGE_FOUND_CLUSTER_GRENADE", "Found cluster grenades");
 			override("COOP_GAME_PLAY_AMMO_MAX", "Ammunition already full");
 			override("COOP_PERK_MACHINES_1000",
 				"\"Improve your game with deadly aim!\"\n"
@@ -565,11 +609,18 @@ namespace localized_strings
 			{
 				override(key, value);
 			}
+			for (const auto& [key, value] : zombies_hintstrings::overrides)
+			{
+				override(key, value);
+			}
+			console::info("[IWZ][ZombieHints] registered audited text overrides=%zu style=sentence-case coverage=all-five-maps nativeAssets=1 lookup=1\n",
+				std::size(zombies_hintstrings::overrides));
+			console::info("[IWZ][ZombieHints] localization keys canonicalized; native hint assets revalidated across map changes; boss-fight parentheses covered\n");
 			fastfiles::on_localize_loaded([](database::LocalizeEntry* asset)
 			{
 				apply_registered_override(asset, "asset-load");
 			});
-			console::info("[IWZ][Localization] installed key-binding colorizer\n");
+			console::info("[IWZ][Localization] installed key-binding colorizer; parameterized HUD tokens retain their authored color\n");
 			console::info("[IWZ][Localization] film selection label='STANDARD FILMS' key=LUA_MENU_ZM_SELECT_SHOW_CAPS\n");
 			console::info("[IWZ][Localization] registered red interaction warnings moneyKey=COOP_INTERACTIONS_NEED_MONEY powerKey=COOP_INTERACTIONS_REQUIRES_POWER ticketKey=CP_ZMB_INTERACTIONS_NEED_TICKETS\n");
 			console::info("[IWZ][GhostsNSkullsHUD] registered shared text overrides tracking='Tracking...' objectivePunctuation=exclamation escapedPunctuationVerified=3\n");
@@ -582,6 +633,7 @@ namespace localized_strings
 			console::info("[IWZ][Localization] pickup wording coverage=all-maps families=ZOMBIE/COOP_PILLAGE,MP_PICKUP,PLATFORM,WEAPON,battery,quest sources=asset-load-and-lookup\n");
 			console::info("[IWZ][Localization] registered wording override ammoFullKey=COOP_GAME_PLAY_AMMO_MAX\n");
 			console::info("[IWZ][Localization] removed trailing periods from portal hints keys=CP_TOWN_INTERACTIONS_HIDDEN_LEAVE,CP_TOWN_INTERACTIONS_HIDDEN_TELEPORT\n");
+			console::info("[IWZ][Localization] removed trailing period key=ZOMBIE_LOST_AND_FOUND_NO_ITEM\n");
 			console::info("[IWZ][Localization] registered punctuation overrides deadeyeDewdrops=1 bountyDescriptions=%zu\n",
 				std::size(bounty_description_overrides));
 			console::info("[IWZ][BountyFixes] punctuation audit includes five shared MP weapon-class descriptions; timer wording='BOUNTIES EXPIRE IN'\n");

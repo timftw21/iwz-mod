@@ -46,6 +46,11 @@ if MenuBuilder.m_types["CPMaps"] == nil then
 	require("frontEnd.cp.CPMaps")
 end
 
+if MenuBuilder.m_types["CPPrivateMatchMenu"] == nil then
+	require("frontEnd.cp.CPPrivateMatchMenu")
+end
+
+local originalCPPrivateMatchMenu = MenuBuilder.m_types["CPPrivateMatchMenu"]
 local originalCPPrivateMatchButtons = MenuBuilder.m_types["CPPrivateMatchButtons"]
 local originalCPMatchDetails = MenuBuilder.m_types["CPMatchDetails"]
 local originalMapButton = MenuBuilder.m_types["MapButton"]
@@ -216,6 +221,11 @@ MenuBuilder.m_types["CPMaps"] = function(menu, controller)
 	local self = originalCPMaps(menu, controller)
 	if Engine.GetDvarBool(SURVIVAL_BROWSE_DVAR) then
 		self.CPMenuTitle.MenuTitle:setText("SURVIVAL FILMS", 0)
+		if self.CPMapsTalisman then
+			self.CPMapsTalisman:close()
+			self.CPMapsTalisman = nil
+			log("Director's Cut stars removed from Survival film picker")
+		end
 	end
 
 	self:addEventHandler("menu_close", function()
@@ -230,6 +240,28 @@ MenuBuilder.m_types["CPMaps"] = function(menu, controller)
 	return self
 end
 
+
+MenuBuilder.m_types["CPPrivateMatchMenu"] = function(menu, controller)
+	local self = originalCPPrivateMatchMenu(menu, controller)
+	local star = self.TalismanLobbyWidget
+	if star then
+		local controllerIndex = getControllerIndex(controller)
+		local lastHidden = nil
+		local function refreshStar()
+			local hidden = Engine.GetDvarBool(SURVIVAL_DVAR)
+			star:SetAlpha(hidden and 0 or 1, 0)
+			if hidden ~= lastHidden then
+				log("lobby talisman star hidden=" .. tostring(hidden) .. " reason=Survival selection")
+				lastHidden = hidden
+			end
+		end
+		self:SubscribeToModel(DataSources.frontEnd.lobby.mapName:GetModel(controllerIndex), refreshStar)
+		self:SubscribeToModel(DataSources.frontEnd.lobby.gameTypeName:GetModel(controllerIndex), refreshStar)
+		self:addEventHandler("gain_focus", refreshStar)
+		refreshStar()
+	end
+	return self
+end
 
 MenuBuilder.m_types["CPPrivateMatchButtons"] = function(menu, controller)
 	local self = originalCPPrivateMatchButtons(menu, controller)

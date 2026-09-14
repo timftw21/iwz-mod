@@ -312,6 +312,15 @@ namespace ui_scripting
 			custom_music_table["play"] = custom_music::play;
 			custom_music_table["resume"] = custom_music::resume;
 			custom_music_table["isplaying"] = custom_music::is_playing;
+			custom_music_table["djtrack"] = []
+			{
+				const auto info = custom_music::get_dj_track();
+				table result;
+				result["sequence"] = info.sequence;
+				result["title"] = info.title;
+				return result;
+			};
+			custom_music_table["fadeout"] = custom_music::fade_out;
 			custom_music_table["claim"] = custom_music::claim;
 			custom_music_table["release"] = custom_music::release;
 			custom_music_table["isclaimed"] = custom_music::is_claimed;
