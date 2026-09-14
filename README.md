@@ -14,7 +14,6 @@ IWZ-MOD 0.98 adds custom DJ music in Spaceland and lets you complete its fifth G
 
 # IWZ-MOD To-Do
 
- - Fate and Fortune machine still needs to be implemented into survival maps
  - Certain vanilla hintstrings should be tweaked
  - Zombies camos (framework is working; test camo called Neon Rot on M1)
  - More map-specific fixes and tweaks
