@@ -28,15 +28,13 @@ General
  - A variety of fixes and tweaks to the Zombies' menus
  - Weapon prestige in Zombies unlocks a sixth attachment slot, with selections preserved across matches
  - Loadout and personalization menus share consistent weapon-name strips and clearer weapon-level visuals
- - Bounty completion and expiry information appears beneath the Bounties button
  - Faster title-screen startup and improved startup diagnostics
  - Third-person aiming follows the bullet path, with a shoulder offset for hipfire
  - Attempting to use empty lethal equipment plays the purchase-denied sound
  - Added a Restart Match button to the in-game pause menu (glorified map_restart)
  - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!", "Rave Rampage", "Subway Shuffle", "Beach Bloodbath", and "Cargo Chaos"
- - Death Wish lets players make slower zombies run in survival maps, with toggle sounds, a red soul jar, and a red scene counter while enabled
+ - Death Wish on survival maps (rampage inducer, basically)
  - Added the Neon Rot camo, unlocked by earning 5 headshot kills with the M1 in Zombies
- - Canceling the survival film browser now preserves the selected game mode, map, and cast
  - Ghosts 'N Skulls Arcade: select Ghosts 'N Skulls games without completing their tedious in-game steps
  - CAST button allows the player to choose their character
  - Power-ups now spawn more frequently (will probably require some more adjustments)
@@ -50,7 +48,6 @@ General
  - The match summary now displays cards for weapon levels and unlocked calling cards
  - Calling cards now display within in-game challenge notifications to indicate that you've completed the highest tier for a challenge
  - Certain calling card challenge requirements have been eased (some of them were clearly meant to pad the game's lifecycle)
- - In-game challenge popups use the active requirements for the completed tier
  - XP rewards for completed challenges are now more generous
  - Custom lobby music is now supported; drag supported files into iw7-mod\custom_music to bring them in-game
  - Red-screen visual is less intrusive
