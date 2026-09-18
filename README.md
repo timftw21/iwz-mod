@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 0.98 adds custom DJ music in Spaceland and lets you complete its fifth Ghosts N Skulls step before the main Easter egg. It also improves Rave quest interactions, Forge Freeze, survival perks, challenge tier highlighting, lobby music selection, Soul Key commands, and map-specific placement and hint text. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 1.0 adds separate Film barracks records for all five Survival maps, makes cash drops benefit from Double Points, and fixes duplicate custom DJ song notifications. It also fixes the startup script-allocation error introduced with Survival records. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -33,11 +33,13 @@ General
  - Attempting to use empty lethal equipment plays the purchase-denied sound
  - Added a Restart Match button to the in-game pause menu (glorified map_restart)
  - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!", "Rave Rampage", "Subway Shuffle", "Beach Bloodbath", and "Cargo Chaos"
+ - Each Survival map has its own Film barracks section and saved combat records, separate from the standard films
  - Death Wish on survival maps (rampage inducer, basically)
  - Added the Neon Rot camo, unlocked by earning 5 headshot kills with the M1 in Zombies
  - Ghosts 'N Skulls Arcade: select Ghosts 'N Skulls games without completing their tedious in-game steps
  - CAST button allows the player to choose their character
  - Power-ups now spawn more frequently (will probably require some more adjustments)
+ - Cash drops now benefit from Double Points when collected
  - Levels 1-999 now take 10% less XP
  - Sprinting zombies are now slightly slower
  - Interactions with traversing zombies do not push the player like a fucking bouncy ball anymore
@@ -54,6 +56,7 @@ General
 
 Zombies in Spaceland
  - The DJ mixes your custom_music files into his rotation in solo and hosted matches, using Spaceland's native PA speakers and a song banner labeled "Custom Playlist" (local playback); use `djcustommusic 1` for custom-only testing or `djcustommusic 0` for mixed rotation
+ - Custom DJ song notifications appear only once per track playback
  - Small tweaks and fixes to the HUD
  - The SETICOM now takes 15 hits instead of 10 hits
  - Alien fuses now persist after first installation

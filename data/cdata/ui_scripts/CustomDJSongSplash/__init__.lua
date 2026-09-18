@@ -7,10 +7,45 @@ if MenuBuilder.m_types["SongSplash"] == nil then
 end
 
 local originalSongSplash = MenuBuilder.m_types["SongSplash"]
+local shownSequences = {}
 MenuBuilder.m_types["SongSplash"] = function(menu, controller)
 	local self = originalSongSplash(menu, controller)
 	local controllerIndex = controller and controller.controllerIndex or self:getRootController()
 	local lastSequence = 0
+	local loggedDuplicate = 0
+	-- Both the stock songPlayingIndex subscription and our timer enter these
+	-- sequences. Deduplicate at that shared boundary, including HUD rebuilds.
+	for _, name in ipairs({"slideIn", "slideInSplitScreen"}) do
+		local animate = self._sequences[name]
+		self._sequences[name] = function()
+			local info = custommusic.djtrack()
+			if info.sequence ~= 0 then
+				if shownSequences[controllerIndex] == info.sequence then
+					if loggedDuplicate ~= info.sequence then
+						loggedDuplicate = info.sequence
+						print("[IWZ][CustomMusicDJ] suppressed duplicate splash sequence=" .. info.sequence)
+					end
+					return
+				end
+				shownSequences[controllerIndex] = info.sequence
+				if not CONDITIONS.MusicPlaylistOnCheck(controllerIndex) then
+					return
+				end
+				self.Title:setText(info.title, 0)
+				self.Artist:setText("Custom Playlist", 0)
+				print("[IWZ][CustomMusicDJ] HUD song=" .. info.title ..
+					" artist=Custom Playlist sequence=" .. info.sequence)
+			else
+				-- Clearing the stock index to -1 while a custom track decodes is
+				-- not a new stock song and must not display an empty banner.
+				local index = DataSources.inGame.CP.zombies.songs.songPlayingIndex:GetValue(controllerIndex)
+				if index == nil or index < 0 then
+					return
+				end
+			end
+			return animate()
+		end
+	end
 	-- Stock omnvar updates can arrive after the custom notification. Keep
 	-- these two labels on the custom metadata while its song is active.
 	for _, field in ipairs({"Title", "Artist"}) do
@@ -31,15 +66,7 @@ MenuBuilder.m_types["SongSplash"] = function(menu, controller)
 			return
 		end
 		lastSequence = sequence
-		if not CONDITIONS.MusicPlaylistOnCheck(controllerIndex) then
-			return
-		end
-
-		local title = info.title
-		self.Title:setText(title, 0)
-		self.Artist:setText("Custom Playlist", 0)
 		ACTIONS.AnimateSequence(self, CONDITIONS.IsSplitscreen(self) and "slideInSplitScreen" or "slideIn")
-		print("[IWZ][CustomMusicDJ] HUD song=" .. title .. " artist=Custom Playlist sequence=" .. sequence)
 	end)
 	local timer = LUI.UITimer.new(nil, {
 		interval = 100,

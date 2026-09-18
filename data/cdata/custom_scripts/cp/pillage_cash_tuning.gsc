@@ -1,5 +1,8 @@
 main()
 {
+    replacefunc(scripts\cp\cp_persistence::give_player_currency, ::give_player_currency);
+    pillage_cash_log("installed pickup-time Double Points multiplier source=level.cash_scalar type=pillage");
+
     configure_item = getfunction("scripts/cp/zombies/zombies_pillage", "_id_7B82");
     select_type = getfunction("scripts/cp/zombies/zombies_pillage", "_id_7BEF");
     select_explosive = getfunction("scripts/cp/zombies/zombies_pillage", "_id_3E8D");
@@ -22,6 +25,75 @@ main()
 pillage_cash_log(message)
 {
     custom_scripts\cp\gsc_diagnostics::emit("PillageCash", message);
+}
+
+// Keep the stock currency award path, including its cap, card charge and HUD
+// notifications. Only pillage cash bypasses Double Money in the retail game.
+give_player_currency(amount, size, effect, skip_prestige, give_type)
+{
+    if (!isplayer(self))
+        return;
+
+    if (isdefined(give_type) && give_type == "pillage" && isdefined(level.cash_scalar))
+    {
+        base_amount = amount;
+        amount = int(amount * level.cash_scalar);
+        pillage_cash_log("pickup player=" + self getentitynumber() + " base=" +
+            base_amount + " cashScalar=" + level.cash_scalar + " award=" + amount);
+    }
+
+    if (!scripts\engine\utility::is_true(skip_prestige))
+    {
+        amount = int(amount * scripts\cp\perks\prestige::prestige_getmoneyearnedscalar());
+        amount = scripts\cp\cp_gamescore::round_up_to_nearest(amount, 5);
+    }
+
+    if (isdefined(level.currency_scale_func))
+        amount = [[level.currency_scale_func]](self, amount);
+
+    previous = scripts\cp\cp_persistence::get_player_currency();
+    maximum = scripts\cp\cp_persistence::get_player_max_currency();
+    balance = min(previous + amount, maximum);
+
+    if (!isdefined(self.total_currency_earned))
+        self.total_currency_earned = amount;
+
+    if (scripts\cp\cp_persistence::is_valid_give_type(give_type))
+    {
+        self.total_currency_earned += balance - previous;
+        self notify("consumable_charge", amount * 0.5);
+    }
+
+    level notify("currency_changed");
+    scripts\cp\cp_persistence::eog_player_update_stat("currencytotal", int(self.total_currency_earned), 1);
+    scripts\cp\cp_persistence::set_player_currency(balance);
+
+    if (isdefined(level.update_money_performance))
+        [[level.update_money_performance]](self, amount);
+
+    now = gettime();
+    if (balance >= maximum)
+    {
+        if (!isdefined(self.next_maxmoney_hint_time))
+            self.next_maxmoney_hint_time = now + 30000;
+        else if (now < self.next_maxmoney_hint_time)
+            return;
+
+        if (!level.gameended)
+        {
+            scripts\cp\utility::setlowermessage("maxmoney", &"COOP_GAME_PLAY_MONEY_MAX", 4);
+            self.next_maxmoney_hint_time = now + 30000;
+        }
+    }
+
+    if (scripts\cp\cp_persistence::is_valid_give_type(give_type))
+        thread scripts\cp\utility::add_to_notify_queue("player_earned_money", amount);
+
+    self notify("currency_earned", amount);
+    if (!scripts\cp\zombies\direct_boss_fight::should_directly_go_to_boss_fight())
+        scripts\cp\utility::bufferednotify("currency_earned_buffered", amount);
+
+    scripts\cp\cp_persistence::eog_player_update_stat("score", int(self.total_currency_earned), 1);
 }
 
 configure_pillage_item_without_50_cash(item, source)

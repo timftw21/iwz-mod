@@ -126,6 +126,61 @@ end
 
 local COMBAT_RECORD_MODEL_PATH = ZombiesUtils.CombatRecordMenuModelPath
 
+local survivalFilms = {
+	cp_zmb = "ARCADE ATTACK!",
+	cp_rave = "RAVE RAMPAGE",
+	cp_disco = "SUBWAY SHUFFLE",
+	cp_town = "BEACH BLOODBATH",
+	cp_final = "CARGO CHAOS"
+}
+local survivalStatFields = {"highestWave", "kills", "rounds", "headshots", "downs", "revives"}
+local stockGetMapsDataSources = ZombiesUtils.GetMapsDataSources
+ZombiesUtils.GetMapsDataSources = function(modelPath, controllerIndex, bossMode)
+	local stock = stockGetMapsDataSources(modelPath, controllerIndex, bossMode)
+	if modelPath ~= COMBAT_RECORD_MODEL_PATH .. ".maps" or bossMode ~= nil then
+		return stock
+	end
+
+	local entries = {}
+	local survivalEntries = {}
+	for index = 0, stock:GetCountValue(controllerIndex) - 1 do
+		local film = stock:GetDataSourceAtIndex(index, controllerIndex)
+		table.insert(entries, film)
+		local title = survivalFilms[film.ref]
+		if title then
+			local path = modelPath .. ".survival." .. film.ref
+			local survival = {
+				ref = "survival_" .. film.ref,
+				isSurvival = true,
+				name = LUI.DataSourceInControllerModel.new(path .. ".name", title),
+				desc = film.desc,
+				image = film.image,
+				isOwned = film.isOwned,
+				boss = LUI.DataSourceInControllerModel.new(path .. ".boss", 0),
+				meph = LUI.DataSourceInControllerModel.new(path .. ".meph", 0)
+			}
+			for _, field in ipairs(survivalStatFields) do
+				survival[field] = LUI.DataSourceInControllerModel.new(path .. "." .. field,
+					Engine.GetDvarInt("iwz_survival_record_" .. film.ref .. "_" .. field))
+			end
+			table.insert(survivalEntries, survival)
+		end
+	end
+	for _, film in ipairs(survivalEntries) do
+		film.listIndex = #entries
+		table.insert(entries, film)
+	end
+
+	local source = LUI.DataSourceFromList.new(#entries)
+	source.MakeDataSourceAtIndex = function(_, index)
+		return entries[index + 1]
+	end
+	source.GetDefaultFocusIndex = function() return 0 end
+	print("[IWZ][CombatRecordFixes] Films records standard=" .. tostring(#entries - #survivalEntries) ..
+		" survival=" .. tostring(#survivalEntries) .. " stats=separate-saved-records")
+	return source
+end
+
 local function buildDescendingDataSource(source, controllerIndex, valueField)
 	local entries = {}
 	local count = source:GetCountValue(controllerIndex)
@@ -284,13 +339,23 @@ end
 if originalMapListMenu then
 	MenuBuilder.m_types["CPCombatRecordMapListMenu"] = function(menu, controller)
 		local self = originalMapListMenu(menu, controller)
+		local controllerIndex = controller and controller.controllerIndex or self:getRootController()
 
 		if self.MapGrid then
 			-- The CP blood graphic animates from a 175x175 box around a 30px row.
 			-- Stock stencils the grid exactly at x=132/y=200, cutting the graphic at
-			-- the left and top edges. Films only contains five rows, so it needs no
+			-- the left and top edges. All ten Films fit on screen, so they need no
 			-- scrolling stencil.
 			self.MapGrid:setUseStencil(false)
+			self:SubscribeToModelThroughElement(self.MapGrid, "name", function()
+				local film = self.MapGrid:GetDataSource(controllerIndex)
+				if film and self.BossBattleStat then
+					self.BossBattleStat:SetAlpha(film.isSurvival and 0 or 1, 0)
+					if film.isSurvival and self.MephBattleStat then
+						self.MephBattleStat:SetAlpha(0, 0)
+					end
+				end
+			end)
 
 			if not loggedFilmStencilFix then
 				print("[IWZ][CombatRecordFixes] disabled Films grid stencil so 175px blood hover art is not clipped")
