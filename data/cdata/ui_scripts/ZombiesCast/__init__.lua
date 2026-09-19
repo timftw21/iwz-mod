@@ -106,6 +106,8 @@ local function getCast(controllerIndex)
 	return cast
 end
 
+local selectionSource = LUI.DataSourceInGlobalModel.new("frontEnd.IWZCast.selection", game:getzombiescharacter())
+
 local function applySelection(controllerIndex, selection)
 	game:setzombiescharacter(selection)
 	Engine.SetPlayerDataEx(
@@ -115,18 +117,18 @@ local function applySelection(controllerIndex, selection)
 		"characterSelect",
 		guestCharacterSelect[selection] or 0
 	)
+	DataModel.SetModelValue(selectionSource:GetModel(controllerIndex), selection)
+	print("[IWZ][ZombiesCast] selected=" .. selection .. " map=" .. getCurrentFilm())
 end
 
 local function getSelectedCharacter(controllerIndex)
 	local selection = game:getzombiescharacter()
 	for _, character in ipairs(getCast(controllerIndex)) do
 		if character.id == selection and not character.locked then
-			applySelection(controllerIndex, selection)
 			return character
 		end
 	end
 
-	applySelection(controllerIndex, 0)
 	return defaultCast[1]
 end
 
@@ -220,8 +222,14 @@ local function addCastInfo(menu, controllerIndex)
 	details.CastValue = value
 
 	menu.updateCastInfo = function()
-		value:setText(ToUpperCase(getSelectedCharacter(controllerIndex).name), 0)
+		local selected = getSelectedCharacter(controllerIndex)
+		if selected.id ~= game:getzombiescharacter() then
+			applySelection(controllerIndex, selected.id)
+		end
+		value:setText(ToUpperCase(selected.name), 0)
 	end
+	value:SubscribeToModel(selectionSource:GetModel(controllerIndex), menu.updateCastInfo)
+	value:SubscribeToModel(DataSources.frontEnd.lobby.mapName:GetModel(controllerIndex), menu.updateCastInfo)
 	menu.updateCastInfo()
 end
 

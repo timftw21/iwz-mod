@@ -280,6 +280,11 @@ else
 		-- Initialize from the active device now; retain the stock callback so a
 		-- later device change still updates it normally.
 		self.ActivateText:setText(Engine.Localize(activationKey), 0)
+		self:addEventHandler("iwz_input_changed", function(element)
+			local key = Engine.IsGamepadEnabled() == 1 and "ZM_CONSUMABLES_BUTTON_KEYS" or
+				"ZM_CONSUMABLES_BUTTON_KEYS_PC"
+			element.ActivateText:setText(Engine.Localize(key), 0)
+		end)
 
 		-- The stock widget is bottom-anchored and extends into the perk strip. Keep
 		-- its parent placement intact and raise every visual inside it by 30 pixels.

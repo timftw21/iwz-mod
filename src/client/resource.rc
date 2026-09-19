@@ -110,6 +110,12 @@ TLS_DLL               RCDATA "../../build/bin/x64/Release/tlsdll.dll"
 
 ICON_IMAGE            RCDATA "resources/icon.png"
 
+#ifdef _DEBUG
+SDL_DLL               RCDATA "../../build/x64/Debug/SDL3.dll"
+#else
+SDL_DLL               RCDATA "../../build/x64/Release/SDL3.dll"
+#endif
+
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
 

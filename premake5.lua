@@ -313,7 +313,12 @@ includedirs {"./src/client", "./src/common", "%{prj.location}/src"}
 
 resincludedirs {"$(ProjectDir)src"}
 
-dependson {"tlsdll"}
+dependson {"tlsdll", "SDL3"}
+
+includedirs {"./deps/SDL/include"}
+libdirs {"%{wks.location}/x64/%{cfg.buildcfg}"}
+links {"SDL3.lib", "delayimp"}
+linkoptions {"/DELAYLOAD:SDL3.dll"}
 
 links {"common"}
 
@@ -350,6 +355,13 @@ if _OPTIONS["debug-dir"] then
 end
 
 dependencies.imports()
+
+externalproject "SDL3"
+location "deps/SDL/VisualC/SDL"
+filename "SDL"
+uuid "81CE8DAF-EBB2-4761-8E45-B71ABCCA8C68"
+kind "SharedLib"
+language "C"
 
 project "tlsdll"
 kind "SharedLib"

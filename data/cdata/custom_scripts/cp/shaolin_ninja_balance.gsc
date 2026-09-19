@@ -1,17 +1,18 @@
-// IWZ-LOAD: map=cp_disco
+// Both maps register the same karatemaster agent and shared teleport behavior.
 post_load()
 {
-    if (getdvar("ui_mapname") != "cp_disco")
+    map = getdvar("mapname");
+    if (map != "cp_disco" && map != "cp_final")
         return;
 
     level thread monitor_ninja_spawns();
     level thread configure_existing_ninjas();
-    ninja_balance_log("installed stock bdisableteleport control and 1.15 locomotion scale");
+    ninja_balance_log("installed map=" + map + " stock bdisableteleport control and 1.15 locomotion scale");
 }
 
 ninja_balance_log(message)
 {
-    custom_scripts\cp\gsc_diagnostics::emit("ShaolinNinjas", message);
+    custom_scripts\cp\gsc_diagnostics::emit("Ninjas", message);
 }
 
 monitor_ninja_spawns()

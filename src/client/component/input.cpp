@@ -4,6 +4,8 @@
 #include "game/game.hpp"
 
 #include "game_console.hpp"
+#include "gamepad.hpp"
+#include "console/console.hpp"
 
 #include "gui/gui.hpp"
 
@@ -43,6 +45,7 @@ namespace input
 
 		void cl_key_event_stub(const int local_client_num, const int key, const int down)
 		{
+			gamepad::key_event(key, down != 0);
 			if (!game_console::console_key_event(local_client_num, key, down))
 			{
 				return;
@@ -90,6 +93,45 @@ namespace input
 		int get_num_keys()
 		{
 			return 118;
+		}
+
+		int key_get_device_bindings_stub(int local_client_num, const char* command, int* keys, int gamepad_only)
+		{
+			keys[0] = keys[1] = -1;
+			int binding = 0;
+			for (int i = 1; i < get_num_keys(); ++i)
+			{
+				if (game::command_whitelist[i] && !_stricmp(command, game::command_whitelist[i]))
+				{
+					binding = i;
+					break;
+				}
+			}
+			if (!binding)
+			{
+				for (size_t i = 0; i < custom_binds.size(); ++i)
+				{
+					if (!_stricmp(command, custom_binds[i].c_str()))
+					{
+						binding = get_num_keys() + static_cast<int>(i);
+						break;
+					}
+				}
+			}
+			if (!binding) return 0;
+
+			// Stock filters gamepad-only requests, but its keyboard path searches
+			// every key. Controller buttons sort first and become KEY_BUTTON_X, etc.
+			int count = 0;
+			for (int key = 1; key < 256 && count < 2; ++key)
+			{
+				if (gamepad::is_controller_key(key) == (gamepad_only == 1)
+					&& game::Key_GetActiveBinding(local_client_num, key) == binding)
+				{
+					keys[count++] = key;
+				}
+			}
+			return count;
 		}
 
 		int key_write_bindings_to_buffer_stub(int, char* buffer, const int buffer_size)
@@ -225,6 +267,8 @@ namespace input
 
 			cl_char_event_hook.create(0x1409A7350, cl_char_event_stub);
 			cl_key_event_hook.create(0x1409A7980, cl_key_event_stub);
+			utils::hook::jump(0x1409A8FC0, key_get_device_bindings_stub);
+			console::info("[IWZ][Input] prompt binding lookup installed: keyboard and controller keys separated\n");
 #ifdef _DEBUG
 			//cl_mouse_move_hook.create(0x140615A50, cl_mouse_move_stub);
 #endif

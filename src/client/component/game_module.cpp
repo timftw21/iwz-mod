@@ -82,7 +82,9 @@ namespace game_module
 		{
 			handle_a_hook.create(&GetModuleHandleA, &get_module_handle_a);
 			handle_w_hook.create(&GetModuleHandleW, &get_module_handle_w);
-			handle_ex_w_hook.create(&GetModuleHandleExA, &get_module_handle_ex_a);
+			// Each API needs its own trampoline, including resource-module lookups
+			// made when loading the embedded controller library after startup.
+			handle_ex_a_hook.create(&GetModuleHandleExA, &get_module_handle_ex_a);
 			handle_ex_w_hook.create(&GetModuleHandleExW, &get_module_handle_ex_w);
 			file_name_a_hook.create(&GetModuleFileNameA, &get_module_file_name_a);
 			file_name_w_hook.create(&GetModuleFileNameW, &get_module_file_name_w);

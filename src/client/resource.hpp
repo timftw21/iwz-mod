@@ -12,6 +12,7 @@
 #define TLS_DLL               305
 
 #define ICON_IMAGE            306
+#define SDL_DLL               310
 
 /*
 #define LUI_COMMON            307

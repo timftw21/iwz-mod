@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 1.0 adds separate Film barracks records for all five Survival maps, makes cash drops benefit from Double Points, and fixes duplicate custom DJ song notifications. It also fixes the startup script-allocation error introduced with Survival records. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 1.1 adds DualShock controller support, automatic controller/mouse-and-keyboard switching, and matching button prompts. It fixes shader-cache restarts and saved progress, makes CAST labels update immediately, and extends the ninja changes to The Beast from Beyond. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -21,6 +21,10 @@ IWZ-MOD 1.0 adds separate Film barracks records for all five Survival maps, make
 # IWZ-MOD Changes
 
 General
+ - Controller support includes DualShock controllers through SDL3 and detects XInput controllers outside slot 0
+ - Controls and button prompts switch automatically between controller and mouse/keyboard input
+ - CAST labels update immediately when selecting a character or changing maps, including after shader caching
+ - Restarting shader caching relaunches the client and resets its own cache progress; malformed progress files are rebuilt safely
  - Removed most IW7-MOD branding
  - Tweaks that improve performance on modern hardware
  - Added client options, such as player name, name color, skipping intro cinematics, pause on focus lost, mute on focus lost, and XP rate
@@ -69,7 +73,7 @@ Rave in the Redwoods
  - Other miscellaneous tweaks and fixes
 
 Shaolin Shuffle
- - Ninja zombies no longer teleport; base ninja zombie speed has been increased by 15%
+ - Ninja zombies in Shaolin Shuffle and The Beast from Beyond no longer teleport; their base movement speed is increased by 15%
  - The Banshee at spawn no longer clips through the bench
  - Zombies ignore players while they are using phone booths
  - Window frames remain visible at their intended render distances
@@ -109,9 +113,11 @@ To download IW7-Mod, [read our Installing IW7-Mod guide](https://docs.auroramod.
 - Clone the Git repo via [Git](https://git-scm.com/install/windows) or [GitHub Desktop](https://desktop.github.com/download/). **DO NOT download it as ZIP** as it will not work.
 - Run the `generate.bat` script to generate the project solution.
 - Build the project via the generated solution file in `build\iw7-mod.sln`.
+ - The solution builds and embeds SDL3, so controller support does not require a separate DLL installation. Its license is included in `iw7-mod\licenses\SDL.txt`.
 
 ## Credits
 
+ - [SDL3](https://libsdl.org/) - controller discovery, mappings, hotplugging, and rumble
 - [s1x-client](https://git.alterware.dev/alterware/s1-mod) *(now **s1-mod**)* - codebase and research
 - [h1-mod](https://github.com/auroramod/h1-mod) - extended work and research
 - [h2-mod](https://github.com/alicelys/h2-mod) - research
