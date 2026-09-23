@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 1.1 adds DualShock controller support, automatic controller/mouse-and-keyboard switching, and matching button prompts. It fixes shader-cache restarts and saved progress, makes CAST labels update immediately, and extends the ninja changes to The Beast from Beyond. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 1.2 adds hardware-aware parallel shader preloading, persistent shader bytecode caching, and shader object reuse. It also fixes shutdown crashes and improves Tips and Tricks text and Solo Afterlife Arcade messages. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -25,6 +25,11 @@ General
  - Controls and button prompts switch automatically between controller and mouse/keyboard input
  - CAST labels update immediately when selecting a character or changing maps, including after shader caching
  - Restarting shader caching relaunches the client and resets its own cache progress; malformed progress files are rebuilt safely
+ - Shader bytecode is cached on disk and preloaded in parallel according to CPU, memory, and driver capabilities; matching shader objects are reused
+ - Faster shader-combination lookup, bounded cache memory, and recovery from incomplete cache writes
+ - Shader resources are released before graphics teardown, and file logging remains available during shutdown
+ - Tips and Tricks text has corrected grammar and spacing, paragraph separation, and a parenthesized QUESTS keybind
+ - Solo no longer shows the Afterlife Arcade instruction to earn a token that has already been granted
  - Removed most IW7-MOD branding
  - Tweaks that improve performance on modern hardware
  - Added client options, such as player name, name color, skipping intro cinematics, pause on focus lost, mute on focus lost, and XP rate

@@ -5,6 +5,7 @@
 
 #include "component/rcon.hpp"
 #include "component/scheduler.hpp"
+#include "component/dvars.hpp"
 
 #include <utils/flags.hpp>
 
@@ -31,10 +32,12 @@ namespace console
 		con_type_default = con_type_terminal,
 	} con_type;
 
-	game::dvar_t* console_log = nullptr;
 	namespace
 	{
 		std::mutex log_mutex;
+		std::string log_path;
+		bool log_ready = false;
+		std::atomic_bool shutting_down{false};
 		std::string startup_log;
 		bool startup_log_truncated = false;
 		constexpr size_t startup_log_limit = 1024 * 1024;
@@ -119,7 +122,7 @@ namespace console
 
 	void dispatch_message(const int type, const std::string& message)
 	{
-		if (rcon::message_redirect(message))
+		if (!shutting_down && rcon::message_redirect(message))
 		{
 			return;
 		}
@@ -132,13 +135,16 @@ namespace console
 
 		{
 			std::lock_guard lock(log_mutex);
-			if (console_log)
-				utils::io::write_file(console_log->current.string, out, true);
+			if (log_ready)
+			{
+				if (!log_path.empty()) utils::io::write_file(log_path, out, true);
+			}
 			else if (startup_log.size() + out.size() <= startup_log_limit)
 				startup_log.append(out);
 			else
 				startup_log_truncated = true;
 		}
+		if (shutting_down) return;
 
 		if (console::is_enabled())
 		{
@@ -158,6 +164,12 @@ namespace console
 		}
 
 		game_console::print(type, message);
+	}
+
+	void begin_shutdown()
+	{
+		if (!shutting_down.exchange(true))
+			console::info("[IWZ][Console] shutdown started; file logging remains available\n");
 	}
 
 	void print(const int type, const char* fmt, ...)
@@ -197,6 +209,13 @@ namespace console
 		static auto initialized = false;
 		if (initialized) return;
 		initialized = true;
+		dvars::callback::on_new_value("g_consoleLog", [](game::DvarValue* value)
+		{
+			if (!value || !value->string) return;
+			std::lock_guard lock(log_mutex);
+			log_path = value->string;
+			log_ready = true;
+		});
 
 		// File logging also applies to -noconsole. Retain pre-main diagnostics
 		// until the engine string allocator and saved dvars are available.
@@ -204,9 +223,11 @@ namespace console
 		{
 			auto* log = game::Dvar_RegisterString("g_consoleLog", "iw7-mod/logs/console.log", game::DVAR_FLAG_SAVED, "Where to write the console log");
 			std::lock_guard lock(log_mutex);
-			console_log = log;
+			log_path = log && log->current.string ?
+				log->current.string : "iw7-mod/logs/console.log";
+			log_ready = true;
 			if (startup_log_truncated) startup_log.append("[IWZ][Console] startup log exceeded 1 MiB; some messages were omitted\n");
-			utils::io::write_file(console_log->current.string, startup_log, true);
+			if (!log_path.empty()) utils::io::write_file(log_path, startup_log, true);
 			std::string{}.swap(startup_log);
 		}, scheduler::main);
 

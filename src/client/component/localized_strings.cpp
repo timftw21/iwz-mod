@@ -19,9 +19,21 @@ namespace localized_strings
 		utils::hook::detour seh_string_ed_get_string_hook;
 		thread_local bool center_multiline_hud = false;
 		std::atomic_bool logged_multiline_hud_fix{false};
+		std::atomic_bool logged_solo_arcade_welcome_fix{false};
 
 		void draw_hud_text(const int client, const char* text, const void* element, void* draw_state)
 		{
+			// Stock grants a revive token immediately in Solo but still displays
+			// the multiplayer instruction to earn one in the arcade.
+			if (text && std::string_view{text} ==
+				"Welcome to the Afterlife Arcade. Play some games to earn a Self Revive Token." &&
+				game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_CP &&
+				game::Com_IsAnyLocalServerRunning() && *game::svs_numclients == 1)
+			{
+				if (!logged_solo_arcade_welcome_fix.exchange(true))
+					console::info("[IWZ][Localization] suppressed stock Afterlife Arcade earn-token welcome in Solo; multiplayer unchanged\n");
+				return;
+			}
 			// CG's alignOrg packs horizontal alignment into bits 2-3. Its text
 			// renderer anchors the whole block but otherwise left-aligns each line.
 			const auto* fields = static_cast<const std::byte*>(element);
@@ -168,6 +180,35 @@ namespace localized_strings
 				"Dragon Rank ^31 [[{+frag}]]^7"},
 			{"CP_DISCO_CHALLENGES_SNAKE_1_REWARD",
 				"Snake Rank ^31 [[{+frag}]]^7"},
+		};
+
+		// Keep a space on blank paragraph lines so the text layout retains their height.
+		constexpr localization_override tutorial_copy_overrides[]
+		{
+			{"ZM_TUTORIALS_AFTERLIFE", "Welcome to the AFTERLIFE ARCADE!\n \nIn Solo, you receive a SELF REVIVE TOKEN when you arrive. In multiplayer, earn a SOUL TOKEN by playing arcade games and filling the SOUL METER at the bottom of the screen. You can also spectate other players. With a token, exit through the SELF REVIVE DOOR to rejoin the fight."},
+			{"ZM_TUTORIALS_ATM", "Need a rainy day fund? Deposit cash into the ATM for park visitors to withdraw. Deposits and withdrawals are handled in $1,000 increments, and the ATM can be shared between all visitors."},
+			{"ZM_TUTORIALS_FORTUNE_DECK", "Now that your Fate and Fortune Meter is full, you can use one of the cards in your deck. When you run out of cards, visit a Fortune Teller to replenish your deck."},
+			{"ZM_TUTORIALS_LOST_AND_FOUND", "Dead and lost your weapons? No worries. When playing with others, return to the LOST & FOUND at the park's main entrance to recover your weapons. Don't wait too long, though; the park only holds your stuff for a limited time."},
+			{"ZM_TUTORIALS_MAGIC_WHEEL", "See that shaft of light in the sky? The MAGIC WHEEL awards players a random weapon for a small fee. Some weapons in the MAGIC WHEEL cannot be found anywhere else in Spaceland. Watch out, though: sometimes the wheel only awards a consolation prize. Find the MAGIC WHEEL, give it a spin, and press your luck!"},
+			{"ZM_TUTORIALS_NEIL", "Hey, thanks for putting N31L back together!\n \nNow that he's back, N31L is looking for worthy parkgoers to save Spaceland. Try completing the N31L challenges in the top-left corner of the screen, and he might return the favor. Good luck!"},
+			{"ZM_TUTORIALS_PACK_A_PUNCH", "Upgrading your weapons in Zombies is crucial to surviving later scenes. For a fee, the elusive Pack-a-Punch machine can further increase their power. Most weapons can be upgraded multiple times and even gain new abilities."},
+			{"ZM_TUTORIALS_PERKS", "Sprinkled throughout Spaceland are 10 PERK stations that, for a fee, can greatly expand your capabilities. You can carry up to five PERKS at a time and mix and match them. Be careful, though: if you go down, you lose all your PERKS and have to buy them again!"},
+			{"ZM_TUTORIALS_POWER_UPS", "Zombies occasionally drop POWER UPS when killed, offering temporary upgrades for the entire team. Walk into a POWER UP to collect it, and it activates immediately. Don't wait too long, though: POWER UPS disappear after a short time!"},
+			{"ZM_TUTORIALS_POWER_SWITCHES", "Throughout Spaceland, POWER SWITCHES activate key features in the park, including PERK stations and TRAPS. They are free to use and permanently restore power to their areas. Try to find them all and restore power to Spaceland."},
+			{"ZM_TUTORIALS_PILLAGE", "When zombies are killed, they occasionally drop bags containing random items such as ammo clips, cash, and more. Search the bags to see what the zombies left behind for you."},
+			{"ZM_TUTORIALS_QUESTS", "Spaceland features QUESTS that can be completed by recovering hidden items throughout the park. Recovered QUEST items appear in your inventory ([{togglescores}]). Collecting them brings you closer to solving Spaceland's mysteries and escaping Willard Wyler's film."},
+			{"ZM_TUTORIALS_SCENES", "In Zombies, players face wave after wave of zombies. Each SCENE contains a set number to defeat. When all are killed, the next SCENE begins. Watch out, though: zombies get craftier and more powerful with every SCENE."},
+			{"ZM_TUTORIALS_SOUVENIR_COINS", "SOUVENIR COINS can be obtained by killing zombies and traded in for goodies at SOUVENIR STATIONS around Spaceland. If you already have a SOUVENIR COIN, you can swap it for another."},
+			{"ZM_TUTORIALS_TEAM_DOOR_BUY", "Some doors in Spaceland can be opened with teamwork. Players can take turns contributing toward the door so no one person bears the full cost. Contributions are made in $1,000 increments."},
+			{"ZM_TUTORIALS_TICKETS", "TICKETS can be earned by playing park games such as Octonian Hunter, killing zombies with TRAPS, or searching dropped PILLAGE bags. Exchange TICKETS at a TICKET PRIZE BOOTH in Spaceland. Some special items can only be purchased with TICKETS."},
+			{"ZM_TUTORIALS_TRAPS", "Throughout Spaceland, TRAPS can kill groups of zombies and protect players when things get tough. They cost a small fee and award TICKETS for every zombie they kill."},
+			{"ZM_TUTORIALS_WINDOW_BOARDING", "Barricades have been set up to keep zombies out, but the zombies keep tearing down the WINDOW BOARDS. Replace the boards to keep zombies out longer and earn cash for each one you restore."},
+			{"ZM_TUTORIALS_ZOMBIE_HEALTH", "With every SCENE, zombies move faster, deal more damage, and grow more aggressive. The later the SCENE, the more powerful they become. Aim for the head: headshots deal much more damage!"},
+			{"ZM_TUTORIALS_CRAFTABLE", "Different combinations of SOUVENIR COINS create different SOUVENIRS. To use yours, press [{+actionslot 3}] to pull it out, then press [{+attack}] to place it."},
+			{"ZM_TUTORIALS_FORTUNE_CARD_MACHINE", "Fortune Tellers throughout Spaceland are eager to restock your Fate and Fortune Cards... for a fee, of course."},
+			{"ZM_TUTORIALS_WALL_BUY", "Weapons are available for purchase throughout Spaceland. If you already own a weapon, you can buy ammo for it at a discount. You can carry only two weapons at a time without the Mule Munchies perk candy."},
+			{"ZM_TUTORIALS_NEIL_TITLE", "N31L the Robot"},
+			{"ZM_TUTORIALS_PACK_A_PUNCH_TITLE", "Pack-a-Punch"},
 		};
 
 		constexpr std::string_view survival_only_override_keys[]
@@ -605,6 +646,13 @@ namespace localized_strings
 			{
 				override(key, value);
 			}
+			for (const auto& [key, value] : tutorial_copy_overrides)
+			{
+				override(key, value);
+			}
+			override("CP_ZOMBIE_EARN_SELF_REVIVE", "You have earned a Self Revive Token. Use it at the Self Revive Door.");
+			console::info("[IWZ][Localization] polished Tips and Tricks text=%zu paragraphSpacers=2 questBindingParentheses=1 and Self Revive Token spacing\n",
+				std::size(tutorial_copy_overrides));
 			for (const auto& [key, value] : pickup_hint_overrides)
 			{
 				override(key, value);

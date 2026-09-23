@@ -12,6 +12,7 @@
 
 DECLSPEC_NORETURN void WINAPI exit_hook(const int code)
 {
+	console::begin_shutdown();
 	component_loader::pre_destroy();
 	exit(code);
 }
@@ -385,6 +386,7 @@ int main()
 		{
 			if (premature_shutdown)
 			{
+				console::begin_shutdown();
 				component_loader::pre_destroy();
 			}
 		});

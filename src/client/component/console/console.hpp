@@ -18,6 +18,7 @@ namespace console
 	};
 
 	void dispatch_message(int type, const std::string& message);
+	void begin_shutdown();
 
 	void print(int type, const char* fmt, ...);
 
