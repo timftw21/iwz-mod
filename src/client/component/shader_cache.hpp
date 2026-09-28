@@ -5,8 +5,12 @@
 #include <cstring>
 #include <istream>
 
+struct ID3D11Device;
+
 namespace shader_cache
 {
+	void on_device_created(ID3D11Device* device);
+
 	struct progress_record
 	{
 		char name[64]{};

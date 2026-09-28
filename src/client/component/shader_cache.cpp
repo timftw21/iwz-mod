@@ -4,6 +4,7 @@
 #include "console/console.hpp"
 #include "game_module.hpp"
 #include "shader_cache.hpp"
+#include "directx.hpp"
 #include <utils/hook.hpp>
 #include <algorithm>
 #include <bit>
@@ -696,20 +697,14 @@ namespace shader_cache
 			pending->Release();
 		}
 
-		HRESULT WINAPI create_device(IDXGIAdapter* adapter, D3D_DRIVER_TYPE driver_type, HMODULE software,
-			UINT flags, const D3D_FEATURE_LEVEL* levels, UINT level_count, UINT sdk_version,
-			ID3D11Device** output, D3D_FEATURE_LEVEL* feature_level, ID3D11DeviceContext** context)
+		void initialize_device(ID3D11Device* device)
 		{
-			const auto result = D3D11CreateDevice(adapter, driver_type, software, flags, levels,
-				level_count, sdk_version, output, feature_level, context);
-			if (FAILED(result) || !output || !*output) return result;
 			std::lock_guard setup_lock(setup_mutex);
-			auto* device = *output;
 			retire_cache();
 			if (device->GetCreationFlags() & D3D11_CREATE_DEVICE_SINGLETHREADED)
 			{
 				console::info("[IWZ][ShaderCache] single-threaded device=%p; cache bypassed\n", device);
-				return result;
+				return;
 			}
 			try
 			{
@@ -724,7 +719,7 @@ namespace shader_cache
 					if (hook_targets[i] && hook_targets[i] != vtable[shader_slots[i]])
 					{
 						console::warn("[IWZ][ShaderCache] new device uses different shader methods; cache disabled device=%p\n", device);
-						return result;
+						return;
 					}
 				}
 				try
@@ -742,7 +737,7 @@ namespace shader_cache
 				catch (const std::exception& e)
 				{
 					console::error("[IWZ][ShaderCache] shader hook unavailable: %s\n", e.what());
-					return result;
+					return;
 				}
 			}
 			const auto* root = *reinterpret_cast<game::dvar_t**>(0x14756DEB0);
@@ -759,14 +754,14 @@ namespace shader_cache
 			{
 				console::error("[IWZ][ShaderCache] device setup failed: %s; using driver\n", e.what());
 			}
-		return result;
 		}
 
 		std::string progress_path()
 		{
 			const auto* root = *reinterpret_cast<game::dvar_t**>(0x14756DEB0);
 			char path[256]{};
-			utils::hook::invoke<void>(0x140CDBBF0, root->current.string, "players2", "upshd.dat", path);
+			utils::hook::invoke<void>(0x140CDBBF0, root->current.string, "players2",
+				dx::d3d12Device ? "upshd.d12" : "upshd.dat", path);
 			return path;
 		}
 
@@ -880,16 +875,14 @@ namespace shader_cache
 		}
 	}
 
+	void on_device_created(ID3D11Device* device)
+	{
+		if (device && !game::environment::is_dedi()) initialize_device(device);
+	}
+
 	class component final : public component_interface
 	{
 	public:
-		void* load_import(const std::string& library, const std::string& function) override
-		{
-			if (!game::environment::is_dedi() && _stricmp(library.c_str(), "d3d11.dll") == 0 &&
-				function == "D3D11CreateDevice") return create_device;
-			return nullptr;
-		}
-
 		void pre_destroy() override
 		{
 			retire_cache();

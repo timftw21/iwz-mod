@@ -115,6 +115,7 @@ SDL_DLL               RCDATA "../../build/x64/Debug/SDL3.dll"
 #else
 SDL_DLL               RCDATA "../../build/x64/Release/SDL3.dll"
 #endif
+FONT_JETBRAINS_MONO   RCDATA "resources/fonts/JetBrainsMono-Regular.ttf"
 
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////

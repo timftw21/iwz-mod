@@ -381,16 +381,16 @@ namespace demonware
 				double randomValue = dis(gen);
 				double cumulativeWeight = 0;
 
-				// Find the item corresponding to the random value
-				for (size_t i = 0; i < lootmap.size(); ++i) {
+				for (size_t i = 0; i < lootmap.size(); ++i)
+				{
 					cumulativeWeight += adjustedWeights[i];
-					if (randomValue < cumulativeWeight) {
+					if (randomValue < cumulativeWeight)
+					{
 						if (quaranteedQuality && get_loot(lootmap[i]).quality < quaranteedQuality)
 							continue;
 						else
 							quaranteedQuality = 0;
 
-						// Add item to the result if it's not already selected
 						if (std::find(selectedItems.begin(), selectedItems.end(), get_loot(lootmap[i])) == selectedItems.end()) {
 							selectedItems.push_back(get_loot(lootmap[i]));
 							break;
@@ -452,30 +452,25 @@ namespace demonware
 			return items;
 		};
 
+		void read_json_data();
+
 		std::vector<Item> get_all_loot_owned()
 		{
-			auto lootmap = get_all_lootmaps();
-			std::vector<Item> items{};
-			for (size_t i = 0; i < lootmap.size(); i++)
-			{
-				if (get_item_balance(lootmap[i]))
-				{
-					items.push_back(get_loot(lootmap[i]));
-				}
-			}
+			cache_loot();
+			read_json_data();
 
-			for (auto& crate : lootcrates)
+			std::vector<Item> items{};
+			for (const auto& entry : json_buffer["Loot"].items())
 			{
-				const auto crate_id = crate.first;
-				if (get_item_balance(crate_id))
+				const auto id = static_cast<std::uint32_t>(std::strtoul(entry.key().data(), nullptr, 10));
+				if (!id || !get_item_balance(id))
 				{
-					Item crate_item{};
-					crate_item.id = crate_id;
-					crate_item.quality = 0;
-					crate_item.salvageReturned = 0;
-					crate_item.cost = 0;
-					items.push_back(crate_item);
+					continue;
 				}
+
+				auto item = get_loot(id);
+				item.id = id;
+				items.push_back(item);
 			}
 
 			return items;
@@ -665,12 +660,15 @@ namespace demonware
 			return json_read<std::uint32_t>(json_buffer["Currency"][std::to_string(currency_id)]["Balance"]);
 		}
 
-		void commit_key_reward_state(const nlohmann::json& state, const std::uint32_t balance)
+		void commit_key_reward_state(const nlohmann::json& state, const std::uint32_t balance,
+			const std::uint32_t salvage_balance)
 		{
 			const auto previous_state = json_buffer["KeyRewards"];
 			const auto previous_balance = get_currency_balance(CurrencyType::keys);
+			const auto previous_salvage = get_currency_balance(CurrencyType::salvage);
 			json_buffer["KeyRewards"] = state;
 			set_currency_balance(CurrencyType::keys, balance);
+			set_currency_balance(CurrencyType::salvage, salvage_balance);
 			try
 			{
 				save_json_data();
@@ -679,6 +677,7 @@ namespace demonware
 			{
 				json_buffer["KeyRewards"] = previous_state;
 				set_currency_balance(CurrencyType::keys, previous_balance);
+				set_currency_balance(CurrencyType::salvage, previous_salvage);
 				throw;
 			}
 		}
@@ -700,14 +699,15 @@ namespace demonware
 				pending.erase(pending.begin());
 			pending.push_back({{"InstanceId", instance}, {"MissionId", mission_id}});
 			state["Pending"] = pending;
-			commit_key_reward_state(state, balance);
+			commit_key_reward_state(state, balance, get_currency_balance(CurrencyType::salvage));
 			return instance;
 		}
 
 		match_key_reward finish_key_reward(const std::uint32_t instance_id,
-			const int mission_id, const std::uint32_t earned)
+			const int mission_id, const std::uint32_t earned, const std::uint32_t salvage_earned)
 		{
 			const auto before = get_currency_balance(CurrencyType::keys);
+			const auto salvage_before = get_currency_balance(CurrencyType::salvage);
 			auto state = json_buffer["KeyRewards"];
 			if (state.is_null())
 				state = nlohmann::json::object();
@@ -717,16 +717,18 @@ namespace demonware
 				return item.at("InstanceId") == instance_id && item.at("MissionId") == mission_id;
 			});
 			if (entry == pending.end())
-				return {false, before, before};
+				return {false, before, before, salvage_before, salvage_before};
 
 			// The stock UI reads signed balances. Never wrap an existing wallet,
 			// including one already above that limit from older tools.
 			const auto room = before < INT_MAX ? INT_MAX - before : 0u;
 			const auto balance = before + std::min(earned, room);
+			const auto salvage_room = salvage_before < INT_MAX ? INT_MAX - salvage_before : 0u;
+			const auto salvage_balance = salvage_before + std::min(salvage_earned, salvage_room);
 			pending.erase(entry);
 			state["Pending"] = pending;
-			commit_key_reward_state(state, balance);
-			return {true, before, balance};
+			commit_key_reward_state(state, balance, salvage_balance);
+			return {true, before, balance, salvage_before, salvage_balance};
 		}
 
 		// daily login
@@ -735,12 +737,9 @@ namespace demonware
 			read_json_data();
 
 			const int64_t last_date_claimed = json_read<int64_t>(json_buffer["DailyLogin"]["LastDateClaimed"]);
-
-			// this may happen if the last date claimed doesn't exist yet
 			if (last_date_claimed == -1)
 				return true;
 
-			// check if its been a new day since the last claim
 			std::time_t now_time = std::time(nullptr);
 			std::time_t last_time = static_cast<std::time_t>(last_date_claimed);
 

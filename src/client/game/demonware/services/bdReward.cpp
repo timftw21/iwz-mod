@@ -12,6 +12,7 @@
 
 #include "../loot/loot.hpp"
 #include "../loot/key_rewards.hpp"
+#include "../loot/missions.hpp"
 #include "game/game.hpp"
 
 #define TRUE_KEY_AMOUNT(num) num * 100
@@ -336,7 +337,10 @@ namespace demonware
 				// The option and the stock event enable the same bonus; they do not stack.
 				const bool double_keys = event_double_keys || toggle_double_keys;
 				const auto earned = loot::calculate_match_keys(mission_id, mission_result, time_played, double_keys);
-				const auto payout = loot::finish_key_reward(mission_instance_id, mission_id, earned);
+				// Zombies reports a scene number, not a multiplayer victory flag.
+				const auto salvage_earned = (mission_id == 0 || mission_id == 1) && mission_result >= 0
+					? loot::missions::get_match_salvage(time_played, mission_id == 0 ? mission_result : 0) : 0u;
+				const auto payout = loot::finish_key_reward(mission_instance_id, mission_id, earned, salvage_earned);
 				json_reply["ClientTx"] = json["ClientTx"];
 				// The native handler computes earned keys from the absolute balance,
 				// then refreshes commerce and feeds the stock after-action display.
@@ -344,11 +348,12 @@ namespace demonware
 					{"Balance", payout.balance}});
 				console::info("[IWZ][Keys] mission ended mode=%s mission=%d instance=%u "
 					"result=%d seconds=%d policy=approximation-v1 doubleKeys=%d event=%d xpToggle=%d "
-					"earnedHundredths=%u balanceHundredths=%u->%u status=%s\n",
+					"earnedHundredths=%u balanceHundredths=%u->%u salvageEarned=%u salvageBalance=%u->%u status=%s\n",
 					mission_id == 1 ? "zombies" : mission_id == 0 ? "multiplayer" : "other",
 					mission_id, mission_instance_id, mission_result, time_played, double_keys,
 					event_double_keys, toggle_double_keys,
 					payout.balance - payout.before, payout.before, payout.balance,
+					payout.salvage_balance - payout.salvage_before, payout.salvage_before, payout.salvage_balance,
 					payout.accepted ? "saved" : "duplicate-or-unknown-instance");
 
 				send(json_reply);
@@ -364,6 +369,11 @@ namespace demonware
 				[[maybe_unused]] const auto mission_set_instance_id = json["MissionSetInstanceId"].get<unsigned int>();
 				[[maybe_unused]] const auto client_tx = json["ClientTx"].get<std::string>();
 
+				// < 100 is a mission team (client wants its next level reward), 100-299 are contracts
+				const auto reward = mission_set_id < 100
+					? loot::missions::give_mission_team_reward(mission_set_id)
+					: loot::missions::give_contract_reward(mission_set_id);
+
 				nlohmann::json json_reply;
 				json_reply["Action"] = "EndMissionSetResponse";
 
@@ -372,6 +382,39 @@ namespace demonware
 				json_reply["Packs"] = nlohmann::json::value_type::array();
 				json_reply["Items"] = nlohmann::json::value_type::array();
 				json_reply["Currencies"] = nlohmann::json::value_type::array();
+
+				for (const auto id : reward.packs)
+				{
+					json_reply["Packs"].push_back(id);
+				}
+
+				// client copies these into a fixed array of 10
+				for (const auto id : reward.items)
+				{
+					if (json_reply["Items"].size() >= 10)
+					{
+						console::error("[DW]: EndMissionSet reward has more than 10 items, dropping %d\n", id);
+						continue;
+					}
+
+					nlohmann::json item;
+					item["ItemId"] = id;
+					item["Collision"] = 0;
+					item["Balance"] = loot::get_item_balance(id);
+					json_reply["Items"].push_back(item);
+				}
+
+				// client sets these as the new balances
+				for (const auto& [currency_id, amount] : reward.currencies)
+				{
+					nlohmann::json currency;
+					currency["CurrencyId"] = currency_id;
+					currency["Balance"] = loot::get_currency_balance(currency_id);
+					json_reply["Currencies"].push_back(currency);
+				}
+
+				console::info("[IWZ][Rewards] mission set completed id=%u packs=%zu items=%zu currencies=%zu\n",
+					mission_set_id, reward.packs.size(), reward.items.size(), reward.currencies.size());
 
 				send(json_reply);
 				console::demonware("%s\n", json_reply.dump().data());

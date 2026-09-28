@@ -8,7 +8,7 @@
 
 #include <utils/hook.hpp>
 
-namespace fx
+namespace zombies_fx
 {
 	namespace
 	{
@@ -417,10 +417,6 @@ namespace fx
 	public:
 		void post_unpack() override
 		{
-			// skip "fx/" and "vfx/" name prefix checks
-			utils::hook::set<uint8_t>(0x140B34889, 0xEB); // Scr_LoadFx
-			utils::hook::nop(0x140D0FBFD, 2); // ParticleSystem_Register
-
 			gsc::function::add("iwz_patch_trailblazer_fx", [](const gsc::function_args&)
 			{
 				return patch_trailblazer_fx() ? 1 : 0;
@@ -430,4 +426,4 @@ namespace fx
 	};
 }
 
-REGISTER_COMPONENT(fx::component)
+REGISTER_COMPONENT(zombies_fx::component)

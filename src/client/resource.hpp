@@ -14,6 +14,8 @@
 #define ICON_IMAGE            306
 #define SDL_DLL               310
 
+#define FONT_JETBRAINS_MONO   311
+
 /*
 #define LUI_COMMON            307
 #define LUI_UPDATER           308

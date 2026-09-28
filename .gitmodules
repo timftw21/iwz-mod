@@ -53,3 +53,6 @@
 [submodule "deps/SDL"]
 	path = deps/SDL
 	url = https://github.com/libsdl-org/SDL.git
+[submodule "deps/DirectXTex"]
+	path = deps/DirectXTex
+	url = https://github.com/microsoft/DirectXTex.git

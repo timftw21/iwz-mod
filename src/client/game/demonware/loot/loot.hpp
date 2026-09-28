@@ -52,11 +52,13 @@ namespace demonware
 			bool accepted;
 			std::uint32_t before;
 			std::uint32_t balance;
+			std::uint32_t salvage_before;
+			std::uint32_t salvage_balance;
 		};
 
 		std::uint32_t begin_key_reward(int mission_id);
 		match_key_reward finish_key_reward(std::uint32_t instance_id,
-			int mission_id, std::uint32_t earned);
+			int mission_id, std::uint32_t earned, std::uint32_t salvage_earned);
 
 		// daily login
 		bool is_new_day();
