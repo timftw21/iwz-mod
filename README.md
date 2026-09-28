@@ -68,7 +68,6 @@ General
 
 Zombies in Spaceland
  - The DJ mixes your custom_music files into his rotation in solo and hosted matches, using Spaceland's native PA speakers and a song banner labeled "Custom Playlist" (local playback); use `djcustommusic 1` for custom-only testing or `djcustommusic 0` for mixed rotation
- - Custom DJ song notifications appear only once per track playback
  - Small tweaks and fixes to the HUD
  - The SETICOM now takes 15 hits instead of 10 hits
  - Alien fuses now persist after first installation
@@ -93,7 +92,6 @@ Attack of the Radioactive Thing
  - Beach Bloodbath's opening screen shows the map's clock above the survival objective
  - Battery drop models rotate while waiting to be collected
  - Nuke effects follow the player's view and reliably show their flash
- - Beach Bloodbath's wheel, perk-board supports, and barriers use consistent player collision
  - Other miscellaneous tweaks and fixes
 
 The Beast from Beyond
@@ -101,7 +99,6 @@ The Beast from Beyond
  - The OSA assault rifle now has more starting ammo
  - Certain objects are now easier to interact with
  - Alien fuses can be picked up while jumping
- - Cargo Chaos's Magic Wheel correctly records Venom-Z as fully upgraded, preventing PaP downgrades
  - Other miscellaneous tweaks and fixes
 
 # IW7-Mod
