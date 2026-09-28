@@ -2,6 +2,7 @@
 #include "loader/component_loader.hpp"
 
 #include "component/command.hpp"
+#include "component/console/console.hpp"
 #include "component/dvars.hpp"
 
 #include "game/game.hpp"
@@ -19,6 +20,8 @@ namespace ranked
 		utils::hook::detour game_state_info_get_hook;
 		utils::hook::detour playlist_run_rules_hook;
 		utils::hook::detour game_state_info_is_public_hook;
+		utils::hook::detour party_using_party_based_teams_hook;
+		utils::hook::detour party_host_using_assigned_teams_hook;
 
 		bool running_playlist_rules = false;
 
@@ -39,6 +42,24 @@ namespace ranked
 		{
 			return ui_combat_training && ui_combat_training->current.enabled
 				&& game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_MP;
+		}
+
+		int party_using_party_based_teams_stub(game::PartyData* party)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_MP)
+			{
+				return 1;
+			}
+			return party_using_party_based_teams_hook.invoke<int>(party);
+		}
+
+		int party_host_using_assigned_teams_stub(game::PartyData* party)
+		{
+			if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_MP)
+			{
+				return 1;
+			}
+			return party_host_using_assigned_teams_hook.invoke<int>(party);
 		}
 
 		bool use_private_game_state()
@@ -215,9 +236,10 @@ namespace ranked
 				utils::hook::nop(0x140C3E518, 53);	// SV_BotTeamLimit
 				utils::hook::nop(0x140C3E576, 0xC); // ^ remove 9 player per team check
 
-				// fix team assignment that lead to gsc problems with invalid sessionteam
-				utils::hook::set(0x14037E030, 0xC300000001B8); // Party_UsingPartyBasedTeams
-				utils::hook::set(0x1409DB330, 0xC300000001B8); // PartyHost_UsingAssignedTeams
+				// Zombies needs the native team checks to reach its lobby loading status.
+				party_using_party_based_teams_hook.create(0x14037E030, party_using_party_based_teams_stub);
+				party_host_using_assigned_teams_hook.create(0x1409DB330, party_host_using_assigned_teams_stub);
+				console::info("[IWZ][Lobby] team assignment overrides restricted to multiplayer; native Zombies loading status preserved\n");
 
 				utils::hook::nop(0x140E7ADC4, 26); // allow saving recipes in onlinegame
 

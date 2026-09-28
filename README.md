@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 1.2 adds hardware-aware parallel shader preloading, persistent shader bytecode caching, and shader object reuse. It also fixes shutdown crashes and improves Tips and Tricks text and Solo Afterlife Arcade messages. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 1.3 incorporates IW7-Mod 1.1.0 while preserving IWZ-MOD's Zombies key rewards and double-XP bonus. It also fixes lobby loading text and ladder speed, and improves pickup notifications and the card-pack menu. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -21,6 +21,9 @@ IWZ-MOD 1.2 adds hardware-aware parallel shader preloading, persistent shader by
 # IWZ-MOD Changes
 
 General
+ - Includes IW7-Mod 1.1.0, preserving IWZ-MOD's Zombies key rewards and double-XP bonus alongside the new salvage and contract rewards
+ - Multiplayer team and ladder changes no longer interfere with Zombies lobby loading text or its intended climbing speed
+ - Pickup notifications use consistent item-name capitalization, and the card-pack menu background fills its row on first opening
  - Controller support includes DualShock controllers through SDL3 and detects XInput controllers outside slot 0
  - Controls and button prompts switch automatically between controller and mouse/keyboard input
  - CAST labels update immediately when selecting a character or changing maps, including after shader caching

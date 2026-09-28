@@ -13,6 +13,7 @@ namespace climbing
 		constexpr auto pm_ladder_pitch_clamp = 0x1406FD172;
 		constexpr auto pm_ladder_pitch_clamp_end = 0x1406FD184;
 		constexpr auto pm_ladder_cmd_scale_call = 0x1406FD227;
+		constexpr auto pm_ladder_speed_mode_check = 0x1406FD23D;
 		constexpr auto pm_cmd_scale = 0x1406F9130;
 
 		bool is_zombies()
@@ -70,11 +71,14 @@ namespace climbing
 				0x08, 0xF3, 0x0F, 0x5F, 0x35, 0xB8, 0xC6, 0xD3, 0x00,
 			};
 			constexpr std::array<std::uint8_t, 5> cmd_scale_call_bytes{0xE8, 0x04, 0xBF, 0xFF, 0xFF};
+			constexpr std::array<std::uint8_t, 5> speed_mode_bytes{0x83, 0xF8, 0x01, 0x75, 0x0A};
 
 			return std::memcmp(reinterpret_cast<const void*>(pm_ladder_pitch_clamp),
 				pitch_bytes.data(), pitch_bytes.size()) == 0
 				&& std::memcmp(reinterpret_cast<const void*>(pm_ladder_cmd_scale_call),
-					cmd_scale_call_bytes.data(), cmd_scale_call_bytes.size()) == 0;
+					cmd_scale_call_bytes.data(), cmd_scale_call_bytes.size()) == 0
+				&& std::memcmp(reinterpret_cast<const void*>(pm_ladder_speed_mode_check),
+					speed_mode_bytes.data(), speed_mode_bytes.size()) == 0;
 		}
 	}
 
@@ -94,7 +98,11 @@ namespace climbing
 			utils::hook::jump(pm_ladder_pitch_clamp, pm_ladder_pitch_stub(), true, true);
 			utils::hook::call(pm_ladder_cmd_scale_call, pm_ladder_cmd_scale_stub);
 
-			console::info("[IWZ][ClimbingNative] installed pitch-independent 3.5x ladder movement\n");
+			// Select the stock 0.2 base for Zombies and the upstream 0.5 base for other modes.
+			utils::hook::set<std::uint8_t>(pm_ladder_speed_mode_check + 2, game::GAME_MODE_CP);
+			utils::hook::set<std::uint8_t>(pm_ladder_speed_mode_check + 3, 0x74); // jne -> je
+
+			console::info("[IWZ][ClimbingNative] installed pitch-independent Zombies ladder movement scale=3.5 base=0.2; other modes base=0.5\n");
 		}
 	};
 }

@@ -296,9 +296,6 @@ namespace gameplay
 			dvars::bg_disable_barrier_clips = game::Dvar_RegisterBool("bg_disableBarrierClips", false, game::DVAR_FLAG_REPLICATED, "(Experimental) Disables barrier clips in maps to access things easily");
 			pmove_single_hook.create(0x14070F530, pmove_single_stub);
 
-			// Make ladder velocity 0.5 for each gamemode
-			utils::hook::nop(0x1406FD240, 2);
-
 			// Make mantle_enable work on all gamemodes
 			utils::hook::nop(0x1406E2676, 2); // Mantle_CanMantle
 			utils::hook::nop(0x1406E4CDE, 2); // Mantle_Update

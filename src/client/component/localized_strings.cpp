@@ -632,7 +632,9 @@ namespace localized_strings
 			override("COOP_PILLAGE_FOUND_BIO_SPIKE", "Found Bio Spikes");
 			override("COOP_PILLAGE_FOUND_GAS_GRENADE", "Found Gas Grenades");
 			override("LUA_MENU_ZM_SELECT_SHOW_CAPS", "STANDARD FILMS");
-			override("COOP_PILLAGE_FOUND_CLUSTER_GRENADE", "Found cluster grenades");
+			override("COOP_PILLAGE_FOUND_CLUSTER_GRENADE", "Found Cluster Grenades");
+			override("COOP_PILLAGE_FOUND_MAX_AMMO", "You found Max Ammo");
+			override("LUA_MENU_ZM_OPEN_CARD_PACK_DESC", "Open card pack.");
 			override("COOP_GAME_PLAY_AMMO_MAX", "Ammunition already full");
 			override("COOP_PERK_MACHINES_1000",
 				"\"Improve your game with deadly aim!\"\n"
@@ -676,6 +678,8 @@ namespace localized_strings
 			console::info("[IWZ][ZombiesCamos] registered localization camo=Neon_Rot:5-headshots splashHeader='WEAPON CAMO EARNED'\n");
 			console::info("[IWZ][Localization] registered door-action overrides lowercaseCount=4 shaolinPapKey=CP_DISCO_INTERACTIONS_ENTER_THIS_AREA shaolinPapCapitalized=1 shaolinStandardKey=IWZ_CP_DISCO_STANDARD_ENTER_THIS_AREA residentZone=iwz_gns_arcade\n");
 			console::info("[IWZ][Localization] registered plural pillage-item overrides bioSpikes=1 gasGrenades=1 clusterGrenades=1\n");
+			console::info("[IWZ][Localization] audited pillage notification item names; restored title case for Cluster Grenades and Max Ammo\n");
+			console::info("[IWZ][CrateFixes] card-pack description punctuation registered key=LUA_MENU_ZM_OPEN_CARD_PACK_DESC\n");
 			console::info("[IWZ][Localization] registered pickup hint overrides count=%zu prefix=Hold removedSome=C4,ClusterGrenades,GasGrenades\n",
 				std::size(pickup_hint_overrides));
 			console::info("[IWZ][Localization] pickup wording coverage=all-maps families=ZOMBIE/COOP_PILLAGE,MP_PICKUP,PLATFORM,WEAPON,battery,quest sources=asset-load-and-lookup\n");
