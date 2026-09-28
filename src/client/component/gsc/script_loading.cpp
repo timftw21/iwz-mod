@@ -27,6 +27,16 @@ namespace gsc
 		utils::hook::detour scr_begin_load_scripts_hook;
 		utils::hook::detour scr_end_load_scripts_hook;
 
+		constexpr std::uint32_t canonical_capacity = 0x3FFF;
+		constexpr std::uint32_t canonical_buffer_size = 0x70000;
+		struct
+		{
+			std::array<std::uint32_t, canonical_capacity + 1> offsets;
+			std::array<char, canonical_buffer_size> strings;
+		} canonical_storage{};
+		constexpr auto canonical_strings_offset = offsetof(decltype(canonical_storage), strings);
+		static_assert(canonical_strings_offset == 0x10000);
+
 		std::unordered_map<std::string, std::uint32_t> main_handles;
 		std::unordered_map<std::string, std::uint32_t> init_handles;
 		std::unordered_map<std::string, std::uint32_t> post_load_handles;
@@ -270,18 +280,28 @@ namespace gsc
 			return {{reinterpret_cast<std::uint8_t*>(script_file->bytecode), static_cast<std::uint32_t>(script_file->bytecodeLen)}, stack_data};
 		}
 
+		void init_canonical_strings()
+		{
+			// The retail canonical-string hunk is sized for 4095 names. Own the
+			// enlarged storage and reset it at the same VM boundary as the engine.
+			std::memset(&canonical_storage, 0, sizeof(canonical_storage));
+			*reinterpret_cast<std::uint32_t**>(0x1460B94F8) = canonical_storage.offsets.data();
+			*reinterpret_cast<std::uint32_t*>(0x1460B9500) = 0;
+			console::info("[IWZ][GSC] canonical storage reset capacity=%u stringCapacity=%u storageBytes=%zu\n",
+				canonical_capacity, canonical_buffer_size, sizeof(canonical_storage));
+		}
+
 		void log_canonical_usage(const char* stage, const char* script)
 		{
-			// SL_GetCanonicalString (0x140BFD340): 4095 open-addressed slots,
-			// slot zero unused, followed by the string buffer at table + 0x4000.
 			const auto* table = *reinterpret_cast<const std::uint32_t**>(0x1460B94F8);
 			if (!table)
 				return;
 			unsigned int used = 0;
-			for (auto i = 1u; i < 4096; ++i)
+			for (auto i = 1u; i <= canonical_capacity; ++i)
 				used += table[i] != 0;
-			console::info("[IWZ][GSC] canonical names stage=%s script=%s used=%u capacity=4095 remaining=%u\n",
-				stage, script, used, 4095 - used);
+			const auto bytes = *reinterpret_cast<const std::uint32_t*>(0x1460B9500);
+			console::info("[IWZ][GSC] canonical names stage=%s script=%s used=%u capacity=%u remaining=%u stringBytes=%u stringCapacity=%u\n",
+				stage, script, used, canonical_capacity, canonical_capacity - used, bytes, canonical_buffer_size);
 		}
 
 		bool should_auto_load_script(const std::string& name)
@@ -576,6 +596,21 @@ namespace gsc
 	public:
 		void post_unpack() override
 		{
+			// Keep SL_GetCanonicalString's hash, collision handling and token base.
+			// Both unsigned divisions change from modulo 4095 to modulo 16383:
+			// reciprocal 0x40011, final shift 13, divisor 0x3FFF.
+			utils::hook::set<std::uint32_t>(0x140BFD387 + 1, 0x40011);
+			utils::hook::set<std::uint8_t>(0x140BFD398 + 2, 13);
+			utils::hook::set<std::uint32_t>(0x140BFD39B + 2, canonical_capacity);
+			utils::hook::set<std::uint32_t>(0x140BFD3DD + 1, 0x40011);
+			utils::hook::set<std::uint8_t>(0x140BFD3F1 + 2, 13);
+			utils::hook::set<std::uint32_t>(0x140BFD3F4 + 2, canonical_capacity);
+			utils::hook::set<std::uint32_t>(0x140BFD3B2 + 3, canonical_strings_offset);
+			utils::hook::set<std::uint32_t>(0x140BFD45B + 3, canonical_strings_offset);
+			// The comparison excludes the terminating NUL; reserve its byte too.
+			utils::hook::set<std::uint32_t>(0x140BFD426 + 1, canonical_buffer_size - 1);
+			utils::hook::jump(0x140C03280, init_canonical_strings, true);
+
 			// Allocate script memory (PMem doesn't work)
 			db_alloc_x_zone_memory_internal_hook.create(0x140A75450, db_alloc_x_zone_memory_internal_stub);
 
