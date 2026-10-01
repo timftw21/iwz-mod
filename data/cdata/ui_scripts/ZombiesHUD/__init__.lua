@@ -103,6 +103,51 @@ local function refreshInGameTimer(hud, hudClassName)
 	end
 end
 
+MenuBuilder.registerType("IWZZombieCounter", function(_, controller)
+	local self = LUI.UIElement.new()
+	self.id = "IWZZombieCounter"
+	self:SetAnchorsAndPosition(0, 1, 0, 1, 0, 1920 * _1080p, 0, 1080 * _1080p)
+	local display = MenuBuilder.BuildRegisteredType("BossTimer", controller)
+	display.id = "ZombieCounterDisplay"
+	-- Reuse the timer's font, color and backing, without its boss-clock model.
+	display.Timer:UnsubscribeFromAllModels()
+	display.Timer:SetWordWrap(false)
+	display.Timer:SetAnchorsAndPosition(0, 1, 0, 1, 5.38 * _1080p, 314.62 * _1080p, 6 * _1080p, 44 * _1080p)
+	display.scoreBox:SetAnchorsAndPosition(0.5, 0.5, 0, 1, -160 * _1080p, 158 * _1080p, 6 * _1080p, 46 * _1080p)
+	display:SetYRotation(16, 0)
+	display:SetZRotation(-3, 0)
+	display:SetAnchorsAndPosition(0, 1, 0, 1, 0, 320 * _1080p, 4 * _1080p, 54 * _1080p)
+	display:SetAlpha(0, 0)
+	self:addElement(display)
+	self.Display = display
+	return self
+end)
+
+local function refreshZombieCounter(hud, hudClassName)
+	local container = hud.zombieCounter and hud.zombieCounter._widget
+	local display = container and container.Display
+	if not display then return end
+	local remaining = Engine.GetDvarInt("iwz_zombies_remaining") or -1
+	local bossSplash = Game.GetOmnvar("zm_boss_splash") or 0
+	local visible = Engine.GetDvarBool("iwz_zombie_counter") and remaining >= 0
+		and Game.GetOmnvar("ui_session_state") == "playing" and (bossSplash == 0 or bossSplash == 2)
+	local top = (Engine.GetDvarBool("iwz_in_game_timer") or bossSplash == 2) and 58 or 4
+	if hud.iwzZombieCounterTop ~= top then
+		hud.iwzZombieCounterTop = top
+		display:SetAnchorsAndPosition(0, 1, 0, 1, 0, 320 * _1080p, top * _1080p, (top + 50) * _1080p)
+		print("[IWZ][ZombieCounter] layout class=" .. hudClassName .. " top=" .. top .. " style=BossTimer")
+	end
+	if hud.iwzZombieCounterVisible ~= visible then
+		hud.iwzZombieCounterVisible = visible
+		display:SetAlpha(visible and 1 or 0, 0)
+		print("[IWZ][ZombieCounter] visibility class=" .. hudClassName .. " visible=" .. tostring(visible))
+	end
+	if visible and hud.iwzZombieCounterLastCount ~= remaining then
+		hud.iwzZombieCounterLastCount = remaining
+		display.Timer:setText("Zombies: " .. remaining, 0)
+	end
+end
+
 local function installDeathWishSceneColor(widget, controllerIndex, textElements)
 	local mapName = Engine.GetDvarString("mapname")
 	if mapName ~= "cp_rave" and mapName ~= "cp_zmb" and mapName ~= "cp_disco" and
@@ -188,6 +233,13 @@ for _, hudEntry in ipairs(zombiesHudClasses) do
 		if stockInit then
 			hudClass.init = function(self, controllerIndex)
 				stockInit(self, controllerIndex)
+				self.zombieCounter = self:AddWidget("IWZZombieCounter", {
+					scalable = true, shakeable = true, leftAnchor = false, rightAnchor = false,
+					topAnchor = true, bottomAnchor = false, horizontalOffset = 0, verticalOffset = 0
+				})
+				self:addEventHandler("iwz_zombie_counter_changed", function(element)
+					refreshZombieCounter(element, hudClassName)
+				end)
 
 				if hudClassName == "ZMHUD" or hudClassName == "ZMHUDDLC1" or
 					hudClassName == "ZMHUDDLC2" or hudClassName == "ZMHUDDLC3" or hudClassName == "ZMHUDDLC4" then
@@ -211,29 +263,30 @@ for _, hudEntry in ipairs(zombiesHudClasses) do
 				local timerText = bossTimerContainer and bossTimerContainer.BossTimer and
 					bossTimerContainer.BossTimer.Timer
 
-				if clockAvailable and timerText then
-					self.iwzInGameTimerVisible = false
-					self.iwzInGameTimerLastSecond = -1
-					self:addEventHandler("iwz_in_game_timer_tick", function(element)
-						refreshInGameTimer(element, hudClassName)
-					end)
-					self:addEventHandler("iwz_in_game_timer_changed", function(element)
-						refreshInGameTimer(element, hudClassName)
-					end)
+				self.iwzInGameTimerVisible = false
+				self.iwzInGameTimerLastSecond = -1
+				self:addEventHandler("iwz_in_game_timer_tick", function(element)
+					refreshInGameTimer(element, hudClassName)
+					refreshZombieCounter(element, hudClassName)
+				end)
+				self:addEventHandler("iwz_in_game_timer_changed", function(element)
+					refreshInGameTimer(element, hudClassName)
+					refreshZombieCounter(element, hudClassName)
+				end)
 
-					local timer = LUI.UITimer.new(nil, {
-						interval = 250,
-						event = "iwz_in_game_timer_tick",
-						disposable = false,
-						broadcastToRoot = false,
-						stopped = false,
-						controllerIndex = controllerIndex
-					})
-					self:addElement(timer)
-					self.iwzInGameTimerTicker = timer
+				local timer = LUI.UITimer.new(nil, {
+					interval = 250,
+					event = "iwz_in_game_timer_tick",
+					disposable = false,
+					broadcastToRoot = false,
+					stopped = false,
+					controllerIndex = controllerIndex
+				})
+				self:addElement(timer)
+				self.iwzInGameTimerTicker = timer
+				if clockAvailable and timerText then
 					print("[IWZ][InGameTimer] installed class=" .. hudClassName ..
 						" source=bossTimer._widget.BossTimer.Timer")
-					refreshInGameTimer(self, hudClassName)
 				else
 					print("[IWZ][InGameTimer] install skipped class=" .. hudClassName ..
 						" clockAvailable=" .. tostring(clockAvailable) ..
@@ -241,6 +294,10 @@ for _, hudEntry in ipairs(zombiesHudClasses) do
 						" widgetAvailable=" .. tostring(bossTimerContainer ~= nil) ..
 						" timerTextAvailable=" .. tostring(timerText ~= nil))
 				end
+				refreshInGameTimer(self, hudClassName)
+				refreshZombieCounter(self, hudClassName)
+				LUI.HUD.UpdateWidgetsVisibility(self)
+				print("[IWZ][ZombieCounter] installed class=" .. hudClassName .. " source=server-scene-total interval=250ms")
 
 				self:addEventHandler("iwz_hud_mode_changed", function(element)
 					LUI.HUD.UpdateWidgetsVisibility(element)

@@ -14,6 +14,7 @@
 #include "scheduler.hpp"
 #include "server_list.hpp"
 #include "download.hpp"
+#include "usermaps.hpp"
 
 #include "utils/hash.hpp"
 
@@ -496,6 +497,15 @@ namespace party
 		void sv_start_map_for_party_stub(const char* map, const char* game_type, int client_count, int agent_count, bool hardcore,
 			bool map_is_preloaded, bool migrate)
 		{
+			if (usermaps::find(map))
+			{
+				for (const auto* dvar : {"iwz_survival_mode", "iwz_survival_browse", "iwz_gns_arcade",
+					"iwz_gns_arcade_game", "iwz_gns_arcade_result", "scr_boss_battles_enabled", "scr_direct_to_grey",
+					"scr_direct_to_super_slasher", "scr_direct_to_rat_king", "scr_direct_to_crab_boss",
+					"scr_direct_to_rhino_fight", "scr_direct_to_meph_fight"})
+					game::Dvar_SetFromStringByName(dvar, "0", game::DVAR_SOURCE_INTERNAL);
+				console::info("[IWZ][Usermaps] starting map=%s; cleared stock film mode overrides\n", map);
+			}
 			hash_cache.clear();
 
 			if (game::environment::is_dedi())
@@ -656,6 +666,15 @@ namespace party
 
 	void start_map(const std::string& mapname, bool dev)
 	{
+		if (const auto* map = usermaps::find(mapname))
+		{
+			if (game::Com_GameMode_GetActiveGameMode() != game::GAME_MODE_CP)
+			{
+				game::Com_GameMode_SetDesiredGameMode(game::GAME_MODE_CP);
+				scheduler::once([name = map->name, dev] { start_map(name, dev); }, scheduler::pipeline::main, 1s);
+				return;
+			}
+		}
 		if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_SP)
 		{
 			console::info("Starting sp map: %s\n", mapname.data());
@@ -726,7 +745,11 @@ namespace party
 
 		command::execute(utils::string::va("seta ui_mapname %s", mapname.data()), true);
 
-		if (auto* gametype = game::Dvar_FindVar("g_gametype");
+		if (usermaps::find(mapname))
+		{
+			game::Dvar_SetFromStringByName("ui_gametype", "zombie", game::DVAR_SOURCE_INTERNAL);
+		}
+		else if (auto* gametype = game::Dvar_FindVar("g_gametype");
 		    gametype && gametype->current.string && gametype->current.string != "frontend"s)
 		{
 			command::execute(utils::string::va("seta ui_gametype %s", gametype->current.string), true);
@@ -912,7 +935,7 @@ namespace party
 					return;
 				}
 
-				if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_SP)
+				if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_SP && !usermaps::find(args.get(1)))
 				{
 					command::execute(utils::string::va("spmap %s", args.get(1)));
 					return;
@@ -946,7 +969,7 @@ namespace party
 						return;
 					}
 
-					if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_SP)
+					if (game::Com_GameMode_GetActiveGameMode() == game::GAME_MODE_SP && !usermaps::find(args.get(1)))
 					{
 						command::execute(utils::string::va("spmap %s", args.get(1)));
 						return;
@@ -1188,6 +1211,7 @@ namespace party
 				info.set("sv_motd", get_dvar_string("sv_motd"));
 				info.set("xuid", utils::string::va("%llX", steam::SteamUser()->GetSteamID().bits));
 				info.set("mapname", get_dvar_string("mapname"));
+				info.set("usermap", usermaps::find(get_dvar_string("mapname")) ? "1" : "0");
 				info.set("isPrivate", get_dvar_string("g_password").empty() ? "0" : "1");
 				info.set("clients", utils::string::va("%i", get_client_count()));
 				info.set("bots", utils::string::va("%i", get_bot_count()));
@@ -1340,6 +1364,14 @@ namespace party
 				if (mapname.empty())
 				{
 					info_response_error("Connection failed: Invalid map.");
+					return;
+				}
+				if (info.get("usermap") == "1" && (!usermaps::find(mapname) ||
+					!usermaps::zone_exists(mapname) || !usermaps::zone_exists(mapname + "_load")))
+				{
+					console::warn("[IWZ][Usermaps] connection rejected; missing package map=%s\n", mapname.c_str());
+					info_response_error("This server uses a custom Zombies map. Install the server's map in "
+						"iw7-mod/usermaps and restart IWZ. Check the console for its name.");
 					return;
 				}
 

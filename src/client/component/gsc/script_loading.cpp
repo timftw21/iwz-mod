@@ -5,6 +5,7 @@
 #include "component/fastfiles.hpp"
 #include "component/filesystem.hpp"
 #include "component/scripting.hpp"
+#include "component/usermaps.hpp"
 
 #include "script_extension.hpp"
 
@@ -84,6 +85,7 @@ namespace gsc
 
 		void clear()
 		{
+			usermaps::set_script_map(nullptr);
 			main_handles.clear();
 			init_handles.clear();
 			post_load_handles.clear();
@@ -467,6 +469,9 @@ namespace gsc
 
 		void scr_begin_load_scripts_stub(bool a1)
 		{
+			const auto* map = game::Dvar_FindVar("mapname");
+			usermaps::set_script_map(map ? map->current.string : nullptr);
+
 			// start the compiler
 			init_compiler();
 

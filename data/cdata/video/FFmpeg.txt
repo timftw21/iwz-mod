@@ -1,0 +1,19 @@
+IWZ custom lobby video decoder
+
+This folder contains the dynamically loaded FFmpeg libraries. Ship all five
+DLLs and FFmpeg-LICENSE.txt with IWZ-MOD's data files. The game still starts
+without them; the custom video menu reports that the decoder is unavailable.
+
+Version: FFmpeg 8.1.3, revision 45e8e0a3ff (BtbN LGPL shared build).
+Archive SHA-256: ce2926e08718b9b4f57b38e735b4695ab32f0e17db9e091dda90a8a39f79406d
+Unmodified binary distribution and build information:
+https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-09-27-13-04
+FFmpeg source: https://github.com/FFmpeg/FFmpeg/tree/45e8e0a3ff
+Build scripts and dependency sources: https://github.com/BtbN/FFmpeg-Builds
+FFmpeg project: https://ffmpeg.org/
+
+FFmpeg is free software distributed under the GNU Lesser General Public
+License. See FFmpeg-LICENSE.txt. IWZ loads these libraries dynamically and
+does not modify them. Compatible replacement libraries can be used here.
+Run tools/setup_video_decoder.ps1 in the source checkout to prepare this
+folder and the matching development headers for a build or release.

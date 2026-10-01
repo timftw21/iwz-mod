@@ -3,6 +3,7 @@
 #include "fastfiles.hpp"
 #include "pap_timer.hpp"
 #include "model_collision.hpp"
+#include "usermaps.hpp"
 
 #include "game/game.hpp"
 
@@ -232,8 +233,6 @@ namespace fastfiles
 
 		HANDLE sys_create_file_stub(game::Sys_Folder folder, const char* base_filename)
 		{
-			auto result = sys_createfile_hook.invoke<HANDLE>(folder, base_filename);
-
 			const auto create_file_a = [](const std::string& filepath)
 			{
 				return CreateFileA(filepath.data(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
@@ -259,12 +258,22 @@ namespace fastfiles
 				return INVALID_HANDLE_VALUE;
 			}
 
+			const auto result = sys_createfile_hook.invoke<HANDLE>(folder, base_filename);
 			if (result != INVALID_HANDLE_VALUE)
 			{
 				return result;
 			}
 
 			std::string real_path{};
+			if ((folder == game::SF_ZONE || folder == game::SF_ZONE_LOC ||
+				folder == game::SF_PAKFILE || folder == game::SF_PAKFILE_LOC) &&
+				usermaps::find_file(base_filename, &real_path))
+			{
+				const auto handle = create_file_a(real_path);
+				console::info("[IWZ][Usermaps] open file=%s path=\"%s\" success=%d\n",
+					base_filename, real_path.c_str(), handle != INVALID_HANDLE_VALUE);
+				return handle;
+			}
 			if (filesystem::find_file("zone\\"s + base_filename, &real_path))
 			{
 				return create_file_a(real_path.data());
@@ -327,7 +336,34 @@ namespace fastfiles
 			}
 
 			std::vector<game::XZoneInfo> zones;
-			merge(&zones, zone_info, zone_count);
+			// Map packages contain complete zones. Retail techsets/patch companions
+			// must not be inferred for them. Dependencies share the map's lifetime.
+			std::deque<std::string> localized_names;
+			const auto add_custom_zone = [&](const char* name, const game::XZoneInfo& owner)
+			{
+				if (std::any_of(zones.begin(), zones.end(), [&](const game::XZoneInfo& zone)
+					{ return zone.name && !strcmp(zone.name, name); })) return;
+				zones.push_back({name, owner.allocFlags | game::DB_ZONE_CUSTOM, owner.freeFlags});
+				console::info("[IWZ][Usermaps] queue zone=%s flags=0x%X\n", name, owner.allocFlags);
+			};
+			for (auto i = 0u; i < zone_count; ++i)
+			{
+				const auto& zone = zone_info[i];
+				if (!zone.name || !zone.allocFlags || !usermaps::zone_exists(zone.name))
+				{
+					zones.push_back(zone);
+					continue;
+				}
+				if (const auto* map = usermaps::find(zone.name))
+					for (const auto& dependency : map->dependencies) add_custom_zone(dependency.c_str(), zone);
+				const auto localized = std::string(game::SEH_GetCurrentLanguageCode()) + "_" + zone.name;
+				if (usermaps::zone_exists(localized))
+				{
+					localized_names.push_back(localized);
+					add_custom_zone(localized_names.back().c_str(), zone);
+				}
+				add_custom_zone(zone.name, zone);
+			}
 			if (film_zone && !timer_zone_already_queued && fastfiles::exists(pap_timer::get_zone_name()))
 			{
 				zones.push_back({pap_timer::get_zone_name(), film_zone->allocFlags | game::DB_ZONE_CUSTOM,

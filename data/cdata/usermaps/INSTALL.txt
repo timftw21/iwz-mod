@@ -1,0 +1,56 @@
+IWZ custom Zombies maps
+
+Install each compiled IW7 map in its own folder, then restart IWZ:
+
+  iw7-mod/usermaps/cp_example/cp_example.ff
+  iw7-mod/usermaps/cp_example/cp_example_load.ff
+  iw7-mod/usermaps/cp_example/map.json                 (optional)
+
+The game directory's usermaps folder is also supported. Packages in iw7-mod
+take priority. The folder name must start with cp_ and contain only lowercase
+letters, numbers and underscores, at most 48 characters. Stock names are reserved.
+
+Both fastfiles are required. They must be compiled for IW7, version 1619, and
+contain the map's world, collision, entities, scripts and assets as appropriate.
+The _load fastfile supplies assets needed while loading. An empty file or a
+renamed fastfile from another game will not work. IWZ does not compile maps.
+
+Fastfiles, image .pak files and sound .sabl/.sabs files can sit directly in the
+map folder or its zone subfolder. Give them unique filenames across packages.
+IWZ loads complete custom zones without inventing retail patch/techset zones.
+An optional current-language companion such as eng_cp_example.ff is loaded
+before its base zone. Additional complete asset zones can be declared as
+dependencies; they load in the declared order before the map and unload with it.
+
+Optional map.json example:
+
+  {
+    "format_version": 1,
+    "title": "Example Map",
+    "description": "A custom Zombies map.",
+    "author": "Your name",
+    "version": "1.0",
+    "dependencies": ["cp_example_assets"]
+  }
+
+Omit dependencies unless cp_example_assets.ff is included in this package.
+Title defaults to the folder name. Map metadata must be smaller than 64 KiB.
+
+Loose server scripts use their normal IW7 paths under the map folder.
+For example, the level script is scripts/cp/maps/cp_example/cp_example.gsc.
+Extra entry-point scripts can use custom_scripts/cp/maps/cp_example/*.gsc.
+These paths are mounted only for that map's script session and take priority
+over IWZ's files. Include the required Zombies setup in your map scripts.
+Include client assets and raw files in the compiled fastfiles.
+
+Select the map's [CUSTOM] entry under STANDARD FILMS, or use:
+
+  usermaps
+  map cp_example
+  devmap cp_example
+
+Dedicated servers can use +set sv_mapRotation "gametype zombie map cp_example".
+Every player must install the same package; automatic map downloading is not
+provided. Boss Battles, IWZ Survival and stock per-film records apply to the
+official maps. Package installation/loading diagnostics use [IWZ][Usermaps]
+in iw7-mod/logs/console.log. Rejected packages are omitted from the picker.

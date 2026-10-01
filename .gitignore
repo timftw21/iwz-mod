@@ -7,3 +7,7 @@ build/
 /minidumps/
 /*.obj
 /iw7-mod.exe
+/deps/ffmpeg/
+/data/cdata/video/*.dll
+/data/cdata/video/FFmpeg-LICENSE.txt
+/data/cdata/video/.decoder-version

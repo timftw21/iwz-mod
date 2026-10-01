@@ -1,6 +1,7 @@
 #include <std_include.hpp>
 #include "loader/component_loader.hpp"
 #include "filesystem.hpp"
+#include "usermaps.hpp"
 
 #include "component/dvars.hpp"
 #include "component/console/console.hpp"
@@ -69,6 +70,7 @@ namespace filesystem
 			filesystem::register_path(sys_default_install_path_stub() + "/"s + "iw7-mod"s);
 
 			fs_startup_hook.invoke<void>(name);
+			usermaps::initialize();
 
 			console::info("[IWZ][FS] search-path priority is registration-based; the first listed path wins raw-file collisions\n");
 			fs_display_path();
@@ -242,6 +244,8 @@ namespace filesystem
 	std::vector<std::string> get_search_paths()
 	{
 		std::vector<std::string> paths{};
+		const auto map_path = usermaps::get_script_path();
+		if (!map_path.empty()) paths.push_back(map_path);
 
 		// Preserve register_path's push-front priority. Raw files and GSC use the
 		// first match; LUI deliberately traverses the resulting list in reverse so

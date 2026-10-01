@@ -7,6 +7,7 @@
 #include "command.hpp"
 #include "console/console.hpp"
 #include "custom_music.hpp"
+#include "custom_video.hpp"
 #include "fastfiles.hpp"
 #include "filesystem.hpp"
 #include "focus_audio.hpp"
@@ -18,6 +19,7 @@
 #include "server_list.hpp"
 #include "download.hpp"
 #include "zombies_cast.hpp"
+#include "usermaps.hpp"
 
 #include "game/ui_scripting/execution.hpp"
 //#include "game/scripting/execution.hpp"
@@ -236,6 +238,23 @@ namespace ui_scripting
 			lua["io"]["removefile"] = utils::io::remove_file;
 			lua["io"]["readfile"] = static_cast<std::string(*)(const std::string&)>(utils::io::read_file);
 			lua["io"]["zoneexists"] = fastfiles::exists;
+			lua["io"]["usermaps"] = []
+			{
+				table result;
+				int index = 1;
+				for (const auto& map : usermaps::get_maps())
+				{
+					if (!usermaps::zone_exists(map.name) || !usermaps::zone_exists(map.name + "_load")) continue;
+					table entry;
+					entry["name"] = map.name;
+					entry["title"] = map.title;
+					entry["description"] = map.description;
+					entry["author"] = map.author;
+					entry["version"] = map.version;
+					result[index++] = entry;
+				}
+				return result;
+			};
 
 			using game = table;
 			auto game_type = game();
@@ -332,6 +351,30 @@ namespace ui_scripting
 			custom_music_table["clear"] = []
 			{
 				custom_music::stop(true, "stock lobby music selected");
+			};
+
+			auto custom_video_table = table();
+			lua["customvideo"] = custom_video_table;
+			custom_video_table["rescan"] = custom_video::rescan;
+			custom_video_table["folder"] = custom_video::folder;
+			custom_video_table["selected"] = custom_video::selected;
+			custom_video_table["status"] = custom_video::status;
+			custom_video_table["play"] = custom_video::play;
+			custom_video_table["clear"] = custom_video::clear;
+			custom_video_table["openfolder"] = custom_video::open_folder;
+			custom_video_table["list"] = []
+			{
+				table result;
+				int index = 1;
+				for (const auto& item : custom_video::list())
+				{
+					table entry;
+					entry["id"] = item.id;
+					entry["name"] = item.name;
+					entry["extension"] = item.extension;
+					result[index++] = entry;
+				}
+				return result;
 			};
 
 			auto scheduler = table();

@@ -134,7 +134,7 @@ install_survival_quick_revive_hooks()
         ::survival_laststand_exit;
 
     survival_log("quick revive hooks installed route=meph-self-revive " +
-        "timeout=3 perkPolicy=stock weaponPolicy=stock-except-mule " +
+        "timeout=3 targetingGrace=2 perkPolicy=stock weaponPolicy=stock-except-mule " +
         "directorsCutPolicy=stock-permanent-perk-restore");
 }
 
@@ -310,6 +310,8 @@ survival_laststand_exit(player)
     {
         return;
     }
+
+    player thread custom_scripts\cp\survival_perks::survival_quick_revive_grace_period();
 
     token_count_before = get_survival_self_revive_count(player);
     if (token_count_before > 0)

@@ -155,11 +155,35 @@ djcustommusic [1|0]
     This test setting resets when the client closes; the lobby selection is preserved.
 
 
+CUSTOM LOBBY VIDEOS
+-------------------
+
+customvideo list|rescan|folder|stop|status
+customvideo play "filename.mp4"
+    Choose a silent, looping video for the Zombies pre-game theater screen.
+    Add files to iw7-mod/custom_videos, then open BARRACKS > MOVIE SCREEN,
+    directly beneath LOBBY MUSIC.
+    stop restores the original movie and clears your saved video selection.
+    MP4/M4V, MKV, WebM, MOV, AVI, WMV, MPG/MPEG, TS and M2TS are supported.
+    Videos keep their proportions and do not affect the lobby music.
+    Errors restore the stock film and are logged with the CustomVideo tag.
+
+iwz_custom_video_file "filename.mp4"
+    Saved filename selected through the menu or customvideo play command.
+    The decoder DLLs in iw7-mod/video must ship with the release's data files.
+
+
 MAPS, CONNECTIONS, BOTS, AND HOST ADMINISTRATION
 ------------------------------------------------
 
 map <map name>
     Start a map normally (or forward to spmap in Campaign).
+    Installed custom Zombies maps automatically select Zombies mode.
+
+usermaps
+    List installed custom Zombies maps, their titles and package locations.
+    Install packages in iw7-mod/usermaps/<cp_name>/ and restart IWZ.
+    See iw7-mod/usermaps/INSTALL.txt for the package layout.
 
 devmap <map name>
     Start a map with cheats enabled. Client/listen-server builds only.
@@ -212,6 +236,11 @@ rcon <command and arguments>
 
 MODE, APPLICATION, AND CONSOLE
 ------------------------------
+
+iwz_discord_rich_presence <0|1>
+    Show current game activity on Discord. Enabled by default and saved.
+    Also available under Options > Client Options > DISCORD RICH PRESENCE.
+    Disabling clears the activity; enabling restores it without restarting.
 
 noMode
     Select no game mode.

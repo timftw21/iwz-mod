@@ -1,0 +1,15 @@
+CUSTOM LOBBY VIDEOS
+
+Put your videos in this folder. Open BARRACKS in the Zombies pre-game lobby,
+then MOVIE SCREEN beneath LOBBY MUSIC. REFRESH and select a video. Choose
+ORIGINAL MOVIE to return to the usual lobby film. Your choice is saved for
+the next session.
+
+Supported containers: MP4, M4V, MKV, WebM, MOV, AVI, WMV, MPEG/MPG, TS, M2TS.
+Common codecs include H.264, HEVC, VP8, VP9, AV1, MPEG-2, MPEG-4 and WMV.
+Encrypted or damaged videos cannot be played. Files may contain audio, but
+only the video plays; the lobby music is unchanged.
+
+Videos loop on the theater screen. Their proportions are preserved with
+black bars where needed. Up to 4K input is supported and scaled to fit the
+screen. Playback is local to each player and stops when leaving the lobby.

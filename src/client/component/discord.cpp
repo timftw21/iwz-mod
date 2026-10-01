@@ -4,6 +4,7 @@
 #include "console/console.hpp"
 #include "command.hpp"
 #include "discord.hpp"
+#include "dvars.hpp"
 #include "party.hpp"
 #include "scheduler.hpp"
 
@@ -49,6 +50,7 @@ namespace discord
 
 		DiscordRichPresence discord_presence{};
 		discord_presence_strings_t discord_strings;
+		game::dvar_t* rich_presence_enabled{};
 
 		std::mutex avatar_map_mutex;
 		std::unordered_map<std::string, game::Material*> avatar_material_map;
@@ -186,6 +188,21 @@ namespace discord
 
 		void update_discord()
 		{
+			const auto enabled = rich_presence_enabled && rich_presence_enabled->current.enabled;
+			static std::optional<bool> last_enabled;
+			if (last_enabled != enabled)
+			{
+				last_enabled = enabled;
+				console::info("[IWZ][Discord] rich presence %s\n", enabled ? "enabled" : "disabled; clearing activity");
+			}
+			if (!enabled)
+			{
+				discord_presence = {};
+				discord_strings = {};
+				Discord_ClearPresence();
+				return;
+			}
+
 			const auto saved_time = discord_presence.startTimestamp;
 			discord_presence = {};
 			discord_presence.startTimestamp = saved_time;
@@ -267,11 +284,8 @@ namespace discord
 
 		void ready(const DiscordUser* request)
 		{
-			DiscordRichPresence presence{};
-			presence.instance = 1;
-			presence.state = "";
 			console::info("Discord: Ready on %s (%s)\n", request->username, request->userId);
-			Discord_UpdatePresence(&presence);
+			update_discord();
 		}
 
 		void errored(const int error_code, const char* message)
@@ -435,6 +449,9 @@ namespace discord
 				return;
 			}
 
+			rich_presence_enabled = game::Dvar_RegisterBool("iwz_discord_rich_presence", true,
+				game::DVAR_FLAG_SAVED, "Show current game activity on Discord");
+
 			DiscordEventHandlers handlers{};
 			handlers.ready = ready;
 			handlers.errored = errored;
@@ -456,8 +473,17 @@ namespace discord
 			}
 			*/
 
-			scheduler::loop(Discord_RunCallbacks, scheduler::async, 500ms);
-			scheduler::loop(update_discord, scheduler::async, 5s);
+			// Wait for saved settings before publishing anything. Keep all presence
+			// changes on the async pipeline, including toggles and reconnects.
+			scheduler::once([]()
+			{
+				dvars::callback::on_new_value("iwz_discord_rich_presence", [](game::DvarValue*)
+				{
+					scheduler::once(update_discord, scheduler::async);
+				});
+				scheduler::loop(Discord_RunCallbacks, scheduler::async, 500ms);
+				scheduler::loop(update_discord, scheduler::async, 5s);
+			}, scheduler::main);
 
 			initialized_ = true;
 

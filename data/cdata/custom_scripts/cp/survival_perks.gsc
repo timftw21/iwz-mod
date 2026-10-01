@@ -110,7 +110,7 @@ install_survival_quick_revive_hooks()
         ::survival_laststand_exit;
 
     survival_log("quick revive hooks installed route=meph-self-revive " +
-        "timeout=3 perkPolicy=stock weaponPolicy=stock-except-mule " +
+        "timeout=3 targetingGrace=2 perkPolicy=stock weaponPolicy=stock-except-mule " +
         "directorsCutPolicy=stock-permanent-perk-restore");
 }
 
@@ -287,6 +287,8 @@ survival_laststand_exit(player)
         return;
     }
 
+    player thread survival_quick_revive_grace_period();
+
     token_count_before = get_survival_self_revive_count(player);
     if (token_count_before > 0)
         scripts\cp\cp_laststand::disable_self_revive(player);
@@ -321,6 +323,32 @@ survival_laststand_exit(player)
     player.iwz_survival_primary_count_before_down = undefined;
     player.iwz_survival_directors_cut_at_down = undefined;
     player.iwz_survival_mule_weapon_at_down = undefined;
+}
+
+survival_quick_revive_grace_period()
+{
+    level endon("game_ended");
+    self endon("disconnect");
+    // A fresh spawn resets the stock ignore counter; never release this
+    // life's reference after that reset.
+    self endon("spawned");
+
+    // The stock revive callback has released last stand's ignore reference.
+    // Own one extra reference so other targeting protection stays intact.
+    self scripts\cp\utility::allow_player_ignore_me(1);
+    started_at = gettime();
+    survival_log("quick revive targeting grace started player=" +
+        (self getentitynumber()) + " durationMs=2000 ignoreEnabled=" +
+        self scripts\cp\utility::isignoremeenabled());
+
+    reason = self scripts\engine\utility::waittill_any_timeout_no_endon_death(
+        2, "last_stand", "death");
+
+    self scripts\cp\utility::allow_player_ignore_me(0);
+    survival_log("quick revive targeting grace ended player=" +
+        (self getentitynumber()) + " reason=" + reason + " elapsedMs=" +
+        (gettime() - started_at) + " ignoreEnabled=" +
+        self scripts\cp\utility::isignoremeenabled());
 }
 
 get_survival_self_revive_count(player)

@@ -10,7 +10,7 @@
 
 IWZ-MOD is a Zombies-focused fork of IW7-Mod for Call of Duty®: Infinite Warfare. It builds on IW7-Mod with Zombies gameplay fixes, tweaks, HUD and menu improvements, custom lobby music, and quality-of-life features.
 
-IWZ-MOD 1.3 incorporates IW7-Mod 1.1.0 while preserving IWZ-MOD's Zombies key rewards and double-XP bonus. It also fixes lobby loading text and ladder speed, and improves pickup notifications and the card-pack menu. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
+IWZ-MOD 1.4 adds custom lobby videos, support for installed custom Zombies maps, an optional zombie counter, and a Discord Rich Presence toggle. It also improves XP icon alignment and gives players a two-second break from zombie targeting after Quick Revive in Survival. To install it, download the [latest release](https://github.com/timftw21/iwz-mod/releases/latest) and extract `iw7-mod.exe` and the `iw7-mod` folder into the Infinite Warfare installation directory. A legal Steam copy of the game is required.
 
 # IWZ-MOD To-Do
 
@@ -37,6 +37,9 @@ General
  - Tweaks that improve performance on modern hardware
  - Added client options, such as player name, name color, skipping intro cinematics, pause on focus lost, mute on focus lost, and XP rate
  - Added zombies-specific options, such as camera perspective options, HUD options, and an in-game timer for all modes
+ - Optional zombie counter shows the enemies remaining in the scene, including those still waiting to spawn
+ - Discord Rich Presence can be enabled or disabled in Client Options, with the setting saved between sessions
+ - Double-XP and Double-Key icons stay centered on the match introduction and summary screens
  - A variety of fixes and tweaks to the Zombies' menus
  - Weapon prestige in Zombies unlocks a sixth attachment slot, with selections preserved across matches
  - Loadout and personalization menus share consistent weapon-name strips and clearer weapon-level visuals
@@ -45,6 +48,8 @@ General
  - Attempting to use empty lethal equipment plays the purchase-denied sound
  - Added a Restart Match button to the in-game pause menu (glorified map_restart)
  - Survival mode: IWZ-MOD's take on Black Ops 7 Zombies' survival maps; available maps are "Arcade Attack!", "Rave Rampage", "Subway Shuffle", "Beach Bloodbath", and "Cargo Chaos"
+ - Quick Revive grants two seconds without zombie targeting after automatically reviving the player in Survival
+ - Installed custom Zombies map packages appear under Standard Films; see `iw7-mod/usermaps/INSTALL.txt` for the package layout
  - Each Survival map has its own Film barracks section and saved combat records, separate from the standard films
  - Death Wish on survival maps (rampage inducer, basically)
  - Added the Neon Rot camo, unlocked by earning 5 headshot kills with the M1 in Zombies
@@ -64,6 +69,7 @@ General
  - Certain calling card challenge requirements have been eased (some of them were clearly meant to pad the game's lifecycle)
  - XP rewards for completed challenges are now more generous
  - Custom lobby music is now supported; drag supported files into iw7-mod\custom_music to bring them in-game
+ - Custom videos loop silently on the Zombies lobby theater screen; add files to `iw7-mod/custom_videos` and select them under Barracks > Movie Screen
  - Red-screen visual is less intrusive
 
 Zombies in Spaceland
@@ -119,6 +125,7 @@ To download IW7-Mod, [read our Installing IW7-Mod guide](https://docs.auroramod.
 - Run the `generate.bat` script to generate the project solution.
 - Build the project via the generated solution file in `build\iw7-mod.sln`.
  - The solution builds and embeds SDL3, so controller support does not require a separate DLL installation. Its license is included in `iw7-mod\licenses\SDL.txt`.
+ - Project generation prepares the pinned FFmpeg headers and runtime for custom lobby videos. Releases include the decoder libraries and license in `iw7-mod\video`.
 
 ## Credits
 

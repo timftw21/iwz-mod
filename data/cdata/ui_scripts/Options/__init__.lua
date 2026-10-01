@@ -150,6 +150,9 @@ local function buildDvarToggleButton(controllerIndex, id, title, description, dv
 					enabled = enabled
 				})
 				print("[IWZ][InGameTimer] option changed enabled=" .. tostring(enabled))
+			elseif dvar == "iwz_zombie_counter" then
+				button:dispatchEventToRoot({name = "iwz_zombie_counter_changed"})
+				print("[IWZ][ZombieCounter] option changed enabled=" .. tostring(enabled))
 			elseif dvar == "cg_thirdPerson" then
 				print("[IWZ][Camera] option changed thirdPerson=" .. tostring(enabled) ..
 					" perspective=" .. (enabled and "third-person" or "first-person"))
@@ -392,6 +395,13 @@ local function buildClientOptions(_, controllerIndex)
 		nameColor,
 		buildDvarToggleButton(
 			controllerIndex,
+			"DiscordRichPresence",
+			"DISCORD RICH PRESENCE",
+			"Show your current game activity on Discord. Changes apply immediately and are saved.",
+			"iwz_discord_rich_presence"
+		),
+		buildDvarToggleButton(
+			controllerIndex,
 			"SkipIntroCinematics",
 			"SKIP INTRO CINEMATICS",
 			"Skip the default and startup cinematics when the client launches.",
@@ -439,6 +449,13 @@ local function buildZombiesOptions(_, controllerIndex)
 			"IN-GAME TIMER",
 			"Show an elapsed match timer using the Zombies Boss Battle HUD display.",
 			"iwz_in_game_timer"
+		),
+		buildDvarToggleButton(
+			controllerIndex,
+			"ZombieCounter",
+			"ZOMBIE COUNTER",
+			"Show the Zombies remaining in the scene, including those waiting to spawn.",
+			"iwz_zombie_counter"
 		)
 	}
 end
@@ -522,6 +539,7 @@ if DoubleXPNotifications and not LUI.iwzDoubleXPNotificationsPatched then
 			refreshOptionalIcon("DoubleWeaponXP", "icon_iw7_xp_weapon",
 				Cac.IsDoubleWeaponXPActive(), 128, self.DoubleMissionTeamXP or self.DoubleKey)
 			refreshOptionalIcon("DoubleKey", "icon_iw7_xk", Cac.IsDoubleKeyActive(), 384)
+			if self.iwzAlignMatchIcons then self.iwzAlignMatchIcons() end
 		end
 
 		self:addEventHandler("iwz_xp_rate_changed", refreshIwzDoubleXPIcons)
@@ -531,6 +549,44 @@ if DoubleXPNotifications and not LUI.iwzDoubleXPNotificationsPatched then
 	end
 
 	print("[IWZ][DoubleXP] level, weapon, and key notification refresh hook installed")
+end
+
+if not Engine.InFrontend() then
+	for _, name in ipairs({"FateCardsGranted", "BroShotZomScreen"}) do
+		local original = MenuBuilder.m_types[name]
+		if original then
+			MenuBuilder.m_types[name] = function(menu, controller)
+				local self = original(menu, controller)
+				local icons = self.DoubleXPNotifications
+				if icons then
+					local function alignIcons()
+						local center = 960 * _1080p
+						if name == "BroShotZomScreen" and self.Logo then
+							local left, _, right = self.Logo:getLocalRect()
+							if not left or not right then return end
+							center = (left + right) * 0.5
+						end
+						local _, top, _, bottom = icons:getLocalRect()
+						if not top or not bottom then return end
+						local slots = 1 + (icons.DoubleWeaponXP and 1 or 0)
+							+ (icons.DoubleMissionTeamXP and 1 or 0) + (icons.DoubleKey and 1 or 0)
+						local width = slots * 128 * _1080p
+						-- The stock level-XP child remains in the stack when hidden.
+						-- Compensate for its empty leading slot at the parent's half scale.
+						local offset = Cac.IsDoubleXPActive() and 0 or 32 * _1080p
+						icons:SetAnchorsAndPosition(0, 1, 0, 1,
+							center - offset - width * 0.5, center - offset + width * 0.5, top, bottom)
+						print("[IWZ][DoubleXP] match icons centered screen=" .. name
+							.. " slots=" .. slots .. " centerX=" .. center .. " hiddenSlotOffset=" .. offset)
+					end
+					icons.iwzAlignMatchIcons = alignIcons
+					self:addEventHandler("menu_create", alignIcons)
+					alignIcons()
+				end
+				return self
+			end
+		end
+	end
 end
 
 local function suppressFocusPause(event)

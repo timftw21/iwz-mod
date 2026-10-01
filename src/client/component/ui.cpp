@@ -52,8 +52,13 @@ namespace ui
 					"Draw the standard in-game Zombies HUD");
 				const auto in_game_timer = game::Dvar_RegisterBool("iwz_in_game_timer", false, game::DVAR_FLAG_SAVED,
 					"Draw an elapsed match timer using the Zombies Boss Battle HUD widget");
-				console::info("[IWZ][HUD] registered iwz_zombies_hud enabled=%d iwz_in_game_timer=%d saved=1 stockCgDraw2D=%d\n",
-					zombies_hud->current.enabled, in_game_timer->current.enabled, dvars::cg_draw2D->current.enabled);
+				const auto zombie_counter = game::Dvar_RegisterBool("iwz_zombie_counter", false, game::DVAR_FLAG_SAVED,
+					"Draw the total Zombies remaining in the current scene, including pending spawns");
+				game::Dvar_RegisterInt("iwz_zombies_remaining", -1, -1, INT_MAX, game::DVAR_FLAG_NONE,
+					"Server-provided Zombies remaining in the current scene");
+				console::info("[IWZ][HUD] registered iwz_zombies_hud enabled=%d iwz_in_game_timer=%d iwz_zombie_counter=%d saved=1 stockCgDraw2D=%d\n",
+					zombies_hud->current.enabled, in_game_timer->current.enabled, zombie_counter->current.enabled,
+					dvars::cg_draw2D->current.enabled);
 			}, scheduler::main);
 
 			dvars::callback::on_new_value("iwz_zombies_hud", [](game::DvarValue* value)
@@ -65,6 +70,10 @@ namespace ui
 			dvars::callback::on_new_value("iwz_in_game_timer", [](game::DvarValue* value)
 			{
 				console::info("[IWZ][InGameTimer] iwz_in_game_timer changed enabled=%d\n", value->enabled);
+			});
+			dvars::callback::on_new_value("iwz_zombie_counter", [](game::DvarValue* value)
+			{
+				console::info("[IWZ][ZombieCounter] iwz_zombie_counter changed enabled=%d\n", value->enabled);
 			});
 
 			cg_draw2d_hook.create(0x140781D90, cg_draw2d_stub);
